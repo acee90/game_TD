@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-<title>머지 가디언즈 — 코어 루프 프로토타입</title>
+<title>머지 가디언즈 — 코어 루프 프로토타입 v0.2</title>
 <style>
   :root{
     --bg:#0e1220; --panel:#171c2e; --panel2:#1e2438; --line:#2a3150;
@@ -24,8 +24,14 @@
   #pollwrap{height:6px;background:var(--panel);border-radius:3px;overflow:hidden;margin:2px 0 6px}
   #pollbar{height:100%;width:0%;background:linear-gradient(90deg,#5a4a8a,var(--danger));transition:width .3s}
   canvas{width:100%;display:block;background:#0a0e19;border:1px solid var(--line);border-radius:8px;touch-action:manipulation}
-  #msg{min-height:20px;font-size:12.5px;color:var(--dim);padding:5px 4px;text-align:center}
-  #controls{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-top:2px}
+  #info{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:8px 10px;
+        margin-top:6px;min-height:58px;font-size:12.5px;line-height:1.55}
+  #info .name{font-weight:700;font-size:14px}
+  #info .chip{display:inline-block;padding:1px 7px;border-radius:9px;font-size:10.5px;
+              margin-left:6px;vertical-align:1px;color:#0e1220;font-weight:700}
+  #info .stats{color:var(--dim);font-variant-numeric:tabular-nums}
+  #msg{min-height:18px;font-size:12px;color:var(--dim);padding:4px;text-align:center}
+  #controls{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px}
   button{background:var(--panel2);color:var(--text);border:1px solid var(--line);border-radius:8px;
          padding:10px 4px;font-size:13px;font-family:inherit;cursor:pointer}
   button:active{transform:translateY(1px)} button:disabled{opacity:.35}
@@ -49,18 +55,17 @@
     <div><button id="speed" style="padding:4px 10px;font-size:12px">×1</button></div>
   </div>
   <div id="pollwrap"><div id="pollbar"></div></div>
-  <canvas id="cv" width="420" height="420"></canvas>
-  <div id="msg">타워를 탭해 선택 → 같은 타워를 탭해 합성. 뽑기로 시작하세요.</div>
+  <canvas id="cv" width="420" height="440"></canvas>
+  <div id="info"><span class="tag">타워를 탭하면 속성·티어·스킬이 여기 표시됩니다.</span></div>
+  <div id="msg">뽑기 → 빈 타일을 탭해 배치하세요.</div>
   <div id="controls">
     <button id="draw" class="gold">뽑기 60</button>
     <button id="gamble" class="mana">마나 변환 100</button>
     <button id="sell" disabled>판매</button>
   </div>
   <div id="lineages">
-    <button id="lin0">번개<br><span class="tag">Lv0 · 20</span></button>
-    <button id="lin1">대지<br><span class="tag">Lv0 · 20</span></button>
-    <button id="lin2">화염<br><span class="tag">Lv0 · 20</span></button>
-    <button id="lin3">냉기<br><span class="tag">Lv0 · 20</span></button>
+    <button id="lin0">번개</button><button id="lin1">대지</button>
+    <button id="lin2">화염</button><button id="lin3">냉기</button>
   </div>
 </div>
 <div id="overlay">
@@ -68,97 +73,131 @@
 </div>
 <script>
 'use strict';
-// ───── 확정 밸런스 상수 (GA v0.4 기준) ─────
+// ───── 확정 밸런스 상수 (GA v0.4) ─────
 const HP0=40, HP_G=1.29, ACC=1.06, ARM0=0.15, ARM_G=1.17;
 const REW_A=100, REW_B=10, DRAW=60;
-const KINDS=['속사','저격','화포','도트','빙결','뇌격','파쇄','상인'];
-const ELEM =[0,1,2,2,3,0,1,3];                    // 원소 매핑
+const KINDS=['속사수','저격수','화포','도트','빙결사','뇌격사','파쇄자','상인'];
+const ELEM =[0,1,2,2,3,0,1,3];
+const ENAME=['번개','대지','화염','냉기'];
 const ECOL =['#ffd23f','#c08850','#ff5a3c','#55c8ff'];
-const APSK =[2.0,0.4,0.8,1.0,1.0,1.0,1.0,0];       // 공속
-const BUDG =[1.0,1.1,0.6,0.8,0.4,0.5,0.4,0];       // 예산 계수 (시트)
-const KG   ={1:1,2:1,3:2,4:3,5:5,6:8};             // 상인 킬골드
+const APSK =[2.0,0.4,0.8,1.0,1.0,1.0,1.0,0];
+const BUDG =[1.0,1.1,0.6,0.8,0.4,0.5,0.4,0];
+const KG   ={1:1,2:1,3:2,4:3,5:5,6:8};
+const NAMES=[
+ ['견습 사수','연발 사수','속사 명수','폭풍 사수','뇌운 사수','초월 · 뇌제'],
+ ['견습 저격수','정찰 저격수','파성 저격수','처형자','산악 거포','초월 · 산왕'],
+ ['소형 박격포','야전 화포','공성 화포','화염 곡사포','재앙 화포','초월 · 겁화룡'],
+ ['불씨 술사','화상 술사','부식 술사','황금 두꺼비','역병 술사','초월 · 역병군주'],
+ ['서리 견습생','한파 술사','빙하 술사','동토 술사','절대영도','초월 · 설왕'],
+ ['정전기 술사','스파크 술사','낙뢰 술사','마비 술사','뇌정 술사','초월 · 뇌신'],
+ ['균열 견습생','파암 술사','파쇄 술사','붕괴 술사','지진 술사','초월 · 지모신'],
+ ['견습 상인','행상인','무역상','상단주','대상단주','초월 · 황금왕']];
+const SKILL=[
+ '빠른 공속 단일 공격. 타격당 감산 구조라 방어력에 가장 취약 — 방깎(파쇄자)과 최고 궁합.',
+ '저속 초고딜 · 최장 사거리. 중갑·보스 특화, 잡몹전은 과잉딜 낭비.',
+ '광역 폭발. 빙결사(감속) 보유 시 밀집 계수 상승 — 냉기 레벨이 폭발 효율을 키움.',
+ '지속 피해 · 방어 완전 무시. 아머 인플레의 무과세 축.',
+ '감속 + 동상 스택 부여, 5스택 시 분쇄 폭발(방어 무시) — 냉기 레벨이 분쇄 위력을 키움.',
+ '타격 시 20% 확률 스턴 0.5초 (보스 면역). 저격수의 고정 시너지 파트너.',
+ '범위 방깎 존 — 대지 레벨이 방깎량을 키움. 속사수의 필수 파트너.',
+ '공격하지 않음. 몬스터 처치당 골드 획득. T1은 전액 환급 판매 가능 — 킵할지가 결정.'];
 const SWARM=new Set([6,15,22,31]), FAST=new Set([8,17,27,35]), HEAVY=new Set([13,24,33]);
 const BOSSDM={10:1.7,20:1.8,30:2.0,40:3.4};
 const wHP=r=>HP0*Math.pow(HP_G,r)*(r>25?Math.pow(ACC,r-25):1);
 const wARM=r=>ARM0*Math.pow(ARM_G,r);
 
-// ───── 경로 & 슬롯 ─────
+// ───── S자 경로 (3레인 서펜타인) ─────
 const cv=document.getElementById('cv'),cx=cv.getContext('2d');
-const M=46, W=420;
-const wp=[[M,M],[W-M,M],[W-M,W-M],[M,W-M],[M,M]];   // 사각 루프
+const wp=[[-14,62],[368,62],[368,178],[52,178],[52,294],[368,294],[368,452]];
 let segLen=[],TOTAL=0;
-for(let i=0;i<4;i++){const l=Math.hypot(wp[i+1][0]-wp[i][0],wp[i+1][1]-wp[i][1]);segLen.push(l);TOTAL+=l;}
+for(let i=0;i<wp.length-1;i++){const l=Math.hypot(wp[i+1][0]-wp[i][0],wp[i+1][1]-wp[i][1]);segLen.push(l);TOTAL+=l;}
 function pathPos(d){ d=Math.max(0,Math.min(d,TOTAL));
-  for(let i=0;i<4;i++){ if(d<=segLen[i]){const t=d/segLen[i];
+  for(let i=0;i<segLen.length;i++){ if(d<=segLen[i]){const t=d/segLen[i];
     return [wp[i][0]+(wp[i+1][0]-wp[i][0])*t, wp[i][1]+(wp[i+1][1]-wp[i][1])*t];}
-    d-=segLen[i];} return wp[4];}
-const SLOTS=[]; // 내부 4×4
-for(let gy=0;gy<4;gy++)for(let gx=0;gx<4;gx++)
-  SLOTS.push({x:118+gx*61.5,y:118+gy*61.5,tower:null});
+    d-=segLen[i];} return wp[wp.length-1];}
+// 타일: 레인 사이 포켓 3줄 + 좌측 하단
+const SLOTS=[];
+for(const y of [120,236,352]) for(let i=0;i<5;i++) SLOTS.push({x:88+i*61,y,tower:null});
+SLOTS.push({x:52,y:392,tower:null});   // 16번째: 탈출로 옆
 
 // ───── 상태 ─────
 const S={gold:150,mana:0,poll:0,debuff:1,lin:[0,0,0,0],round:0,phase:'prep',
-         prepT:2,waveT:0,spawned:0,toSpawn:0,killed:0,speed:1,sel:null,over:false,
-         golden:new WeakSet()};
-let enemies=[],shots=[],msgT=0;
+         prepT:2,waveT:0,spawned:0,toSpawn:0,killed:0,paidWave:0,speed:1,
+         sel:null,pending:null,over:false,golden:new WeakSet()};
+let enemies=[],shots=[],floats=[];
 const $=id=>document.getElementById(id);
-function msg(t){$('msg').textContent=t;msgT=4;}
+function msg(t){$('msg').textContent=t;}
 
-// ───── 타워 ─────
-function towerDmg(t){ // 타격당 피해
-  const b=6*BUDG[t.kind]*Math.pow(2.2,t.tier-1)*Math.pow(1.03,S.lin[ELEM[t.kind]]);
+// ───── 타워 수치 ─────
+function towerDmg(t){const b=6*BUDG[t.kind]*Math.pow(2.2,t.tier-1)*Math.pow(1.03,S.lin[ELEM[t.kind]]);
   return b/(APSK[t.kind]||1);}
 function towerRange(t){return [90,170,110,120,105,110,100,0][t.kind]+(t.tier-1)*6;}
-function freeSlot(){return SLOTS.find(s=>!s.tower);}
-function drawTower(){
+function showInfo(t,pendingMode){
+  const el=ELEM[t.kind],col=ECOL[el];
+  const dps=t.kind===7?0:(towerDmg(t)*APSK[t.kind]).toFixed(0);
+  let stats=t.kind===7
+    ? `처치당 +${KG[t.tier]}골드${S.golden.has(t)?' ×2 (황금!)':''}`
+    : `공격력 ${towerDmg(t).toFixed(1)} · 공속 ${APSK[t.kind]}/s · 사거리 ${towerRange(t)} · DPS ${dps}`;
+  $('info').innerHTML=`<span class="name">T${t.tier} ${NAMES[t.kind][t.tier-1]}</span>`+
+    `<span class="chip" style="background:${col}">${ENAME[el]}</span>`+
+    (pendingMode?`<span class="chip" style="background:#8a8fa8">배치 대기</span>`:'')+
+    `<br><span class="stats">${stats}</span><br>${SKILL[t.kind]}`;
+}
+function clearInfo(){$('info').innerHTML='<span class="tag">타워를 탭하면 속성·티어·스킬이 여기 표시됩니다.</span>';}
+
+// ───── 뽑기 · 배치 · 합성 · 판매 ─────
+function rollTower(){
+  if(S.pending)return msg('먼저 빈 타일을 탭해 배치하세요.');
   if(S.gold<DRAW)return msg('골드가 부족합니다.');
-  const slot=freeSlot(); if(!slot)return msg('빈 슬롯이 없습니다 — 합성이나 판매로 정리하세요.');
+  if(!SLOTS.some(s=>!s.tower))return msg('빈 타일이 없습니다 — 합성이나 판매로 정리하세요.');
   S.gold-=DRAW;
   const k=Math.floor(Math.random()*8);
-  if(k===7 && countMerch()>=4){S.gold+=DRAW;return msg('상인 등장 → 전액 환급 (킵 상한 4)');}
-  const t={kind:k,tier:1,cool:0,stacks:0};
+  const t={kind:k,tier:1,cool:0};
   if(k===7&&Math.random()<0.10)S.golden.add(t);
-  slot.tower=t;
-  if(k===7)msg('상인 등장! 킵하면 처치당 골드, T1은 전액 환급 판매 가능.');
-  tryMerchantMerge();
+  S.pending=t;S.sel=null;$('sell').disabled=true;
+  showInfo(t,true);
+  msg(`${KINDS[k]} 등장! 빈 타일을 탭해 배치하세요.${k===7?' (원치 않으면 배치 후 전액 환급 판매)':''}`);
+  $('draw').disabled=true;
 }
-function countMerch(){return SLOTS.filter(s=>s.tower&&s.tower.kind===7).length;}
-function tryMerchantMerge(){ // 상인 확정 합성
+function tryMerchantMerge(){
   for(let tier=1;tier<=5;tier++){
     const ms=SLOTS.filter(s=>s.tower&&s.tower.kind===7&&s.tower.tier===tier);
     if(ms.length>=2){ms[1].tower=null;
-      const t={kind:7,tier:tier+1,cool:0,stacks:0};
+      const t={kind:7,tier:tier+1,cool:0};
       if(Math.random()<0.10)S.golden.add(t);
-      ms[0].tower=t;return tryMerchantMerge();}}}
+      ms[0].tower=t;msg(`상인 합성 → T${tier+1} ${NAMES[7][tier]}`);return tryMerchantMerge();}}}
 function tapSlot(slot){
+  if(S.pending){
+    if(slot.tower)return msg('빈 타일을 선택하세요.');
+    slot.tower=S.pending;S.pending=null;$('draw').disabled=false;
+    if(slot.tower.kind===7)tryMerchantMerge();
+    clearInfo();msg('배치 완료.');return;}
   const t=slot.tower;
   if(S.sel&&S.sel!==slot&&t&&S.sel.tower&&t.kind===S.sel.tower.kind&&t.tier===S.sel.tower.tier&&t.tier<=5&&t.kind!==7){
-    // 합성: 같은 종·티어 2기 → 상위 랜덤 (전투 7종)
-    const nt={kind:Math.floor(Math.random()*7),tier:t.tier+1,cool:0,stacks:0};
+    const nt={kind:Math.floor(Math.random()*7),tier:t.tier+1,cool:0};
     slot.tower=null;S.sel.tower=nt;
-    msg(`합성! → T${nt.tier} ${KINDS[nt.kind]}${nt.tier===6?' ★초월★':''}`);
-    S.sel=null;$('sell').disabled=true;return;}
+    msg(`합성! → T${nt.tier} ${NAMES[nt.kind][nt.tier-1]}${nt.tier===6?' ★초월★':''}`);
+    showInfo(nt);S.sel=null;$('sell').disabled=true;return;}
   S.sel=(t&&S.sel!==slot)?slot:null;
   $('sell').disabled=!S.sel;
-  if(S.sel){const st=S.sel.tower;
+  if(S.sel){showInfo(S.sel.tower);
+    const st=S.sel.tower;
     const price=st.kind===7&&st.tier===1?DRAW:(st.tier>=5?0:30*Math.pow(2,st.tier-1));
-    msg(`T${st.tier} ${KINDS[st.kind]} 선택 — ${st.tier>=5?'매각 불가':'판매 '+price+'골드'}. 같은 타워 탭 = 합성`);}
+    msg(st.tier>=5?'T5 이상은 매각 불가. 같은 타워 탭 = 합성':`판매 ${price}골드 · 같은 타워 탭 = 합성`);}
+  else clearInfo();
 }
 $('sell').onclick=()=>{if(!S.sel)return;const t=S.sel.tower;
   if(t.tier>=5)return msg('T5 이상은 매각할 수 없습니다.');
   const price=t.kind===7&&t.tier===1?DRAW:30*Math.pow(2,t.tier-1);
-  S.gold+=price;S.sel.tower=null;S.sel=null;$('sell').disabled=true;
-  msg(`판매 +${price}골드${t.kind===7?' (상인 T1 전액 환급)':''}`);};
-
-// ───── 계보 ─────
-function linCost(i){return Math.floor(20*(1+S.lin[i]/100));}
-for(let i=0;i<4;i++)$('lin'+i).onclick=()=>{const c=linCost(i);
-  if(S.mana<c)return msg('마나가 부족합니다.');
-  S.mana-=c;S.lin[i]++;};
+  S.gold+=price;S.sel.tower=null;S.sel=null;$('sell').disabled=true;clearInfo();
+  msg(`판매 +${price}골드${t.kind===7&&t.tier===1?' (상인 T1 전액 환급)':''}`);};
+$('draw').onclick=rollTower;
 $('gamble').onclick=()=>{if(S.gold<100)return msg('골드가 부족합니다.');
   S.gold-=100;const g=20+10*Math.floor(Math.random()*15);S.mana+=g;
   msg(`마나 변환: +${g} ${g>=120?'— 대박!':g<=40?'— 꽝...':''}`);};
-$('draw').onclick=drawTower;
+function linCost(i){return Math.floor(20*(1+S.lin[i]/100));}
+for(let i=0;i<4;i++)$('lin'+i).onclick=()=>{const c=linCost(i);
+  if(S.mana<c)return msg('마나가 부족합니다.');S.mana-=c;S.lin[i]++;};
 $('speed').onclick=()=>{S.speed=S.speed===1?2:S.speed===2?4:1;$('speed').textContent='×'+S.speed;};
 cv.addEventListener('pointerdown',e=>{
   const r=cv.getBoundingClientRect(),sc=420/r.width;
@@ -169,40 +208,51 @@ cv.addEventListener('pointerdown',e=>{
 
 // ───── 웨이브 ─────
 function startRound(){
-  S.round++;S.phase='wave';S.waveT=0;S.spawned=0;S.killed=0;
+  S.round++;S.phase='wave';S.waveT=0;S.spawned=0;S.killed=0;S.paidWave=0;
   const r=S.round;
   S.mobN=Math.min(30,12+3*r);
   S.special=HEAVY.has(r)?'중갑':FAST.has(r)?'신속':SWARM.has(r)?'쇄도':(BOSSDM[r]?'보스':null);
   S.toSpawn=BOSSDM[r]?1:(S.special==='쇄도'?S.mobN*2:S.mobN);
+  S.rewardPool=REW_A+REW_B*r;
+  S.pollSnapshot=S.poll;
   $('wavetag').textContent=S.special?`[${S.special}]`:'';
   $('round').textContent='R'+r;
 }
 function spawnEnemy(){
   const r=S.round;let hp=wHP(r),spd=42,arm=wARM(r),weight=1;
-  if(BOSSDM[r]){hp*=S.mobN*BOSSDM[r]*0.55;spd=26;arm*=2;weight=8;}
+  if(BOSSDM[r]){hp*=S.mobN*BOSSDM[r]*0.55;spd=24;arm*=2;weight=8;}
   else if(S.special==='쇄도'){hp*=0.55;weight=1.5;}
   else if(S.special==='신속'){spd*=1.4;weight=1.5;}
   else if(S.special==='중갑'){hp*=1.15;arm*=4;spd*=0.85;weight=1.5;}
-  enemies.push({d:0,hp,maxhp:hp,spd,arm,weight,slow:0,stun:0,dot:0,stacks:0,boss:!!BOSSDM[r]});
+  enemies.push({d:0,hp,maxhp:hp,spd,arm,weight,slow:0,stun:0,dot:0,dotT:0,stacks:0,boss:!!BOSSDM[r]});
+}
+function onKill(e){
+  S.killed++;
+  // 웨이브 보상 킬 분할 지급 + 상인 킬골드
+  const share=Math.floor(S.rewardPool/S.toSpawn);
+  let kg=0;for(const sl of SLOTS){const t=sl.tower;if(t&&t.kind===7)kg+=KG[t.tier]*(S.golden.has(t)?2:1);}
+  const g=(e.boss?S.rewardPool:share)+Math.min(kg,8);
+  S.gold+=g;S.paidWave+=e.boss?S.rewardPool:share;
+  const[x,y]=pathPos(e.d);floats.push({x,y,txt:'+'+g,life:0.8,c:'#ffd23f'});
 }
 function endRound(){
-  const r=S.round,ratio=S.toSpawn?S.killed/S.toSpawn:1;
-  let g=Math.floor((REW_A+REW_B*r)*Math.min(1,ratio));
-  S.gold+=g;let m='';
+  const r=S.round;let m='';
+  const rest=Math.max(0,Math.floor(S.rewardPool*(S.killed/S.toSpawn))-S.paidWave);
+  if(rest>0)S.gold+=rest;
   if({9:150,18:250,27:350,36:450}[r]){const b={9:150,18:250,27:350,36:450}[r];S.gold+=b;m+=` 킬업적 +${b}`;}
-  if(BOSSDM[r]&&ratio>=0.6){S.mana+=150;m+=' 보스 마나 +150';
-    if(ratio>=1&&S.pollSnapshot===S.poll){S.gold+=250;S.mana+=100;m+=' 무피해 리베이트!';}}
+  if(BOSSDM[r]&&S.killed>=S.toSpawn*0.6){S.mana+=150;m+=' 보스 마나 +150';
+    if(S.poll===S.pollSnapshot){S.gold+=250;S.mana+=100;m+=' 무피해 리베이트!';}}
   if(S.gold>1000){S.gold-=100;m+=' (재화 상한 −100)';}
-  msg(`R${r} 정산 +${g}골드${m}`);
+  msg(`R${r} 종료${m}`);
   if(r>=40){finish(true);return;}
   S.phase='prep';S.prepT=2.5;
 }
 function finish(clear){
   S.over=true;$('overlay').style.display='flex';
   $('ovTitle').textContent=clear?'클리어 — 사건 달성':'기록: R'+S.round;
-  $('ovBody').innerHTML=(clear?'40라운드 완주. 클리어율 설계치 0.48%의 판을 뽑았습니다.':
-    `오염 100% 도달.<br>도달 라운드가 이 판의 기록입니다.`)+
-    `<br><br>골드 총획득 감각, 합성 손맛, 상인 킵 판단이 어땠는지 메모해두세요.`;
+  $('ovBody').innerHTML=(clear?'40라운드 완주. 설계 클리어율 0.48%의 판을 뽑았습니다.':
+    '오염 100% 도달.<br>도달 라운드가 이 판의 기록입니다.')+
+    '<br><br>합성 손맛 · 상인 킵 판단 · 계보 배분 감각을 메모해두세요.';
 }
 
 // ───── 전투 ─────
@@ -212,24 +262,20 @@ function shredAt(e){let s=0;
   return s;}
 function dist(sl,e){const[x,y]=pathPos(e.d);return Math.hypot(sl.x-x,sl.y-y);}
 function hitEnemy(e,dmg,opts={}){
-  let a=opts.trueDmg?0:Math.max(0,e.arm-(opts.shred??shredAt(e)));
-  const d=Math.max(1,dmg-a)*S.debuff;
-  e.hp-=d;}
+  const a=opts.trueDmg?0:Math.max(0,e.arm-(opts.shred??shredAt(e)));
+  e.hp-=Math.max(1,dmg-a)*S.debuff;}
 function update(dt){
   if(S.over)return;
-  if(S.phase==='prep'){S.prepT-=dt;if(S.prepT<=0){S.pollSnapshot=S.poll;startRound();}return;}
-  // 스폰
+  if(S.phase==='prep'){S.prepT-=dt;if(S.prepT<=0)startRound();return;}
   S.waveT+=dt;
   const spawnDur=BOSSDM[S.round]?0.1:14;
   while(S.spawned<S.toSpawn&&S.waveT>=S.spawned*(spawnDur/S.toSpawn)){spawnEnemy();S.spawned++;}
-  // 적 이동
   for(const e of enemies){
-    if(e.stun>0){e.stun-=dt;}
-    else{const sl=Math.min(0.6,e.slow);e.d+=e.spd*(1-sl)*dt;}
+    if(e.stun>0)e.stun-=dt;
+    else e.d+=e.spd*(1-Math.min(0.6,e.slow))*dt;
     e.slow=Math.max(0,e.slow-dt*0.4);
     if(e.dot>0){e.hp-=e.dot*dt*S.debuff;e.dotT-=dt;if(e.dotT<=0)e.dot=0;}
   }
-  // 타워
   for(const sl of SLOTS){const t=sl.tower;if(!t||t.kind===7)continue;
     t.cool-=dt;if(t.cool>0)continue;
     const rng=towerRange(t);
@@ -240,51 +286,64 @@ function update(dt){
     t.cool=1/APSK[t.kind];
     const dmg=towerDmg(t)*(t.tier===6?1.4:1);
     const[ex,ey]=pathPos(tgt.d);shots.push({x:sl.x,y:sl.y,ex,ey,c:ECOL[ELEM[t.kind]],life:.12});
-    if(t.kind===2){ // 화포: 스플래시 + 밀집 계수
+    if(t.kind===2){
       const hasSlow=SLOTS.some(s=>s.tower&&s.tower.kind===4&&s.tower.tier>=2);
       const f=Math.min(1.5,0.75+(hasSlow?0.6*(1+S.lin[3]/200):0));
       for(const e of enemies){if(e.hp<=0)continue;
         const[x1,y1]=pathPos(e.d);if(Math.hypot(x1-ex,y1-ey)<=42)hitEnemy(e,dmg*f);}
-    }else if(t.kind===3){tgt.dot=Math.max(tgt.dot,towerDmg(t)*1.0);tgt.dotT=6;hitEnemy(tgt,dmg*0.3,{trueDmg:true});}
-    else if(t.kind===4){ // 빙결: 감속 + 동상→분쇄
+    }else if(t.kind===3){tgt.dot=Math.max(tgt.dot,towerDmg(t));tgt.dotT=6;hitEnemy(tgt,dmg*0.3,{trueDmg:true});}
+    else if(t.kind===4){
       tgt.slow=Math.min(0.6,tgt.slow+0.3+(t.tier-1)*0.06);
       hitEnemy(tgt,dmg*(0.35+0.45*Math.min(1,S.lin[3]/120))/0.4);
       tgt.stacks++;
       if(tgt.stacks>=5){tgt.stacks=0;
         hitEnemy(tgt,towerDmg(t)*5*(1+0.08*Math.floor(S.lin[3]/5)),{shred:1e9});
-        shots.push({x:sl.x,y:sl.y,ex,ey,c:'#bfefff',life:.25});}}
+        shots.push({x:sl.x,y:sl.y,ex,ey,c:'#bfefff',life:.25});
+        floats.push({x:ex,y:ey,txt:'분쇄!',life:0.7,c:'#bfefff'});}}
     else if(t.kind===5){hitEnemy(tgt,dmg);if(Math.random()<0.2&&!tgt.boss)tgt.stun=0.5+(t.tier-1)*0.1;}
     else hitEnemy(tgt,dmg);
   }
-  // 처치·누출 처리
-  const pw=S.special?1.5:(BOSSDM[S.round]?2:1);
+  const pw=S.special==='보스'?2:(S.special?1.5:1);
   enemies=enemies.filter(e=>{
-    if(e.hp<=0){S.killed++;
-      let kg=0;for(const sl of SLOTS){const t=sl.tower;if(t&&t.kind===7)kg+=KG[t.tier]*(S.golden.has(t)?2:1);}
-      if(kg)S.gold+=Math.min(kg, 6); // 처치당 (라운드 상한은 근사 생략, 킬당 캡)
-      return false;}
-    if(e.d>=TOTAL){S.poll+=e.weight*pw*(S.round<=5?0.5:1);S.killed++; // 누출도 스폰 소진 처리
-      return false;}
+    if(e.hp<=0){onKill(e);return false;}
+    if(e.d>=TOTAL){S.poll+=e.weight*pw*(S.round<=5?0.5:1);S.killed++;
+      floats.push({x:368,y:430,txt:'누출',life:0.8,c:'#ff5a3c'});return false;}
     return true;});
   for(const th of[25,50,75])if(S.poll>=th&&!S['ms'+th]){S['ms'+th]=1;S.debuff*=0.97;msg(`오염 ${th}% — 오염 지형 발생 (DPS −3%)`);}
   if(S.poll>=100){finish(false);return;}
   if(S.spawned>=S.toSpawn&&enemies.length===0&&S.phase==='wave')endRound();
   shots=shots.filter(s=>(s.life-=dt)>0);
+  floats=floats.filter(f=>{f.life-=dt;f.y-=14*dt;return f.life>0;});
 }
 // ───── 렌더 ─────
 function render(){
-  cx.clearRect(0,0,420,420);
+  cx.clearRect(0,0,420,440);
+  // 배경 격자점
+  cx.fillStyle='#141a2c';
+  for(let x=20;x<420;x+=40)for(let y=20;y<440;y+=40){cx.fillRect(x,y,1.5,1.5);}
   // 경로
-  cx.strokeStyle='#232a45';cx.lineWidth=26;cx.lineJoin='round';
-  cx.beginPath();cx.moveTo(...wp[0]);for(let i=1;i<5;i++)cx.lineTo(...wp[i]);cx.stroke();
+  cx.strokeStyle='#232a45';cx.lineWidth=26;cx.lineJoin='round';cx.lineCap='round';
+  cx.beginPath();cx.moveTo(...wp[0]);for(let i=1;i<wp.length;i++)cx.lineTo(...wp[i]);cx.stroke();
   cx.strokeStyle='#2e3760';cx.lineWidth=2;cx.stroke();
-  // 슬롯·타워
+  // 진행 화살표
+  cx.fillStyle='#3d477a';
+  for(let d=40;d<TOTAL;d+=90){const[x,y]=pathPos(d),[x2,y2]=pathPos(d+8);
+    const ang=Math.atan2(y2-y,x2-x);
+    cx.save();cx.translate(x,y);cx.rotate(ang);
+    cx.beginPath();cx.moveTo(4,0);cx.lineTo(-3,-4);cx.lineTo(-3,4);cx.fill();cx.restore();}
+  // 입구·출구
+  cx.font='10px sans-serif';cx.textAlign='left';
+  cx.fillStyle='#7ee08a';cx.fillText('▶ 진입',4,50);
+  cx.fillStyle='#ff5a3c';cx.textAlign='right';cx.fillText('탈출 = 오염 ▼',412,432);
+  // 타일·타워
   for(const sl of SLOTS){
-    cx.fillStyle=sl===S.sel?'#2c3558':'#151a2c';
+    const placeable=S.pending&&!sl.tower;
+    cx.fillStyle=sl===S.sel?'#2c3558':placeable?'#22305a':'#151a2c';
     cx.beginPath();cx.arc(sl.x,sl.y,24,0,7);cx.fill();
+    if(placeable){cx.strokeStyle='#55c8ff';cx.globalAlpha=0.5+0.5*Math.sin(Date.now()/200);
+      cx.lineWidth=1.5;cx.stroke();cx.globalAlpha=1;}
     const t=sl.tower;if(!t)continue;
     const col=t.kind===7?(S.golden.has(t)?'#ffe28a':'#9aa2c0'):ECOL[ELEM[t.kind]];
-    // 시그니처: 티어 = 겹층 링
     for(let i=0;i<t.tier;i++){cx.strokeStyle=col;cx.globalAlpha=0.35+0.65*(i+1)/t.tier;
       cx.lineWidth=2;cx.beginPath();cx.arc(sl.x,sl.y,8+i*3.2,0,7);cx.stroke();}
     cx.globalAlpha=1;cx.fillStyle=col;
@@ -292,7 +351,6 @@ function render(){
     cx.fillStyle='#0e1220';cx.font='bold 8px sans-serif';cx.textAlign='center';
     cx.fillText(t.tier===6?'★':t.tier,sl.x,sl.y+3);
     cx.fillStyle=col;cx.font='9px sans-serif';cx.fillText(KINDS[t.kind],sl.x,sl.y+34);
-    // 합성 가능 쌍 맥동
     if(S.sel&&S.sel.tower&&sl!==S.sel&&t.kind===S.sel.tower.kind&&t.tier===S.sel.tower.tier&&t.tier<=5&&t.kind!==7){
       cx.strokeStyle='#fff';cx.globalAlpha=0.5+0.5*Math.sin(Date.now()/150);
       cx.lineWidth=2;cx.beginPath();cx.arc(sl.x,sl.y,27,0,7);cx.stroke();cx.globalAlpha=1;}
@@ -304,20 +362,21 @@ function render(){
     cx.beginPath();cx.arc(x,y,R0,0,7);cx.fill();
     cx.fillStyle='#0a0e19';cx.fillRect(x-9,y-R0-6,18,3);
     cx.fillStyle='#7ee08a';cx.fillRect(x-9,y-R0-6,18*Math.max(0,e.hp/e.maxhp),3);
-    if(e.stacks>0){cx.fillStyle='#bfefff';cx.font='7px sans-serif';cx.fillText('❄'.repeat(Math.min(e.stacks,5)),x,y-R0-9);}}
-  // 샷
+    if(e.stacks>0){cx.fillStyle='#bfefff';cx.font='7px sans-serif';cx.textAlign='center';
+      cx.fillText('❄'.repeat(Math.min(e.stacks,5)),x,y-R0-9);}}
+  // 샷·플로팅 텍스트
   for(const s of shots){cx.strokeStyle=s.c;cx.globalAlpha=s.life/0.12;cx.lineWidth=1.5;
     cx.beginPath();cx.moveTo(s.x,s.y);cx.lineTo(s.ex,s.ey);cx.stroke();cx.globalAlpha=1;}
-  // 준비 카운트
+  for(const f of floats){cx.fillStyle=f.c;cx.globalAlpha=Math.min(1,f.life/0.4);
+    cx.font='bold 10px sans-serif';cx.textAlign='center';cx.fillText(f.txt,f.x,f.y);cx.globalAlpha=1;}
   if(S.phase==='prep'&&!S.over){cx.fillStyle='#e8e6df';cx.font='bold 15px sans-serif';cx.textAlign='center';
-    cx.fillText(S.round>=40?'':'다음 라운드 준비 중… R'+(S.round+1),210,210);}
+    cx.fillText('다음 라운드 준비 중… R'+(S.round+1),210,225);}
 }
 function hud(){
   $('gold').textContent=Math.floor(S.gold);
   $('mana').textContent=Math.floor(S.mana);
   $('pollbar').style.width=S.poll+'%';
-  for(let i=0;i<4;i++)$('lin'+i).innerHTML=['번개','대지','화염','냉기'][i]+`<br><span class="tag">Lv${S.lin[i]} · ${linCost(i)}</span>`;
-  if(msgT>0)msgT-=0.05;
+  for(let i=0;i<4;i++)$('lin'+i).innerHTML=ENAME[i]+`<br><span class="tag">Lv${S.lin[i]} · ${linCost(i)}</span>`;
 }
 let last=performance.now();
 function loop(now){
