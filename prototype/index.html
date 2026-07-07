@@ -134,7 +134,7 @@ for(const y of [116,228,340,445,500,555]) for(let i=0;i<6;i++) SLOTS.push({x:84+
 // ───── 상태 ─────
 const S={gold:300,poll:0,debuff:1,lin:[0,0,0,0],round:0,phase:'prep',
          prepT:2,waveT:0,spawned:0,toSpawn:0,killed:0,paidWave:0,speed:1,
-         sel:null,pending:null,over:false,golden:new WeakSet()};
+         sel:null,pending:null,over:false,buys:0,golden:new WeakSet()};
 let enemies=[],shots=[],floats=[];
 const $=id=>document.getElementById(id);
 function msg(t){$('msg').textContent=t;}
@@ -193,14 +193,15 @@ function rollTower(){
   msg(`${KINDS[k]} 등장! 빈 타일을 탭해 배치하세요.${k===7?' (원치 않으면 배치 후 전액 환급 판매)':''}`);
   $('draw').disabled=true;
 }
-// 지정 구매: 원하는 T1을 라운드 비례 프리미엄가로 (뽑기보다 비싸지만 확정)
-function buyCost(){return 100+6*S.round;}
+// 지정 구매: 원하는 T1을 확정으로 얻는 만큼 라운드와 사용 횟수에 따라 비선형으로 비싸진다.
+function buyCost(){return Math.floor(100+4*S.round+0.35*S.round*S.round+20*S.buys+3*S.buys*S.buys);}
 function buyTower(k){
   if(S.pending)return msg('먼저 대기 중인 타워를 배치하세요.');
   const c=buyCost();
   if(S.gold<c)return msg(`골드 부족 — ${KINDS[k]} 지정 구매에 ${c}골드 필요 (보유 ${Math.floor(S.gold)})`);
   if(!SLOTS.some(s=>!s.tower))return msg('빈 타일이 없습니다 — 합성이나 판매로 정리하세요.');
   S.gold-=c;
+  S.buys++;
   const t={kind:k,tier:1,cool:0};
   if(k===7&&Math.random()<0.10)S.golden.add(t);
   S.pending=t;S.sel=null;$('sell').disabled=true;
