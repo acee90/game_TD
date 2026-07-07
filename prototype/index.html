@@ -75,7 +75,8 @@
 'use strict';
 // ───── 확정 밸런스 상수 (GA v0.4) ─────
 const HP0=40, HP_G=1.29, ACC=1.06, ARM0=0.15, ARM_G=1.17;
-const REW_A=100, REW_B=10, DRAW=60;
+// 프로토 체험용 경제 완화 (문서 확정치: 100+10r, 시작 150골드 — 합성 템포 검증 위해 ×1.6)
+const REW_A=160, REW_B=16, DRAW=60;
 const KINDS=['속사수','저격수','화포','도트','빙결사','뇌격사','파쇄자','상인'];
 const ELEM =[0,1,2,2,3,0,1,3];
 const ENAME=['번개','대지','화염','냉기'];
@@ -121,7 +122,7 @@ for(const y of [120,236,352]) for(let i=0;i<5;i++) SLOTS.push({x:88+i*61,y,tower
 SLOTS.push({x:52,y:392,tower:null});   // 16번째: 탈출로 옆
 
 // ───── 상태 ─────
-const S={gold:150,mana:0,poll:0,debuff:1,lin:[0,0,0,0],round:0,phase:'prep',
+const S={gold:300,mana:0,poll:0,debuff:1,lin:[0,0,0,0],round:0,phase:'prep',
          prepT:2,waveT:0,spawned:0,toSpawn:0,killed:0,paidWave:0,speed:1,
          sel:null,pending:null,over:false,golden:new WeakSet()};
 let enemies=[],shots=[],floats=[];
