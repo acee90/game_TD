@@ -74,9 +74,9 @@
 <script>
 'use strict';
 // ───── 확정 밸런스 상수 (GA v0.4) ─────
-const HP0=40, HP_G=1.29, ACC=1.06, ARM0=0.15, ARM_G=1.17;
+const HP0=40, HP_G=1.22, ACC=1.06,  // 프로토 체험 모드 (문서 확정 1.29) ARM0=0.15, ARM_G=1.17;
 // 프로토 체험용 경제 완화 (문서 확정치: 100+10r, 시작 150골드 — 합성 템포 검증 위해 ×1.6)
-const REW_A=160, REW_B=16, DRAW=60;
+const REW_A=160, REW_B=16, DRAW=40;  // 프로토: 뽑기 40 (문서 60)
 const KINDS=['속사수','저격수','화포','도트','빙결사','뇌격사','파쇄자','상인'];
 const ELEM =[0,1,2,2,3,0,1,3];
 const ENAME=['번개','대지','화염','냉기'];
@@ -118,8 +118,7 @@ function pathPos(d){ d=Math.max(0,Math.min(d,TOTAL));
     d-=segLen[i];} return wp[wp.length-1];}
 // 타일: 레인 사이 포켓 3줄 + 좌측 하단
 const SLOTS=[];
-for(const y of [120,236,352]) for(let i=0;i<5;i++) SLOTS.push({x:88+i*61,y,tower:null});
-SLOTS.push({x:52,y:392,tower:null});   // 16번째: 탈출로 옆
+for(const y of [120,236,352,408]) for(let i=0;i<6;i++) SLOTS.push({x:84+i*51,y,tower:null});
 
 // ───── 상태 ─────
 const S={gold:300,mana:0,poll:0,debuff:1,lin:[0,0,0,0],round:0,phase:'prep',
@@ -183,16 +182,16 @@ function tapSlot(slot){
   $('sell').disabled=!S.sel;
   if(S.sel){showInfo(S.sel.tower);
     const st=S.sel.tower;
-    const price=st.kind===7&&st.tier===1?DRAW:(st.tier>=5?0:30*Math.pow(2,st.tier-1));
+    const price=st.kind===7&&st.tier===1?DRAW:(st.tier>=5?0:DRAW/2*Math.pow(2,st.tier-1));
     msg(st.tier>=5?'T5 이상은 매각 불가. 같은 타워 탭 = 합성':`판매 ${price}골드 · 같은 타워 탭 = 합성`);}
   else clearInfo();
 }
 $('sell').onclick=()=>{if(!S.sel)return;const t=S.sel.tower;
   if(t.tier>=5)return msg('T5 이상은 매각할 수 없습니다.');
-  const price=t.kind===7&&t.tier===1?DRAW:30*Math.pow(2,t.tier-1);
+  const price=t.kind===7&&t.tier===1?DRAW:DRAW/2*Math.pow(2,t.tier-1);
   S.gold+=price;S.sel.tower=null;S.sel=null;$('sell').disabled=true;clearInfo();
   msg(`판매 +${price}골드${t.kind===7&&t.tier===1?' (상인 T1 전액 환급)':''}`);};
-$('draw').onclick=rollTower;
+$('draw').onclick=rollTower;$('draw').textContent='뽑기 '+DRAW;
 $('gamble').onclick=()=>{if(S.gold<100)return msg('골드가 부족합니다.');
   S.gold-=100;const g=20+10*Math.floor(Math.random()*15);S.mana+=g;
   msg(`마나 변환: +${g} ${g>=120?'— 대박!':g<=40?'— 꽝...':''}`);};
@@ -352,6 +351,10 @@ function render(){
     cx.fillStyle='#0e1220';cx.font='bold 8px sans-serif';cx.textAlign='center';
     cx.fillText(t.tier===6?'★':t.tier,sl.x,sl.y+3);
     cx.fillStyle=col;cx.font='9px sans-serif';cx.fillText(KINDS[t.kind],sl.x,sl.y+34);
+    // 합성 짝 존재 시 상시 표시점
+    if(t.kind!==7&&t.tier<=5&&SLOTS.some(o=>o!==sl&&o.tower&&o.tower.kind===t.kind&&o.tower.tier===t.tier)){
+      cx.fillStyle='#fff';cx.globalAlpha=0.5+0.4*Math.sin(Date.now()/300);
+      cx.beginPath();cx.arc(sl.x+17,sl.y-17,3,0,7);cx.fill();cx.globalAlpha=1;}
     if(S.sel&&S.sel.tower&&sl!==S.sel&&t.kind===S.sel.tower.kind&&t.tier===S.sel.tower.tier&&t.tier<=5&&t.kind!==7){
       cx.strokeStyle='#fff';cx.globalAlpha=0.5+0.5*Math.sin(Date.now()/150);
       cx.lineWidth=2;cx.beginPath();cx.arc(sl.x,sl.y,27,0,7);cx.stroke();cx.globalAlpha=1;}
