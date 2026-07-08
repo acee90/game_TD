@@ -12,8 +12,13 @@ docs/        게임 디자인 문서
   시퀀스표_v0.1.md                    ← 40라운드 레벨 디자인 (수치는 상수에서 자동 산출)
 sim/         밸런스 검증 시뮬레이터
   td_sim_v04_ga.py                    ← 유전 알고리즘 기반 (python3 td_sim_v04_ga.py)
-prototype/   코어 루프 웹 프로토타입
+prototype/   코어 루프 웹 프로토타입 (단일 html, 레거시)
   index.html                          ← 브라우저로 열면 바로 플레이
+  gattadi.html                        ← 갓타디 시스템 이식 1차 스케치
+web/         갓타디 프로토 (Vite + TypeScript, 현행)
+  src/data/balance.ts                 ← 밸런스 외부 테이블 (§11 정합)
+  src/game/game.ts                    ← DOM 없는 게임 로직 (vitest 커버)
+  tests/game.test.ts                  ← 로직 스모크 테스트 12종
 ```
 
 ## 핵심 설계 요약
@@ -46,6 +51,19 @@ prototype/   코어 루프 웹 프로토타입
 주의: 프로토타입은 합성 손맛 체험을 위해 **문서 확정치 대비 완화된 체험 모드**
 (보상 160+16r · 시작 300골드 · 뽑기 40골드 · 타일 24개 · HP 계수 1.22).
 출시 밸런스는 문서 §7의 GA 확정치(뽑기 60 · HP 1.29)를 따른다.
+
+## 갓타디 프로토 (web/) 실행
+
+```bash
+cd web
+npm install
+npm run dev     # http://localhost:5173
+npm test        # 게임 로직 스모크 테스트
+npm run build   # 타입체크 + 프로덕션 빌드
+```
+
+십자가 맵 · 스플/파워 변환 · 보스 직접 소환 · 일꾼 경제 검증용.
+설계 근거: docs/갓타디_운영레이어_분석_v0.1.md
 
 ## 시뮬레이터 실행
 

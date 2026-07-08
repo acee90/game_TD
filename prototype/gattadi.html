@@ -1,0 +1,402 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>갓타디 프로토 — 스플/파워 변환 · 보스 소환 · 십자가</title>
+<style>
+  :root{
+    --bg:#0e1220; --panel:#171c2e; --panel2:#1e2438; --line:#2a3150;
+    --text:#e8e6df; --dim:#8a8fa8;
+    --terran:#4ea3ff; --zerg:#c065e0; --toss:#ffd23f;
+    --gold:#ffd23f; --danger:#ff5a3c; --splash:#55c8ff; --power:#ff8a3c;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  body{background:var(--bg);color:var(--text);font-family:-apple-system,'Noto Sans KR',sans-serif;
+       display:flex;flex-direction:column;align-items:center;min-height:100vh;padding:8px}
+  #wrap{width:100%;max-width:440px}
+  #hud{display:flex;justify-content:space-between;align-items:center;padding:6px 4px;
+       font-variant-numeric:tabular-nums;font-size:14px}
+  #hud b{font-size:16px}
+  .res span::before{content:'◆';font-size:10px;margin-right:3px;vertical-align:1px;color:var(--gold)}
+  #pollwrap{height:6px;background:var(--panel);border-radius:3px;overflow:hidden;margin:2px 0 6px}
+  #pollbar{height:100%;width:0%;background:linear-gradient(90deg,#5a4a8a,var(--danger));transition:width .2s}
+  canvas{width:100%;display:block;background:#0a0e19;border:1px solid var(--line);border-radius:8px;touch-action:manipulation}
+  #info{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:8px 10px;
+        margin-top:6px;min-height:60px;font-size:12.5px;line-height:1.5}
+  #info .name{font-weight:700;font-size:14px}
+  .chip{display:inline-block;padding:1px 7px;border-radius:9px;font-size:10.5px;
+        margin-left:6px;vertical-align:1px;color:#0e1220;font-weight:700}
+  #msg{min-height:18px;font-size:12px;color:var(--dim);padding:4px;text-align:center}
+  .row{display:grid;gap:6px;margin-top:6px}
+  .c2{grid-template-columns:1fr 1fr}.c3{grid-template-columns:1fr 1fr 1fr}.c4{grid-template-columns:repeat(4,1fr)}
+  button{background:var(--panel2);color:var(--text);border:1px solid var(--line);border-radius:8px;
+         padding:10px 4px;font-size:12.5px;font-family:inherit;cursor:pointer;line-height:1.4}
+  button:active{transform:translateY(1px)} button:disabled{opacity:.35}
+  button.gold{border-color:var(--gold)} button.splash{border-color:var(--splash)} button.power{border-color:var(--power)}
+  button.hot{background:#33324a;border-color:var(--gold)}
+  #prep{background:var(--panel);border:1px solid var(--gold);border-radius:8px;padding:8px 10px;margin-top:6px;font-size:12.5px}
+  #prep .wt{font-weight:700;font-size:14px}
+  .tag{font-size:11px;color:var(--dim)}
+  #bt0{border-color:var(--line)} #bt1{border-color:var(--power)} #bt2{border-color:var(--danger)}
+  #up0{border-color:var(--terran)} #up1{border-color:var(--zerg)} #up2{border-color:var(--toss)}
+  #overlay{position:fixed;inset:0;background:rgba(10,14,25,.93);display:none;
+           flex-direction:column;align-items:center;justify-content:center;gap:14px;text-align:center;padding:24px}
+  #overlay h1{font-size:26px} #overlay p{color:var(--dim);line-height:1.8}
+  #overlay button{padding:12px 28px;font-size:15px}
+</style>
+</head>
+<body>
+<div id="wrap">
+  <div id="hud">
+    <div><b id="round">R1</b> <span id="phase" class="tag">준비</span></div>
+    <div class="res"><span id="gold">240</span> · <span class="tag" id="wk">일꾼 0</span></div>
+    <div><button id="speed" style="padding:4px 10px;font-size:12px">×1</button></div>
+  </div>
+  <div id="pollwrap"><div id="pollbar"></div></div>
+  <canvas id="cv" width="420" height="520"></canvas>
+  <div id="info"><span class="tag">십자가 타일을 탭해 배치 · 타워를 탭하면 정보와 스플/파워 전환</span></div>
+  <div id="msg">준비 단계: 다음 웨이브 성격을 보고 스플/파워를 맞춘 뒤 시작하세요.</div>
+
+  <!-- 준비 단계 패널: 웨이브 예고 + 보스 소환 선택 -->
+  <div id="prep">
+    <div><span class="wt" id="wtName">—</span> <span id="wtTip" class="tag"></span></div>
+    <div class="row c3" style="margin-top:8px">
+      <button id="bt0" class="hot">보스 없음</button>
+      <button id="bt1">★ 하급보스</button>
+      <button id="bt2">★★ 상급보스</button>
+    </div>
+    <div class="tag" id="bossTip" style="margin-top:6px;text-align:center">보스를 소환하면 골드가 크게 늘지만, 못 잡으면 오염이 폭증합니다.</div>
+    <button id="start" class="gold" style="width:100%;margin-top:8px">웨이브 시작 ▶</button>
+  </div>
+
+  <div class="row c2">
+    <button id="produce" class="gold">유닛 생산 40</button>
+    <button id="hire">일꾼 고용 90</button>
+  </div>
+  <div class="row c2">
+    <button id="mSplash" class="splash">전체 → 광역</button>
+    <button id="mPower" class="power">전체 → 단일</button>
+  </div>
+  <div class="tag" style="text-align:center;margin-top:8px">종족 강화(골드) — 선택 종족 공격력 +6%/Lv</div>
+  <div class="row c3">
+    <button id="up0">테란 +0</button><button id="up1">저그 +0</button><button id="up2">토스 +0</button>
+  </div>
+  <div class="tag" style="text-align:center;margin-top:8px">단축키 — P 생산 · H 일꾼 · Space 웨이브시작 · Q 광역 · E 단일 · 123 보스선택</div>
+</div>
+<div id="overlay"><h1 id="ovT"></h1><p id="ovB"></p><button onclick="location.reload()">다시 도전</button></div>
+<script>
+'use strict';
+const $=id=>document.getElementById(id);
+const cv=$('cv'),cx=cv.getContext('2d');
+
+/* ───────── 상수 ───────── */
+const RACE=['테란','저그','토스'], RCOL=['#4ea3ff','#c065e0','#ffd23f'];
+const TNAME=['Lv1','Lv2','Lv3','Lv4','갓'];          // 티어 5단계 (갓타디: 하위 4레벨 → 갓)
+const TDMG =[1, 3, 9, 28, 95];                        // 티어별 기본 공격력 배수(가속)
+const TRNG =[120,140,160,185,225];                    // 티어별 사거리
+const DMG0 =7;                                        // 기준 공격력
+const ATKINT=0.55;                                    // 공격 간격(초)
+const PRODUCE=40, HIRE_BASE=90, WORKER_INC=14;        // 생산·일꾼 비용/수입
+const WAVE_BASE=(r)=>28+8*r;                          // 웨이브 클리어 기본 소득
+const KILL_GOLD=2;
+// 웨이브 성격: 일반 / 쇄도(광역 유리) / 중갑(단일 유리)
+const WTYPES={
+  normal:{name:'일반',  tip:'균형 — 아무 형태나 무난',      color:'#8a8fa8'},
+  swarm: {name:'쇄도',  tip:'다수 저체력 → 광역이 유리',    color:'#55c8ff'},
+  heavy: {name:'중갑',  tip:'소수 고장갑 → 단일이 유리',    color:'#ff8a3c'},
+};
+
+/* ───────── 십자가 맵: 사각 루프 경로 + 중앙 십자 타일 ───────── */
+// 몹은 루프를 시계방향으로 돈다. 한 바퀴(LOOP) 안에 못 잡으면 누출 = 라인 샘.
+const A=[40,70],B=[380,70],C=[380,470],D=[40,470];
+const WP=[A,B,C,D,A]; let SEG=[],LOOP=0;
+for(let i=0;i<WP.length-1;i++){const l=Math.hypot(WP[i+1][0]-WP[i][0],WP[i+1][1]-WP[i][1]);SEG.push(l);LOOP+=l;}
+function pathPos(d){d=((d%LOOP)+LOOP)%LOOP;for(let i=0;i<SEG.length;i++){if(d<=SEG[i]){const t=d/SEG[i];
+  return[WP[i][0]+(WP[i+1][0]-WP[i][0])*t,WP[i][1]+(WP[i+1][1]-WP[i][1])*t];}d-=SEG[i];}return A;}
+// 중앙 십자(+) 배치 타일: 상/하/좌/우 팔 + 허브 = 9칸
+const TILE=42, CXc=210, CYc=270;
+const SLOTS=[
+  {x:CXc,y:140},{x:CXc,y:190},              // 상 팔 (상단 엣지 커버)
+  {x:CXc,y:350},{x:CXc,y:400},              // 하 팔
+  {x:110,y:CYc},{x:160,y:CYc},              // 좌 팔
+  {x:260,y:CYc},{x:310,y:CYc},              // 우 팔
+  {x:CXc,y:CYc},                            // 허브
+].map(s=>({...s,tower:null}));
+
+/* ───────── 상태 ───────── */
+const S={gold:240,poll:0,round:1,phase:'prep',workers:0,speed:1,
+         up:[0,0,0],sel:null,pending:null,boss:0,over:false,
+         spawnQ:[],spawnT:0,alive:0};
+let enemies=[],shots=[],floats=[];
+function msg(t){$('msg').textContent=t;}
+
+/* ───────── 웨이브 구성 ───────── */
+function waveHP(r){return 34*Math.pow(1.32,r);}        // 잡몹 기준 체력
+function pickType(r){                                   // 라운드별 성격(초반은 일반, 이후 번갈아)
+  if(r<3)return 'normal';
+  const m=r%3; return m===0?'heavy':m===1?'swarm':'normal';
+}
+function buildWave(r){
+  const t=pickType(r), hp=waveHP(r); let q=[];
+  if(t==='swarm'){ for(let i=0;i<16+r;i++)q.push({hp:hp*0.55,armor:hp*0.02,spd:78,r:8,type:t}); }
+  else if(t==='heavy'){ for(let i=0;i<5;i++)q.push({hp:hp*2.6,armor:hp*0.13,spd:42,r:13,type:t}); }
+  else { for(let i=0;i<9;i++)q.push({hp:hp,armor:hp*0.05,spd:56,r:10,type:t}); }
+  return {type:t,q};
+}
+let NEXT=buildWave(S.round);
+
+/* ───────── 타워 수치 ───────── */
+function tdmg(t){return DMG0*TDMG[t.tier]*Math.pow(1.06,S.up[t.race]);}
+function trng(t){return TRNG[t.tier]*(t.mode==='power'?1.15:1);}
+// 유효 피해: 장갑을 뺀다(단일 큰 타격은 장갑 관통, 광역 소타격은 장갑에 갉아먹힘)
+function effDmg(raw,armor){return Math.max(raw-armor, raw*0.1);}
+
+/* ───────── 입력: 생산 / 배치 / 합성 / 판매 ───────── */
+function produce(){
+  if(S.pending)return msg('먼저 대기 유닛을 배치하세요.');
+  if(S.gold<PRODUCE)return msg('골드 부족.');
+  if(!SLOTS.some(s=>!s.tower))return msg('빈 타일이 없습니다 — 합성/판매로 정리하세요.');
+  S.gold-=PRODUCE;
+  S.pending={race:Math.floor(Math.random()*3),tier:0,mode:'splash',cd:0};
+  S.sel=null; showInfo(S.pending,true);
+  msg(`${RACE[S.pending.race]} Lv1 생산! 십자가 빈 타일을 탭해 배치.`);
+}
+function hireCost(){return HIRE_BASE+S.workers*35;}
+function hire(){
+  const c=hireCost();
+  if(S.gold<c)return msg(`골드 부족 — 일꾼 ${c} 필요.`);
+  if(S.workers>=10)return msg('일꾼은 최대 10기.');
+  S.gold-=c; S.workers++;
+  msg(`일꾼 고용! 웨이브당 +${WORKER_INC}골드 (지금 투자 = 미래 소득, 대신 이번 방어는 얇아짐)`);
+  sync();
+}
+function tryMerge(){ // 같은 종족+티어 2기 자동 합성(배치 직후 검사) — 상위 티어, 종족 랜덤
+  for(let ti=0;ti<4;ti++)for(let r=0;r<3;r++){
+    const g=SLOTS.filter(s=>s.tower&&s.tower.tier===ti&&s.tower.race===r);
+    if(g.length>=2){ g[1].tower=null;
+      const nr=Math.floor(Math.random()*3);
+      g[0].tower={race:nr,tier:ti+1,mode:g[0].tower.mode,cd:0};
+      floatT(g[0].x,g[0].y,ti+1===4?'★갓★':'합성!',ti+1===4?'#ffd23f':'#fff');
+      return tryMerge();
+    }}
+}
+function tapCanvas(px,py){
+  // 타일 판정
+  for(const s of SLOTS){
+    if(Math.abs(px-s.x)<=TILE/2&&Math.abs(py-s.y)<=TILE/2){
+      if(S.pending){ if(s.tower)return msg('빈 타일을 선택하세요.');
+        s.tower=S.pending; S.pending=null; tryMerge(); S.sel=null; clearInfo(); msg('배치 완료.'); sync(); return; }
+      if(s.tower){ S.sel=(S.sel===s?null:s); if(S.sel)showInfo(s.tower); else clearInfo(); }
+      else { S.sel=null; clearInfo(); }
+      sync(); return;
+    }}
+  S.sel=null; clearInfo(); sync();
+}
+function toggleMode(one){ // one=선택 타워만 / 아니면 전체
+  const set=(t)=>{t.mode=(t.mode==='splash'?'power':'splash');};
+  if(one){ if(!S.sel)return; set(S.sel.tower); showInfo(S.sel.tower); }
+  sync();
+}
+function setAll(mode){ SLOTS.forEach(s=>{if(s.tower)s.tower.mode=mode;});
+  if(S.sel)showInfo(S.sel.tower);
+  msg(`모든 타워 → ${mode==='splash'?'광역(라인청소)':'단일(보스·중갑)'} 전환`); sync(); }
+
+/* ───────── 정보 패널 ───────── */
+function showInfo(t,pend){
+  const col=RCOL[t.race], dps=(tdmg(t)/ATKINT).toFixed(0);
+  const modeChip=`<span class="chip" style="background:${t.mode==='splash'?'#55c8ff':'#ff8a3c'}">${t.mode==='splash'?'광역':'단일'}</span>`;
+  $('info').innerHTML=`<span class="name">${RACE[t.race]} ${TNAME[t.tier]}</span>`+
+    `<span class="chip" style="background:${col}">${RACE[t.race]}</span>`+modeChip+
+    (pend?`<span class="chip" style="background:#8a8fa8">배치 대기</span>`:'')+
+    `<br><span class="tag">공격력 ${tdmg(t).toFixed(0)} · 사거리 ${trng(t).toFixed(0)} · DPS ${dps}</span>`+
+    (pend?'':`<div class="row c2" style="margin-top:6px">`+
+      `<button onclick="toggleMode(true)">${t.mode==='splash'?'→ 단일 전환':'→ 광역 전환'}</button>`+
+      `<button onclick="sellSel()">판매 +${sellPrice(t)}</button></div>`);
+}
+function clearInfo(){$('info').innerHTML='<span class="tag">십자가 타일을 탭해 배치 · 타워를 탭하면 정보와 스플/파워 전환</span>';}
+function sellPrice(t){return Math.floor(PRODUCE*0.5*Math.pow(2,t.tier));}
+function sellSel(){ if(!S.sel)return; S.gold+=sellPrice(S.sel.tower); S.sel.tower=null; S.sel=null; clearInfo(); msg('판매 완료.'); sync(); }
+window.toggleMode=toggleMode; window.sellSel=sellSel;
+
+/* ───────── 웨이브 진행 ───────── */
+function startWave(){
+  if(S.phase!=='prep')return;
+  S.phase='wave'; S.spawnQ=NEXT.q.slice(); S.spawnT=0; S.alive=S.spawnQ.length;
+  // 보스 소환: 선택한 등급을 이번 웨이브에 합류
+  if(S.boss>0){
+    const mult=S.boss===1?26:60, rew=S.boss===1?260+40*S.round:640+90*S.round;
+    S.spawnQ.push({hp:waveHP(S.round)*mult,armor:waveHP(S.round)*0.18,spd:30,r:20,type:'boss',reward:rew,boss:S.boss});
+    S.alive++;
+  }
+  $('prep').style.display='none';
+  msg(`${WTYPES[NEXT.type].name} 웨이브 진행 중…`); sync();
+}
+function endWave(){
+  S.gold+=WAVE_BASE(S.round)+S.workers*WORKER_INC;
+  S.round++; S.phase='prep'; S.boss=0; S.sel=null;
+  NEXT=buildWave(S.round);
+  $('prep').style.display='';
+  $('bt0').classList.add('hot');$('bt1').classList.remove('hot');$('bt2').classList.remove('hot');
+  clearInfo(); msg(`웨이브 클리어! +${WAVE_BASE(S.round-1)+S.workers*WORKER_INC}골드. 다음 성격을 보고 형태를 맞추세요.`);
+  sync();
+}
+function leak(e){
+  const p=e.type==='boss'?(e.boss===2?45:28):(e.type==='swarm'?2:e.type==='heavy'?6:3);
+  S.poll=Math.min(100,S.poll+p);
+  floatT(LEAKP[0],LEAKP[1],e.type==='boss'?'보스 누출!':'누출',e.type==='boss'?'#ff5a3c':'#ff8a3c');
+  if(S.poll>=100)gameOver();
+}
+const LEAKP=[40,70];
+
+/* ───────── 업데이트 루프 ───────── */
+let last=0;
+function frame(ts){
+  const dt=Math.min(0.05,(ts-last)/1000||0)*S.speed; last=ts;
+  if(!S.over){ update(dt); render(); }
+  requestAnimationFrame(frame);
+}
+function update(dt){
+  if(S.phase==='wave'){
+    // 스폰
+    if(S.spawnQ.length){ S.spawnT-=dt;
+      if(S.spawnT<=0){ const spec=S.spawnQ.shift();
+        enemies.push({...spec,d:0,maxhp:spec.hp}); S.spawnT=spec.type==='swarm'?0.35:0.7; } }
+    // 적 이동 + 누출
+    for(const e of enemies){ e.d+=e.spd*dt;
+      if(e.d>=LOOP){ e.dead=true; e.leaked=true; leak(e); } }
+    // 타워 공격
+    for(const s of SLOTS){ const t=s.tower; if(!t)continue; t.cd-=dt; if(t.cd>0)continue;
+      const rng=trng(t), raw=tdmg(t); let fired=false;
+      const inRange=enemies.filter(e=>!e.dead&&Math.hypot(pathPos(e.d)[0]-s.x,pathPos(e.d)[1]-s.y)<=rng);
+      if(!inRange.length)continue;
+      if(t.mode==='power'){ // 단일: 체력 최대(=보스/중갑 우선) 하나에 큰 피해
+        let tg=inRange[0]; for(const e of inRange)if(e.hp>tg.hp)tg=e;
+        hit(tg,effDmg(raw*1.6,tg.armor)); shots.push({x:s.x,y:s.y,tx:pathPos(tg.d)[0],ty:pathPos(tg.d)[1],life:.08,c:'#ff8a3c'}); fired=true;
+      } else { // 광역: 범위 내 전체에 감소 피해
+        for(const e of inRange){ hit(e,effDmg(raw*0.7,e.armor)); }
+        const c=pathPos(inRange[0].d); shots.push({x:s.x,y:s.y,tx:c[0],ty:c[1],life:.08,c:'#55c8ff',splash:rng}); fired=true;
+      }
+      if(fired)t.cd=ATKINT;
+    }
+    // 처치 처리
+    for(const e of enemies){ if(e.hp<=0&&!e.dead){ e.dead=true; S.gold+=KILL_GOLD;
+      if(e.type==='boss'){ S.gold+=e.reward; floatT(pathPos(e.d)[0],pathPos(e.d)[1],'+'+e.reward,'#ffd23f'); } } }
+    if(enemies.some(e=>e.dead))sync();
+    enemies=enemies.filter(e=>!e.dead);
+    S.alive=enemies.length+S.spawnQ.length;
+    if(S.alive===0)endWave();
+  }
+  for(const s of shots)s.life-=dt; shots=shots.filter(s=>s.life>0);
+  for(const f of floats){f.life-=dt; f.y-=18*dt;} floats=floats.filter(f=>f.life>0);
+}
+function hit(e,dmg){ e.hp-=dmg; }
+function floatT(x,y,txt,c){floats.push({x,y,txt,c,life:.9});}
+
+/* ───────── 렌더 ───────── */
+function render(){
+  cx.clearRect(0,0,cv.width,cv.height);
+  // 루프 경로
+  cx.strokeStyle='#232a44'; cx.lineWidth=26; cx.lineJoin='round';
+  cx.beginPath(); cx.moveTo(A[0],A[1]); for(let i=1;i<WP.length;i++)cx.lineTo(WP[i][0],WP[i][1]); cx.stroke();
+  cx.strokeStyle='#3a4468'; cx.lineWidth=2; cx.setLineDash([6,8]);
+  cx.beginPath(); cx.moveTo(A[0],A[1]); for(let i=1;i<WP.length;i++)cx.lineTo(WP[i][0],WP[i][1]); cx.stroke(); cx.setLineDash([]);
+  // 스폰/누출 지점
+  cx.fillStyle='#3a4468'; cx.beginPath(); cx.arc(A[0],A[1],9,0,7); cx.fill();
+  cx.fillStyle=S.poll>60?'#ff5a3c':'#5a4a8a'; cx.font='9px sans-serif'; cx.textAlign='center';
+  cx.fillText('진입/누출',A[0]+4,A[1]-13);
+  // 타일 + 타워
+  for(const s of SLOTS){
+    const on=S.pending&&!s.tower, seld=S.sel===s;
+    cx.fillStyle=on?'#1d2f2a':'#141a2c';
+    cx.strokeStyle=seld?'#ffd23f':(on?'#3ea06a':'#2a3150'); cx.lineWidth=seld?2.5:1.2;
+    rr(s.x-TILE/2,s.y-TILE/2,TILE,TILE,7); cx.fill(); cx.stroke();
+    const t=s.tower; if(!t)continue;
+    // 사거리(선택 시)
+    if(seld){ cx.strokeStyle='rgba(255,210,63,.28)'; cx.lineWidth=1; cx.beginPath(); cx.arc(s.x,s.y,trng(t),0,7); cx.stroke(); }
+    // 타워 본체
+    cx.fillStyle=RCOL[t.race]; rr(s.x-15,s.y-15,30,30,6); cx.fill();
+    // 모드 링(광역=청/단일=주황)
+    cx.strokeStyle=t.mode==='splash'?'#55c8ff':'#ff8a3c'; cx.lineWidth=3;
+    cx.beginPath(); cx.arc(s.x,s.y,17,0,7); cx.stroke();
+    // 티어 표기
+    cx.fillStyle='#0e1220'; cx.font='bold 11px sans-serif'; cx.textAlign='center';
+    cx.fillText(t.tier===4?'갓':('L'+(t.tier+1)),s.x,s.y+4);
+  }
+  // 샷
+  for(const sh of shots){ cx.globalAlpha=Math.max(0,sh.life/.08);
+    if(sh.splash){ cx.strokeStyle=sh.c; cx.lineWidth=2; cx.beginPath(); cx.arc(sh.tx,sh.ty,sh.splash*.5,0,7); cx.stroke(); }
+    cx.strokeStyle=sh.c; cx.lineWidth=2; cx.beginPath(); cx.moveTo(sh.x,sh.y); cx.lineTo(sh.tx,sh.ty); cx.stroke(); }
+  cx.globalAlpha=1;
+  // 적
+  for(const e of enemies){ const p=pathPos(e.d);
+    cx.fillStyle=e.type==='boss'?'#ff5a3c':e.type==='swarm'?'#7fd8ff':e.type==='heavy'?'#ffb07a':'#d0d4e4';
+    cx.beginPath(); cx.arc(p[0],p[1],e.r,0,7); cx.fill();
+    // 체력바
+    const w=e.r*2, h=e.hp/e.maxhp;
+    cx.fillStyle='#000'; cx.fillRect(p[0]-w/2,p[1]-e.r-6,w,3);
+    cx.fillStyle=e.type==='boss'?'#ffd23f':'#7CFC8A'; cx.fillRect(p[0]-w/2,p[1]-e.r-6,w*h,3);
+    if(e.type==='boss'){cx.fillStyle='#fff';cx.font='bold 10px sans-serif';cx.fillText(e.boss===2?'★★':'★',p[0],p[1]+3);}
+  }
+  // 플로팅 텍스트
+  for(const f of floats){ cx.globalAlpha=Math.max(0,f.life/.9); cx.fillStyle=f.c; cx.font='bold 13px sans-serif';
+    cx.textAlign='center'; cx.fillText(f.txt,f.x,f.y);} cx.globalAlpha=1;
+  // 웨이브 진행 표시
+  if(S.phase==='wave'){ cx.fillStyle='#8a8fa8'; cx.font='11px sans-serif'; cx.textAlign='left';
+    cx.fillText(`남은 적 ${S.alive}`,12,16); }
+}
+function rr(x,y,w,h,r){cx.beginPath();cx.moveTo(x+r,y);cx.arcTo(x+w,y,x+w,y+h,r);cx.arcTo(x+w,y+h,x,y+h,r);
+  cx.arcTo(x,y+h,x,y,r);cx.arcTo(x,y,x+w,y,r);cx.closePath();}
+
+/* ───────── HUD 동기화 ───────── */
+function sync(){
+  $('round').textContent='R'+S.round;
+  $('phase').textContent=S.phase==='prep'?'준비':'전투';
+  $('gold').textContent=Math.floor(S.gold);
+  $('wk').textContent='일꾼 '+S.workers;
+  $('pollbar').style.width=S.poll+'%';
+  $('produce').textContent='유닛 생산 '+PRODUCE;
+  $('hire').textContent='일꾼 고용 '+hireCost();
+  for(let i=0;i<3;i++)$('up'+i).textContent=RACE[i]+' +'+S.up[i];
+  // 준비 패널
+  $('prep').style.display=S.phase==='prep'?'':'none';
+  const wt=WTYPES[NEXT.type];
+  $('wtName').textContent='다음: '+wt.name+' ×'+NEXT.q.length; $('wtName').style.color=wt.color;
+  $('wtTip').textContent=wt.tip;
+  $('produce').disabled=!!S.pending;
+}
+
+/* ───────── 종족 강화 ───────── */
+function upCost(r){return 60+S.up[r]*28;}
+function upgrade(r){const c=upCost(r); if(S.gold<c)return msg(`골드 부족 — ${RACE[r]} 강화 ${c} 필요`);
+  S.gold-=c; S.up[r]++; if(S.sel)showInfo(S.sel.tower); msg(`${RACE[r]} 강화 → Lv${S.up[r]} (해당 종족 공격력 +6%)`); sync();}
+
+/* ───────── 보스 선택 ───────── */
+function chooseBoss(n){ if(S.phase!=='prep')return; S.boss=n;
+  for(let i=0;i<3;i++)$('bt'+i).classList.toggle('hot',i===n);
+  $('bossTip').textContent=n===0?'보스 없음 — 안전하게 소득만 챙깁니다.'
+    :n===1?'하급보스: 중간 보상 · 중간 위험. 단일 형태 화력이 필요.'
+    :'상급보스: 큰 보상 · 큰 위험. 못 잡으면 오염 +45. 도박입니다.'; }
+
+/* ───────── 게임오버 ───────── */
+function gameOver(){ S.over=true; $('ovT').textContent='라인이 뚫렸다';
+  $('ovB').innerHTML=`도달 <b>R${S.round}</b> · 일꾼 ${S.workers}기<br>오염 100% — 다음 판엔 웨이브 성격에 맞춰 스플/파워를 더 빨리 전환해보세요.`;
+  $('overlay').style.display='flex'; }
+
+/* ───────── 이벤트 ───────── */
+cv.addEventListener('click',ev=>{const r=cv.getBoundingClientRect();
+  tapCanvas((ev.clientX-r.left)*cv.width/r.width,(ev.clientY-r.top)*cv.height/r.height);});
+$('produce').onclick=produce; $('hire').onclick=hire; $('start').onclick=startWave;
+$('mSplash').onclick=()=>setAll('splash'); $('mPower').onclick=()=>setAll('power');
+$('bt0').onclick=()=>chooseBoss(0); $('bt1').onclick=()=>chooseBoss(1); $('bt2').onclick=()=>chooseBoss(2);
+for(let i=0;i<3;i++)$('up'+i).onclick=()=>upgrade(i);
+$('speed').onclick=()=>{S.speed=S.speed===1?2:S.speed===2?3:1; $('speed').textContent='×'+S.speed;};
+addEventListener('keydown',e=>{const k=e.key.toLowerCase();
+  if(k==='p')produce(); else if(k==='h')hire(); else if(k===' '){e.preventDefault();startWave();}
+  else if(k==='q')setAll('splash'); else if(k==='e')setAll('power');
+  else if(k==='1')chooseBoss(0); else if(k==='2')chooseBoss(1); else if(k==='3')chooseBoss(2);});
+
+sync(); clearInfo(); requestAnimationFrame(frame);
+</script>
+</body>
+</html>
