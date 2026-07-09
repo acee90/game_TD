@@ -3,6 +3,7 @@
 
 import * as B from '../data/balance';
 import * as H from '../data/hero';
+import * as K from '../data/skills';
 import * as S from '../data/score';
 import { PATH_LENGTH, SLOT_POS, pathPos } from '../core/map';
 import { GOD_TIER, RACE_COLOR, tagLabel, type Race } from '../data/units';
@@ -11,7 +12,7 @@ import { attackInterval, damage, isSplash, range, slowFactor, type UpgradeLevels
 import { bossKillMineral, killIncome } from './economy';
 import { Hero, rollAugmentChoices } from './hero';
 import { findMerge, unitFor, type Rand } from './merge';
-import type { Enemy, EnemySpec, FloatText, Shot, Slot } from './types';
+import type { Decoy, Enemy, EnemySpec, FloatText, Shot, Slot } from './types';
 
 export class Game {
   mineral = B.START_MINERAL;
@@ -54,11 +55,14 @@ export class Game {
   enemies: Enemy[] = [];
   shots: Shot[] = [];
   floats: FloatText[] = [];
+  /** 영웅이 세운 미끼 (허수아비 스킬) */
+  decoy: Decoy | null = null;
 
   private spawnQueue: EnemySpec[] = [];
   private spawnTimer = 0;
   private gasFraction = 0;
   private heroHitTimer = 0;
+  private decoyHitTimer = 0;
 
   /** 유닛 추첨용 난수. 테스트에서 결정적 함수를 주입한다. */
   private readonly rand: Rand;
@@ -81,6 +85,162 @@ export class Game {
 
   moveHero(x: number, y: number): void {
     this.hero.moveTo(x, y);
+  }
+
+  // ── 액티브 스킬 (자동 시전) ──
+  get canUseSkill(): boolean {
+    return !this.over && !this.paused && this.hero.skillReady;
+  }
+
+  /**
+   * 지금 스킬을 쓸 만한가. 쿨타임이 찼다고 아무 때나 쏘면 뭉친 순간을 놓친다.
+   * 스킬마다 다른 조건을 데이터(autoCastMinTargets)로 둔다.
+   */
+  get shouldAutoCastSkill(): boolean {
+    const skill = this.hero.skill;
+    if (!this.canUseSkill || !skill) return false;
+    return this.autoCastTargetCount(skill) >= skill.def.autoCastMinTargets;
+  }
+
+  /** 지금 시전하면 몇 기가 영향을 받는가 */
+  private autoCastTargetCount(skill: K.ResolvedSkill): number {
+    const hero = this.hero;
+    const live = this.enemies.filter((e) => !e.dead);
+
+    switch (skill.def.id) {
+      case 'whirlwind':
+        return live.filter((e) => Math.abs(e.distance - hero.distance) <= skill.radius).length;
+      case 'volley':
+        return live.filter((e) => Math.abs(e.distance - hero.distance) <= hero.stats.range).length;
+      case 'meteor':
+        return live.reduce(
+          (best, candidate) =>
+            Math.max(
+              best,
+              live.filter((e) => Math.abs(e.distance - candidate.distance) <= skill.radius).length,
+            ),
+          0,
+        );
+      case 'decoy':
+        // 이미 세워져 있으면 다시 안 세운다
+        if (this.decoy) return 0;
+        return live.filter((e) => {
+          const gap = hero.distance - e.distance;
+          return gap >= 0 && gap <= K.DECOY_AUTOCAST_RANGE;
+        }).length;
+    }
+  }
+
+  /** 스킬을 쓴다. 못 쓰면 false. */
+  useSkill(): boolean {
+    const hero = this.hero;
+    const skill = hero.skill;
+    if (!this.canUseSkill || !skill) return false;
+
+    switch (skill.def.id) {
+      case 'whirlwind':
+        this.castWhirlwind(skill);
+        break;
+      case 'volley':
+        this.castVolley(skill);
+        break;
+      case 'meteor':
+        this.castMeteor(skill);
+        break;
+      case 'decoy':
+        this.castDecoy(skill);
+        break;
+    }
+    hero.skillCooldown = skill.cooldown;
+    return true;
+  }
+
+  /** 스킬 피해 한 방 */
+  private skillHit(enemy: Enemy, skill: K.ResolvedSkill): void {
+    const raw = this.hero.stats.damage * skill.damageMult;
+    enemy.hp -= B.effectiveDamage(raw, enemy.armor);
+    enemy.lastHitByHero = true;
+    if (skill.mods.slowFactor < 1) {
+      enemy.slowFactor = skill.mods.slowFactor;
+      enemy.slowTimer = skill.mods.slowSeconds;
+    }
+  }
+
+  private castWhirlwind(skill: K.ResolvedSkill): void {
+    const hero = this.hero;
+    for (const enemy of this.enemies) {
+      if (Math.abs(enemy.distance - hero.distance) <= skill.radius) this.skillHit(enemy, skill);
+    }
+    this.float(hero.x, hero.y, '소용돌이!', '#6fdc8c');
+    this.shots.push({
+      x: hero.x, y: hero.y, tx: hero.x, ty: hero.y, life: 0.22,
+      color: '#6fdc8c', splashRadius: skill.radius,
+    });
+  }
+
+  private castVolley(skill: K.ResolvedSkill): void {
+    const hero = this.hero;
+    const reach = hero.stats.range;
+    const inReach = this.enemies
+      .filter((e) => !e.dead && Math.abs(e.distance - hero.distance) <= reach)
+      .sort((a, b) => b.distance - a.distance) // 출구에 가까운 적부터
+      .slice(0, skill.targets);
+
+    for (const target of inReach) {
+      this.skillHit(target, skill);
+      const [tx, ty] = pathPos(target.distance);
+      this.shots.push({ x: hero.x, y: hero.y, tx, ty, life: 0.14, color: '#4ea3ff' });
+
+      // 폭발 화살 — 화살마다 주변으로 번진다
+      if (skill.mods.explosiveRadius > 0) {
+        for (const splash of this.enemies) {
+          if (splash === target || splash.dead) continue;
+          if (Math.abs(splash.distance - target.distance) <= skill.mods.explosiveRadius) {
+            this.skillHit(splash, skill);
+          }
+        }
+        this.shots.push({
+          x: tx, y: ty, tx, ty, life: 0.18,
+          color: '#ff8a3c', splashRadius: skill.mods.explosiveRadius,
+        });
+      }
+    }
+    this.float(hero.x, hero.y, `일제 사격 x${skill.targets}`, '#4ea3ff');
+  }
+
+  /** 적이 가장 많이 몰린 경로 지점을 찾아 떨어뜨린다 */
+  private castMeteor(skill: K.ResolvedSkill): void {
+    if (!this.enemies.length) return;
+    let bestDistance = this.enemies[0].distance;
+    let bestCount = 0;
+    for (const candidate of this.enemies) {
+      const count = this.enemies.filter(
+        (e) => Math.abs(e.distance - candidate.distance) <= skill.radius,
+      ).length;
+      if (count > bestCount) {
+        bestCount = count;
+        bestDistance = candidate.distance;
+      }
+    }
+    for (const enemy of this.enemies) {
+      if (Math.abs(enemy.distance - bestDistance) <= skill.radius) this.skillHit(enemy, skill);
+    }
+    const [x, y] = pathPos(bestDistance);
+    this.float(x, y, `유성! ${bestCount}기`, '#c065e0');
+    this.shots.push({ x, y, tx: x, ty: y, life: 0.3, color: '#c065e0', splashRadius: skill.radius });
+  }
+
+  private castDecoy(skill: K.ResolvedSkill): void {
+    const hero = this.hero;
+    const maxHp = Math.round(hero.stats.maxHp * K.DECOY_HP_RATIO * skill.mods.decoyHpMult);
+    this.decoy = {
+      distance: Math.max(0, hero.distance - K.DECOY_AHEAD), // 몹이 오는 쪽
+      hp: maxHp,
+      maxHp,
+      life: K.DECOY_LIFETIME,
+      taunts: skill.mods.decoyTaunts,
+    };
+    this.float(hero.x, hero.y, '허수아비!', '#ff8a3c');
   }
 
   /** 증강 하나를 고른다. 남은 선택이 있으면 다음 선택지를 띄운다. */
@@ -402,6 +562,8 @@ export class Game {
 
     this.fireTowers(dt);
     this.stepHero(dt);
+    if (this.shouldAutoCastSkill) this.useSkill();
+    this.stepDecoy(dt);
 
     for (const enemy of this.enemies) {
       if (enemy.hp <= 0 && !enemy.dead) {
@@ -427,12 +589,28 @@ export class Game {
   private advanceEnemies(dt: number): void {
     const hero = this.hero;
     const heroBlocks = hero.alive;
+    const decoy = this.decoy;
 
     for (const enemy of this.enemies) {
-      const speed = enemy.speed * this.slowAt(enemy.distance);
+      // 스킬 감속 디버프
+      if (enemy.slowTimer !== undefined && enemy.slowTimer > 0) {
+        enemy.slowTimer -= dt;
+        if (enemy.slowTimer <= 0) enemy.slowFactor = undefined;
+      }
+      const debuff = enemy.slowFactor ?? 1;
+      const speed = enemy.speed * this.slowAt(enemy.distance) * debuff;
 
-      if (heroBlocks && this.isAggroed(enemy, hero!)) {
-        const gap = hero!.distance - enemy.distance;
+      // 허수아비가 먼저 붙잡는다
+      if (decoy && this.isDecoyAggroed(enemy, decoy)) {
+        const gap = decoy.distance - enemy.distance;
+        if (gap > H.ENEMY_TOUCH_RANGE) {
+          enemy.distance += Math.min(speed * dt, gap - H.ENEMY_TOUCH_RANGE);
+        }
+        continue;
+      }
+
+      if (heroBlocks && this.isAggroed(enemy, hero)) {
+        const gap = hero.distance - enemy.distance;
         // 영웅에게 다가가되 지나치지 않는다
         if (gap > H.ENEMY_TOUCH_RANGE) {
           enemy.distance += Math.min(speed * dt, gap - H.ENEMY_TOUCH_RANGE);
@@ -444,6 +622,44 @@ export class Game {
         enemy.dead = true;
         this.breakthrough(enemy);
       }
+    }
+  }
+
+  /**
+   * 허수아비가 이 몹을 붙잡는가.
+   * 도발 인형은 이미 지나친 몹도 끌어당긴다 — 원거리 영웅에게 탱킹을 대신 해준다.
+   */
+  private isDecoyAggroed(enemy: Enemy, decoy: Decoy): boolean {
+    const gap = decoy.distance - enemy.distance;
+    if (gap < -H.ENEMY_TOUCH_RANGE && !decoy.taunts) return false;
+    return Math.abs(gap) <= K.DECOY_AGGRO_RANGE;
+  }
+
+  /** 허수아비를 때리고, 수명이나 체력이 다하면 치운다 */
+  private stepDecoy(dt: number): void {
+    const decoy = this.decoy;
+    if (!decoy) return;
+
+    decoy.life -= dt;
+    this.decoyHitTimer -= dt;
+
+    if (this.decoyHitTimer <= 0) {
+      let incoming = 0;
+      for (const enemy of this.enemies) {
+        if (Math.abs(enemy.distance - decoy.distance) > H.ENEMY_TOUCH_RANGE + enemy.radius) continue;
+        incoming +=
+          enemy.kind === 'boss'
+            ? H.bossDamage(enemy.bossLevel ?? 1, this.round)
+            : H.enemyDamage(this.round);
+      }
+      decoy.hp -= incoming;
+      this.decoyHitTimer = H.ENEMY_ATTACK_INTERVAL;
+    }
+
+    if (decoy.hp <= 0 || decoy.life <= 0) {
+      const [x, y] = pathPos(decoy.distance);
+      this.float(x, y, '허수아비 파괴', '#8a8fa8');
+      this.decoy = null;
     }
   }
 
@@ -508,8 +724,13 @@ export class Game {
     // 적의 반격 — 영웅에 닿은 적이 때린다
     this.heroHitTimer -= dt;
     if (this.heroHitTimer <= 0) {
+      const decoy = this.decoy;
       let incoming = 0;
       for (const enemy of this.enemies) {
+        // 허수아비에 붙어 있는 몹은 영웅을 때리지 않는다
+        if (decoy && Math.abs(enemy.distance - decoy.distance) <= H.ENEMY_TOUCH_RANGE + enemy.radius) {
+          continue;
+        }
         const gap = Math.abs(enemy.distance - hero.distance);
         if (gap > H.ENEMY_TOUCH_RANGE + enemy.radius) continue;
         incoming +=

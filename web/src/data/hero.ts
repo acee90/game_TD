@@ -1,3 +1,5 @@
+import type { SkillId, SkillModPatch } from './skills';
+
 // ───────── 영웅 · 제단 · 증강 ─────────
 // 원본 갓타디에는 없는 신규 설계다. 근거 표기 대상이 아니다.
 //
@@ -158,6 +160,12 @@ export interface Augment {
   /** 같은 증강을 몇 번까지 쌓을 수 있나 */
   readonly maxStacks: number;
   readonly effect: AugmentEffect;
+  /** 이 증강을 고르면 액티브 스킬을 얻는다 (스킬이 없을 때만 등장) */
+  readonly grantsSkill?: SkillId;
+  /** 스킬을 개조한다 */
+  readonly skillMod?: SkillModPatch;
+  /** 이 스킬을 든 영웅에게만 등장한다 */
+  readonly requiresSkill?: SkillId | 'any';
 }
 
 // ───────── 등급 ─────────
@@ -277,10 +285,63 @@ export const AUGMENTS: readonly Augment[] = [
     effect: { respawnCut: 4 } },
   { id: 'warlord', kind: 'utility', name: '전쟁군주', description: '모든 타워 공격력 +12%', maxStacks: 3,
     effect: { towerDamageMult: 1.12 } },
+
+  // ── 액티브 스킬 획득 (영웅은 하나만 든다)
+  { id: 'skill_whirlwind', kind: 'tank', name: '소용돌이', maxStacks: 1,
+    description: '[스킬] 주변 적 전체에 공격력 3배 · 쿨 8초',
+    effect: {}, grantsSkill: 'whirlwind' },
+  { id: 'skill_volley', kind: 'ranged', name: '일제 사격', maxStacks: 1,
+    description: '[스킬] 사거리 안 4명에게 각각 공격력 2배 · 쿨 7초',
+    effect: {}, grantsSkill: 'volley' },
+  { id: 'skill_meteor', kind: 'mage', name: '유성', maxStacks: 1,
+    description: '[스킬] 적이 가장 많은 곳에 공격력 6배 광역 · 쿨 13초',
+    effect: {}, grantsSkill: 'meteor' },
+  { id: 'skill_decoy', kind: 'utility', name: '허수아비', maxStacks: 1,
+    description: '[스킬] 앞쪽에 미끼를 세워 몹을 붙잡는다 · 쿨 18초',
+    effect: {}, grantsSkill: 'decoy' },
+
+  // ── 스킬 공용 강화 (스킬을 든 뒤에만 등장)
+  { id: 'skill_cdr', kind: 'utility', name: '냉각', maxStacks: 3,
+    description: '스킬 쿨타임 20% 감소',
+    effect: {}, skillMod: { cooldownMult: 0.8 }, requiresSkill: 'any' },
+  { id: 'skill_amp', kind: 'stat', name: '증폭', maxStacks: 3,
+    description: '스킬 피해 +45%',
+    effect: {}, skillMod: { damageMult: 1.45 }, requiresSkill: 'any' },
+
+  // ── 스킬 개조 (그 스킬을 든 뒤에만 등장) — 질적 시너지
+  { id: 'explosive_arrow', kind: 'ranged', name: '폭발 화살', maxStacks: 2,
+    description: '일제 사격의 화살마다 반경 32의 폭발',
+    effect: {}, skillMod: { explosiveRadius: 32 }, requiresSkill: 'volley' },
+  { id: 'multishot', kind: 'ranged', name: '연사', maxStacks: 3,
+    description: '일제 사격의 화살 +2발',
+    effect: {}, skillMod: { extraTargets: 2 }, requiresSkill: 'volley' },
+  { id: 'cyclone', kind: 'tank', name: '회오리', maxStacks: 2,
+    description: '소용돌이 반경 +25, 맞은 적을 2초간 40% 감속',
+    effect: {}, skillMod: { radiusAdd: 25, slowFactor: 0.6, slowSeconds: 2 }, requiresSkill: 'whirlwind' },
+  { id: 'cataclysm', kind: 'mage', name: '대재앙', maxStacks: 2,
+    description: '유성 반경 +35, 스킬 피해 +30%',
+    effect: {}, skillMod: { radiusAdd: 35, damageMult: 1.3 }, requiresSkill: 'meteor' },
+  { id: 'taunt_dummy', kind: 'utility', name: '도발 인형', maxStacks: 1,
+    description: '허수아비가 주변 몹을 강제로 끌어당기고 체력 2배',
+    effect: {}, skillMod: { decoyHpMult: 2, decoyTaunts: true }, requiresSkill: 'decoy' },
 ];
 
 /** 광역 증강은 '충격파'를 먼저 잡아야 의미가 있다 */
 export const requiresSplash = (augment: Augment): boolean => augment.id === 'novabig';
+
+/**
+ * 지금 든 스킬(없으면 null)로 이 증강을 뽑을 수 있는가.
+ *
+ * - 스킬 획득 증강은 스킬이 없을 때만 나온다 — 영웅은 스킬을 하나만 든다.
+ * - 개조 증강은 그 스킬을 든 뒤에만 나온다. '폭발 화살'은 일제 사격을 쥔 다음에야 의미가 있다.
+ *   이게 수치가 아니라 **관계**로 맺어지는 시너지다.
+ */
+export function skillGateAllows(augment: Augment, currentSkill: SkillId | null): boolean {
+  if (augment.grantsSkill) return currentSkill === null;
+  if (!augment.requiresSkill) return true;
+  if (currentSkill === null) return false;
+  return augment.requiresSkill === 'any' || augment.requiresSkill === currentSkill;
+}
 
 // ───────── 특화 시너지 ─────────
 // 증강 하나하나는 곱연산이라 이미 복리로 붙는다. 여기에 "같은 계열을 모으면 더 준다"를

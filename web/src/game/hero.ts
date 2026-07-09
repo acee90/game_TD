@@ -5,6 +5,7 @@
 import { ALTAR_PATH_DISTANCE, PATH_LENGTH, nearestPathDistance, pathPos } from '../core/map';
 import * as H from '../data/hero';
 import type { AugmentCard, AugmentEffect } from '../data/hero';
+import { foldMods, resolveSkill, type ResolvedSkill, type SkillId } from '../data/skills';
 
 export interface HeroStats {
   readonly maxHp: number;
@@ -87,6 +88,8 @@ export class Hero {
   alive = true;
   respawnTimer = 0;
   attackCooldown = 0;
+  /** 액티브 스킬 재사용 대기 */
+  skillCooldown = 0;
 
   readonly augments: AugmentCard[] = [];
   /** 아직 고르지 않은 증강 선택 횟수 */
@@ -121,6 +124,25 @@ export class Hero {
 
   get hasSplash(): boolean {
     return this.stats.splashRadius > 0;
+  }
+
+  /** 들고 있는 액티브 스킬. 스킬 증강을 안 골랐으면 null. */
+  get skillId(): SkillId | null {
+    return this.augments.find((c) => c.augment.grantsSkill)?.augment.grantsSkill ?? null;
+  }
+
+  /** 개조가 반영된 스킬 수치 */
+  get skill(): ResolvedSkill | null {
+    const id = this.skillId;
+    if (!id) return null;
+    const patches = this.augments
+      .map((c) => c.augment.skillMod)
+      .filter((m): m is NonNullable<typeof m> => m !== undefined);
+    return resolveSkill(id, foldMods(patches));
+  }
+
+  get skillReady(): boolean {
+    return this.alive && this.skillId !== null && this.skillCooldown <= 0;
   }
 
   /** 클릭 좌표를 경로에 투영해서 목적지로 삼는다 */
@@ -173,6 +195,7 @@ export class Hero {
     }
 
     this.attackCooldown -= dt;
+    if (this.skillCooldown > 0) this.skillCooldown = Math.max(0, this.skillCooldown - dt);
 
     const { moveSpeed, regen, maxHp } = this.stats;
     if (regen > 0) this.hp = Math.min(maxHp, this.hp + regen * dt);
@@ -186,6 +209,7 @@ export class Hero {
 
   private respawn(): void {
     this.alive = true;
+    this.skillCooldown = 0;
     this.hp = this.stats.maxHp;
     this.distance = this.altarDistance;
     this.targetDistance = this.altarDistance;
@@ -198,9 +222,11 @@ export class Hero {
  * 최대 스택에 도달한 것과 선행 조건을 못 채운 것은 제외한다.
  */
 export function rollAugmentChoices(hero: Hero, rand: () => number): AugmentCard[] {
+  const skill = hero.skillId;
   const pool = H.AUGMENTS.filter((augment) => {
     if (hero.stacksOf(augment.id) >= augment.maxStacks) return false;
     if (H.requiresSplash(augment) && !hero.hasSplash) return false;
+    if (!H.skillGateAllows(augment, skill)) return false;
     return true;
   });
 

@@ -8,6 +8,7 @@ import { dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, test } from 'vitest';
 import * as H from '../src/data/hero';
+import * as K from '../src/data/skills';
 
 const DIR = `${dirname(fileURLToPath(import.meta.url))}/../../docs/balance`;
 const read = (name: string): string[] => {
@@ -16,7 +17,7 @@ const read = (name: string): string[] => {
 };
 
 describe('밸런스 CSV — 코드와 일치해야 한다', () => {
-  test('증강 15종이 전부 들어있다', () => {
+  test('증강이 전부 들어있다', () => {
     const rows = read('augments.csv');
     expect(rows).toHaveLength(H.AUGMENTS.length + 1); // 헤더 포함
     for (const augment of H.AUGMENTS) {
@@ -52,6 +53,22 @@ describe('밸런스 CSV — 코드와 일치해야 한다', () => {
     expect(value('HERO_HP_PER_LEVEL')).toBe(H.HERO_HP_PER_LEVEL);
     expect(value('XP_COST_GROWTH')).toBe(H.XP_COST_GROWTH);
     expect(value('SYNERGY_THRESHOLD')).toBe(H.SYNERGY_THRESHOLD);
+  });
+
+  test('액티브 스킬 4종이 들어있다', () => {
+    const rows = read('skills.csv').slice(1);
+    expect(rows).toHaveLength(K.SKILL_IDS.length);
+    for (const id of K.SKILL_IDS) {
+      expect(rows.some((r) => r.startsWith(`${id},`))).toBe(true);
+    }
+  });
+
+  test('스킬 증강과 개조 증강이 열로 표시된다', () => {
+    const rows = read('augments.csv');
+    expect(rows[0]).toContain('grantsSkill');
+    expect(rows[0]).toContain('requiresSkill');
+    expect(rows.some((r) => r.includes('skill_volley'))).toBe(true);
+    expect(rows.some((r) => r.includes('explosive_arrow'))).toBe(true);
   });
 
   test('파워 커브에 무증강과 특화 빌드가 둘 다 있다', () => {

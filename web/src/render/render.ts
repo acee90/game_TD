@@ -188,6 +188,26 @@ function drawHero(ctx: CanvasRenderingContext2D, game: Game): void {
   ctx.textBaseline = 'alphabetic';
 }
 
+function drawDecoy(ctx: CanvasRenderingContext2D, game: Game): void {
+  const decoy = game.decoy;
+  if (!decoy) return;
+  const [x, y] = pathPos(decoy.distance);
+
+  ctx.beginPath();
+  ctx.arc(x, y, 9, 0, Math.PI * 2);
+  ctx.fillStyle = '#ff8a3c';
+  ctx.fill();
+  ctx.strokeStyle = decoy.taunts ? '#ffd23f' : '#0e1220';
+  ctx.lineWidth = 2;
+  ctx.stroke();
+
+  const width = 22;
+  ctx.fillStyle = '#0a0e19';
+  ctx.fillRect(x - width / 2, y - 16, width, 3);
+  ctx.fillStyle = '#ff8a3c';
+  ctx.fillRect(x - width / 2, y - 16, width * Math.max(0, decoy.hp / decoy.maxHp), 3);
+}
+
 export function render(ctx: CanvasRenderingContext2D, game: Game): void {
   const { canvas } = ctx;
   ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -223,6 +243,7 @@ export function render(ctx: CanvasRenderingContext2D, game: Game): void {
     const [x, y] = pathPos(enemy.distance);
     drawEnemy(ctx, x, y, enemy);
   }
+  drawDecoy(ctx, game);
   drawHero(ctx, game);
 
   ctx.font = '700 11px system-ui, sans-serif';

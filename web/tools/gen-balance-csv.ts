@@ -9,6 +9,7 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import * as H from '../src/data/hero';
+import * as K from '../src/data/skills';
 import { computeStats } from '../src/game/hero';
 import { attackInterval, damage } from '../src/game/combat';
 import { TIER_POOLS } from '../src/data/units';
@@ -65,11 +66,15 @@ const EFFECT_COLUMNS = [
 const effectCells = (effect: H.AugmentEffect): (string | number)[] =>
   EFFECT_COLUMNS.map((key) => effect[key] ?? '');
 
-// ── 증강 15종
+// ── 증강 (패시브 + 스킬 획득 + 스킬 개조)
 write(
   'augments.csv',
   toCsv(
-    ['id', 'kind', 'kindLabel', 'name', 'description', 'maxStacks', 'requiresSplash', ...EFFECT_COLUMNS],
+    [
+      'id', 'kind', 'kindLabel', 'name', 'description', 'maxStacks',
+      'requiresSplash', 'grantsSkill', 'requiresSkill', 'skillMod',
+      ...EFFECT_COLUMNS,
+    ],
     H.AUGMENTS.map((a) => [
       a.id,
       a.kind,
@@ -78,6 +83,9 @@ write(
       a.description,
       a.maxStacks,
       H.requiresSplash(a) ? 'TRUE' : 'FALSE',
+      a.grantsSkill ?? '',
+      a.requiresSkill ?? '',
+      a.skillMod ? JSON.stringify(a.skillMod) : '',
       ...effectCells(a.effect),
     ]),
   ),
@@ -125,6 +133,19 @@ write(
     ],
   ),
 );
+
+// ── 액티브 스킬
+write(
+  'skills.csv',
+  toCsv(
+    ['id', 'name', 'description', 'cooldown', 'damageMult', 'radius', 'targets', 'autoCastMinTargets'],
+    K.SKILL_IDS.map((id) => {
+      const s = K.SKILLS[id];
+      return [s.id, s.name, s.description, s.cooldown, s.damageMult, s.radius, s.targets, s.autoCastMinTargets];
+    }),
+  ),
+);
+
 
 // ── 파워 커브 — 빌드 × 레벨
 const builds: [string, string[]][] = [

@@ -36,6 +36,9 @@ export interface Elements {
   readonly heroXp: HTMLElement;
   readonly heroStats: HTMLElement;
   readonly heroAugs: HTMLElement;
+  readonly skill: HTMLElement;
+  readonly skillCd: HTMLElement;
+  readonly skillText: HTMLElement;
   readonly augOverlay: HTMLElement;
   readonly augSub: HTMLElement;
   readonly augCards: HTMLElement;
@@ -76,6 +79,9 @@ export function bindElements(): Elements {
     heroXp: $('heroXp'),
     heroStats: $('heroStats'),
     heroAugs: $('heroAugs'),
+    skill: $('skill'),
+    skillCd: $('skillCd'),
+    skillText: $('skillText'),
     augOverlay: $('augOverlay'),
     augSub: $('augSub'),
     augCards: $('augCards'),
@@ -181,6 +187,24 @@ function refreshHero(el: Elements, game: Game): void {
       return `<span class="aug" style="background:${color};box-shadow:0 0 0 1.5px ${border}">${card.augment.name}</span>`;
     })
     .join('');
+
+  const skill = hero.skill;
+  el.skill.hidden = skill === null;
+  if (skill) {
+    const remain = Math.max(0, hero.skillCooldown);
+    const charged = 1 - remain / skill.cooldown;
+    el.skill.classList.toggle('ready', game.canUseSkill);
+    el.skillCd.style.transform = `scaleX(${charged.toFixed(3)})`;
+
+    const damage = skill.damageMult > 0
+      ? ` · 피해 ${Math.round(hero.stats.damage * skill.damageMult)}`
+      : '';
+    const targets = skill.targets > 0 ? ` · ${skill.targets}발` : '';
+    const state = game.canUseSkill
+      ? game.shouldAutoCastSkill ? '시전!' : '대기 중'
+      : `${remain.toFixed(1)}s`;
+    el.skillText.textContent = `${skill.def.name}${damage}${targets} · ${state}`;
+  }
 
   const synergies = HD.activeSynergies(hero.augments);
   if (synergies.length) {

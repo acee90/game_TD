@@ -1,0 +1,5 @@
+id,name,description,cooldown,damageMult,radius,targets,autoCastMinTargets
+whirlwind,소용돌이,주변의 적 전체에 공격력 3배 피해,8,3,70,0,2
+volley,일제 사격,사거리 안 적 4명에게 각각 공격력 2배 피해,7,2,0,4,1
+meteor,유성,적이 가장 많은 곳에 공격력 6배 광역 피해,13,6,85,0,3
+decoy,허수아비,앞쪽에 미끼를 세워 몹을 붙잡는다 (피해 없음),18,0,0,0,2
