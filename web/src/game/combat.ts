@@ -23,9 +23,14 @@ export function damage(tower: Tower, levels: UpgradeLevels): number {
     B.BASE_DAMAGE *
     B.TIER_DAMAGE[tower.tier] *
     combine(tower.def.tags, 'damage') *
-    upgradeMultiplier(levels, tower.def.race)
+    upgradeMultiplier(levels, tower.def.race) *
+    (isCreature(tower) ? B.CREATURE_DAMAGE_MULT : 1)
   );
 }
+
+/** 크리쳐 타워가 사거리 안 몹에게 거는 이동속도 배수. 크리쳐가 아니면 1. */
+export const slowFactor = (tower: Tower): number =>
+  isCreature(tower) ? B.CREATURE_SLOW[tower.tier] : 1;
 
 export function attackInterval(tower: Tower): number {
   return B.BASE_ATTACK_INTERVAL * combine(tower.def.tags, 'interval');

@@ -6,7 +6,7 @@ import * as H from '../data/hero';
 import { PATH_LENGTH, SLOT_POS, pathPos } from '../core/map';
 import { GOD_TIER, RACE_COLOR, tagLabel, type Race } from '../data/units';
 import type { Augment } from '../data/hero';
-import { attackInterval, damage, isSplash, range, type UpgradeLevels } from './combat';
+import { attackInterval, damage, isSplash, range, slowFactor, type UpgradeLevels } from './combat';
 import { bossKillMineral, killIncome } from './economy';
 import { Hero, rollAugmentChoices } from './hero';
 import { findMerge, unitFor, type Rand } from './merge';
@@ -422,20 +422,39 @@ export class Game {
     const heroBlocks = hero !== null && hero.alive;
 
     for (const enemy of this.enemies) {
+      const speed = enemy.speed * this.slowAt(enemy.distance);
+
       if (heroBlocks && this.isAggroed(enemy, hero!)) {
         const gap = hero!.distance - enemy.distance;
         // 영웅에게 다가가되 지나치지 않는다
         if (gap > H.ENEMY_TOUCH_RANGE) {
-          enemy.distance += Math.min(enemy.speed * dt, gap - H.ENEMY_TOUCH_RANGE);
+          enemy.distance += Math.min(speed * dt, gap - H.ENEMY_TOUCH_RANGE);
         }
         continue;
       }
-      enemy.distance += enemy.speed * dt;
+      enemy.distance += speed * dt;
       if (enemy.distance >= PATH_LENGTH) {
         enemy.dead = true;
         this.breakthrough(enemy);
       }
     }
+  }
+
+  /**
+   * 경로 위 한 지점에 걸린 이동속도 배수.
+   * 크리쳐 타워 여러 기가 겹쳐도 가장 강한 감속 하나만 적용한다.
+   */
+  slowAt(distance: number): number {
+    const [x, y] = pathPos(distance);
+    let slowest = 1;
+    for (const slot of this.slots) {
+      const tower = slot.tower;
+      if (!tower) continue;
+      const factor = slowFactor(tower);
+      if (factor >= slowest) continue;
+      if (Math.hypot(slot.x - x, slot.y - y) <= range(tower)) slowest = factor;
+    }
+    return slowest;
   }
 
   /** 몹 앞쪽 시야 안에 살아있는 영웅이 있는가 */

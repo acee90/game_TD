@@ -1,7 +1,8 @@
 import { describe, expect, test } from 'vitest';
 import * as B from '../src/data/balance';
-import { ARM_TILES, CORNER_COLS, CORNER_ROWS, PATH_LENGTH, SLOT_POS, TILE, pathPos } from '../src/core/map';
-import { GOD_POOL_EARLY, GOD_POOL_LATE, GOD_TIER, godPool } from '../src/data/units';
+import { ARM_TILES, CORNER_COLS, CORNER_ROWS, PATH_LENGTH, SLOT_POS, TILE, nearestPathDistance, pathPos } from '../src/core/map';
+import { CREATURE, GOD_POOL_EARLY, GOD_POOL_LATE, GOD_TIER, TIER_POOLS, godPool } from '../src/data/units';
+import { damage } from '../src/game/combat';
 import { Game } from '../src/game/game';
 import { bossKillMineral, killIncome } from '../src/game/economy';
 import { poolFor, unitFor } from '../src/game/merge';
@@ -507,6 +508,83 @@ describe('맵 — 십자 일주', () => {
     const game = new Game();
     game.summonBoss();
     expect(game.enemies[0].distance).toBe(0);
+  });
+});
+
+describe('크리쳐 — 보조 타워', () => {
+  const creatureName = (tier: number) =>
+    TIER_POOLS[tier].find((u) => u.race === CREATURE)!.name;
+
+  /** 지정한 유닛을 슬롯에 직접 꽂는다 */
+  const place = (game: Game, slotIndex: number, tier: number, name: string) => {
+    const def = TIER_POOLS[tier].find((u) => u.name === name)!;
+    game.slots[slotIndex].tower = { def, tier, cooldown: 0 };
+  };
+
+  test('크리쳐는 딜이 깎인다', () => {
+    const creature = TIER_POOLS[0].find((u) => u.race === CREATURE)!;
+    const other = TIER_POOLS[0].find((u) => u.race !== CREATURE && u.tags.includes('power'))!;
+
+    const creatureDps = damage({ def: creature, tier: 0, cooldown: 0 }, [0, 0, 0, 0]);
+    const otherDps = damage({ def: other, tier: 0, cooldown: 0 }, [0, 0, 0, 0]);
+    expect(creatureDps).toBeLessThan(otherDps);
+    expect(creatureDps / otherDps).toBeCloseTo(B.CREATURE_DAMAGE_MULT, 5);
+  });
+
+  test('크리쳐가 없으면 감속이 없다', () => {
+    const game = new Game();
+    expect(game.slowAt(100)).toBe(1);
+  });
+
+  test('크리쳐 사거리 안에서는 몹이 느려진다', () => {
+    const game = new Game();
+    place(game, 1, 0, creatureName(0)); // 십자 상단 첫 칸
+
+    const slot = game.slots[1];
+    // 그 타일에서 가장 가까운 경로 지점
+    const near = nearestPathDistance(slot.x, slot.y - 60);
+    expect(game.slowAt(near)).toBeLessThan(1);
+  });
+
+  test('감속은 겹쳐도 가장 강한 것 하나만 적용된다', () => {
+    const game = new Game();
+    place(game, 1, 0, creatureName(0)); // 배수 0.9
+    place(game, 2, 2, creatureName(2)); // 배수 0.76
+
+    const slot = game.slots[1];
+    const near = nearestPathDistance(slot.x, slot.y - 60);
+    const factor = game.slowAt(near);
+
+    // 곱(0.9 × 0.76 = 0.684)이 아니라 최솟값이어야 한다
+    expect(factor).toBeGreaterThanOrEqual(Math.min(...B.CREATURE_SLOW));
+    expect(factor).not.toBeCloseTo(0.9 * 0.76, 3);
+  });
+
+  test('티어가 높은 크리쳐일수록 더 느리게 만든다', () => {
+    for (let tier = 0; tier < B.CREATURE_SLOW.length - 1; tier++) {
+      expect(B.CREATURE_SLOW[tier + 1]).toBeLessThan(B.CREATURE_SLOW[tier]);
+    }
+    expect(Math.min(...B.CREATURE_SLOW)).toBeGreaterThan(0); // 완전 정지는 없다
+  });
+
+  test('감속을 받은 몹은 실제로 천천히 간다', () => {
+    const slowed = new Game();
+    place(slowed, 1, 2, creatureName(2));
+    const plain = new Game();
+
+    const slot = slowed.slots[1];
+    const start = nearestPathDistance(slot.x, slot.y - 60);
+    const mob = () => ({
+      kind: 'mob' as const, name: 'x', maxHp: 1e9, hp: 1e9, armor: 1e9,
+      speed: 50, radius: 9, distance: start,
+    });
+    slowed.enemies.push(mob());
+    plain.enemies.push(mob());
+
+    slowed.update(0.1);
+    plain.update(0.1);
+
+    expect(slowed.enemies[0].distance).toBeLessThan(plain.enemies[0].distance);
   });
 });
 

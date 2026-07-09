@@ -151,6 +151,18 @@ export const TIER_DAMAGE = [1, 3, 9, 28, 95] as const;
 export const TIER_RANGE = [120, 140, 160, 185, 225] as const;
 export const BASE_ATTACK_INTERVAL = 0.9;
 
+/**
+ * 크리쳐는 보조 타워다. 딜은 40% 깎이는 대신 사거리 안 몹을 늦춘다.
+ *
+ * 감속은 곱연산으로 쌓지 않고 **가장 강한 것 하나만** 적용한다. 안 그러면 크리쳐를 도배해서
+ * 몹을 멈춰 세울 수 있다. 티어가 오를수록 배수가 낮아진다(= 더 느려진다).
+ *
+ * 이 타워가 있으면 몹이 타워 사거리에 오래 머물러, 영웅이 탱킹하지 않아도 딜 시간이 나온다.
+ * 그래서 크리쳐를 많이 뽑은 판은 원거리 영웅이, 딜 타워만 뜬 판은 탱커 영웅이 유리해진다. [프로토]
+ */
+export const CREATURE_DAMAGE_MULT = 0.6;
+export const CREATURE_SLOW = [0.9, 0.84, 0.76, 0.66, 0.5] as const;
+
 export const TAG_EFFECT: Record<Tag, { damage: number; interval: number; range: number }> = {
   power: { damage: 1.6, interval: 1.0, range: 1.15 },
   splash: { damage: 0.7, interval: 1.0, range: 1.0 },
