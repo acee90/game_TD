@@ -7,8 +7,14 @@
 import type { Tag } from './units';
 
 // ── 시작 자원 — trigger #349 SetResources(SetTo, 55, ore) / (SetTo, 6, gas) [원본확정]
-export const START_MINERAL = 55;
+export const ORIGINAL_START_MINERAL = 55;
 export const START_GAS = 6;
+
+/**
+ * 시작 미네랄. 원본은 55지만 원본에는 제단이 없다.
+ * 제단(40)을 세우고도 유닛 몇 기를 깔 수 있어야 초반이 성립한다. [프로토]
+ */
+export const START_MINERAL = 80;
 
 /** 원본 trigger #266의 SetCountdownTimer(57). [원본확정] */
 export const ORIGINAL_ROUND_SECONDS = 57;
@@ -92,8 +98,24 @@ export const bossLeakLives = (level: number): number => 2 + level;
 // 원본은 특정 라운드에 이름 붙은 GOD 적이 나오지만(trigger #268~#286), 그 사이 라운드의
 // 몹 구성·수·HP 곡선이 전부 EUD라 웨이브를 재현할 근거가 없다. 이 프로토는 모든 웨이브를
 // 같은 잡몹으로 두고, 특별한 적은 플레이어가 부르는 보스로만 등장시킨다.
-export const enemyHP = (round: number): number => 30 * Math.pow(1.28, round); // [프로토]
-export const enemyArmor = (round: number): number => Math.floor(round * 0.8); // [프로토]
+/**
+ * 몹 체력. 지수가 전부다.
+ *
+ * 1.28이었을 때 R30에 필요한 총 DPS가 49,365였는데, 타일 17개를 전부 GOD 타워로
+ * 채워도 약 20,000이라 수학적으로 불가능했다(40판 전부 R23 이전 사망).
+ * 1.18이면 사망 라운드 중앙값이 R33, R35 생존율이 45%로 영웅 30레벨 창(R30~35)과 맞물린다.
+ * [프로토]
+ */
+export const enemyHP = (round: number): number => 30 * Math.pow(1.18, round);
+/**
+ * 적 장갑은 계단식이다. 선형으로 매 라운드 오르면 저티어 유닛이 매 라운드 조금씩
+ * 무력해져서 언제 갈아엎어야 하는지 감이 안 온다. 5라운드마다 한 칸씩 오르면
+ * "다음 계단 전에 티어를 올려야 한다"는 목표가 분명해진다. [프로토]
+ */
+export const ENEMY_ARMOR_STEP_ROUNDS = 5;
+export const ENEMY_ARMOR_PER_STEP = 3;
+export const enemyArmor = (round: number): number =>
+  Math.floor(round / ENEMY_ARMOR_STEP_ROUNDS) * ENEMY_ARMOR_PER_STEP;
 
 /**
  * 웨이브당 잡몹 수. 원본은 스폰 로직이 EUD라 몹 수를 읽을 수 없다(§9.2, §11.1).

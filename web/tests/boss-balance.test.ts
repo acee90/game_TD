@@ -4,6 +4,7 @@
 
 import { describe, expect, test } from 'vitest';
 import * as B from '../src/data/balance';
+import { ALTAR_MINERAL } from '../src/data/hero';
 import { Game } from '../src/game/game';
 
 /** 결정적 난수 — 시드마다 다른 유닛 조합이 나온다 */
@@ -47,20 +48,20 @@ const killRate = (budget: number): number =>
   SEEDS.filter((s) => fightLv1Boss(s, budget).killed).length / SEEDS.length;
 
 describe('Lv1 보스 — 시작 전력으로 넘을 수 있어야 한다', () => {
-  test('시작 미네랄 55로 유닛 4기를 산다', () => {
-    expect(Math.floor(B.START_MINERAL / B.SPAWN_UNIT_MINERAL)).toBe(4);
+  test('시작 미네랄로 유닛 여섯 기를 산다', () => {
+    expect(Math.floor(B.START_MINERAL / B.SPAWN_UNIT_MINERAL)).toBeGreaterThanOrEqual(6);
   });
 
   test('75 미네랄(6기)이면 어떤 뽑기 운에도 Lv1 보스를 잡는다', () => {
     expect(killRate(COMFORTABLE_BUDGET)).toBe(1);
   });
 
-  // 55로도 절반 넘게 잡지만 확실하지 않다. 라운드 잡몹이 타워를 끌어당기기 때문에
-  // 실제 처치율은 유닛 수만으로 계산한 값보다 낮다.
-  test('시작 미네랄 55(4기)만으로는 뽑기 운을 탄다', () => {
-    const rate = killRate(B.START_MINERAL);
-    expect(rate).toBeGreaterThan(0.5);
-    expect(rate).toBeLessThan(1);
+  // 제단(40)을 세우면 유닛 세 기밖에 못 산다. 그 전력으로 Lv1 보스를 잡는 건 뽑기 운이다 —
+  // 제단을 먼저 세울지 보스를 먼저 잡을지가 실제 선택이 되게 하는 지점이다.
+  test('제단을 세우고 남은 미네랄로는 뽑기 운을 탄다', () => {
+    const rate = killRate(B.START_MINERAL - ALTAR_MINERAL);
+    expect(rate).toBeGreaterThan(0.15);
+    expect(rate).toBeLessThan(0.75);
   });
 
   test('Lv1 보스가 즉사하지는 않는다', () => {

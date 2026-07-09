@@ -18,11 +18,25 @@ function spawn(game: Game): void {
   game.spawnUnit(emptySlot(game));
 }
 
-describe('시작 상태 — 원본 trigger #349', () => {
-  test('미네랄 55, 가스 6으로 시작한다', () => {
+describe('시작 상태', () => {
+  test('원본 시작 미네랄은 55, 가스 6', () => {
+    expect(B.ORIGINAL_START_MINERAL).toBe(55);
+    expect(B.START_GAS).toBe(6);
+  });
+
+  test('프로토는 제단 값만큼 시작 미네랄을 더 준다', () => {
     const game = new Game();
-    expect(game.mineral).toBe(55);
-    expect(game.gas).toBe(6);
+    expect(game.mineral).toBe(B.START_MINERAL);
+    expect(B.START_MINERAL).toBeGreaterThan(B.ORIGINAL_START_MINERAL);
+    expect(game.gas).toBe(B.START_GAS);
+  });
+
+  test('시작 미네랄로 제단을 세우고도 유닛 세 기는 산다', () => {
+    const game = new Game();
+    expect(game.buildAltar()).toBe(true);
+    let bought = 0;
+    while (game.spawnUnitAnywhere()) bought++;
+    expect(bought).toBeGreaterThanOrEqual(3);
   });
 
   test('원본 라운드 간격은 57초이고, 프로토는 그보다 짧다', () => {
@@ -99,6 +113,29 @@ describe('라운드 진행 — 고정 간격', () => {
       game.over = false;
     }
     expect(game.round).toBeGreaterThan(10);
+  });
+
+  test('적 장갑은 5라운드마다 계단식으로 오른다', () => {
+    expect(B.ENEMY_ARMOR_STEP_ROUNDS).toBe(5);
+
+    // 같은 계단 안에서는 변하지 않는다
+    expect(B.enemyArmor(5)).toBe(B.enemyArmor(9));
+    expect(B.enemyArmor(10)).toBe(B.enemyArmor(14));
+
+    // 계단을 넘으면 한 칸 오른다
+    expect(B.enemyArmor(10) - B.enemyArmor(9)).toBe(B.ENEMY_ARMOR_PER_STEP);
+    expect(B.enemyArmor(15) - B.enemyArmor(14)).toBe(B.ENEMY_ARMOR_PER_STEP);
+
+    // 첫 계단 전에는 장갑이 없다
+    expect(B.enemyArmor(1)).toBe(0);
+    expect(B.enemyArmor(4)).toBe(0);
+  });
+
+  test('적 체력 지수는 타워 총합으로 감당 가능한 범위다', () => {
+    // 타일 17개를 GOD으로 채웠을 때의 대략적 상한
+    const wallDps = 17 * 1180;
+    const needAtRound35 = (B.enemyHP(35) * B.enemyCount(35)) / B.ROUND_SECONDS;
+    expect(needAtRound35).toBeLessThan(wallDps);
   });
 
   test('웨이브당 잡몹은 15기에서 시작한다', () => {
