@@ -66,6 +66,17 @@
   .augcard .k{font-size:10.5px;font-weight:700;letter-spacing:.03em}
   .augcard .n{font-size:15px;font-weight:700;margin:3px 0 2px}
   .augcard .d{font-size:12px;color:var(--dim)}
+  #scorebar{display:flex;align-items:baseline;gap:8px;justify-content:center;
+            padding:4px 0 2px;font-size:12px;font-variant-numeric:tabular-nums}
+  #scorebar b{font-size:20px;color:var(--gold);font-weight:800;letter-spacing:.02em}
+  #hallOfFame{width:100%;max-width:340px;font-size:12.5px;font-variant-numeric:tabular-nums}
+  #hallOfFame h3{font-size:13px;color:var(--dim);font-weight:600;margin-bottom:6px}
+  #hallOfFame ol{list-style:none;display:grid;gap:4px}
+  #hallOfFame li{display:grid;grid-template-columns:24px 1fr auto;gap:8px;
+                 padding:5px 8px;background:var(--panel);border:1px solid var(--line);border-radius:6px}
+  #hallOfFame li.me{border-color:var(--gold)}
+  #hallOfFame .rank{color:var(--dim)}
+  #hallOfFame .pts{color:var(--gold);font-weight:700}
   #missions{background:var(--panel);border:1px solid var(--line);border-radius:8px;
             padding:9px 10px;font-size:11.5px;display:grid;gap:7px}
   .mrow{display:grid;grid-template-columns:64px 1fr auto;align-items:center;gap:8px}
@@ -90,6 +101,10 @@
     <div class="g">가스<b id="gas">6</b></div>
     <div class="l">라이프<b id="lives">20</b></div>
     <div>누적 킬<b id="kills">0</b></div>
+  </section>
+  <section id="scorebar" aria-label="점수">
+    <span class="dim">점수</span><b id="score">0</b>
+    <span class="dim" id="scoreNext"></span>
   </section>
 
   <canvas id="canvas" width="420" height="470" aria-label="십자 일주 맵"></canvas>
@@ -175,6 +190,7 @@
 <div id="overlay">
   <h1 id="overlayTitle"></h1>
   <p id="overlayBody" class="dim"></p>
+  <div id="hallOfFame"></div>
   <button onclick="location.reload()">다시 도전</button>
 </div>
 

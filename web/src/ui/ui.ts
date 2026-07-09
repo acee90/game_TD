@@ -4,6 +4,8 @@ import { RACES, RACE_COLOR, TIER_LABEL, tagLabel, type Race } from '../data/unit
 import { attackInterval, damage, range } from '../game/combat';
 import { bossKillMineral, nextMilestone } from '../game/economy';
 import * as HD from '../data/hero';
+import * as S from '../data/score';
+import * as hallOfFame from './hall-of-fame';
 import type { Game } from '../game/game';
 
 const $ = <T extends HTMLElement>(id: string): T => {
@@ -47,6 +49,9 @@ export interface Elements {
   readonly overlay: HTMLElement;
   readonly overlayTitle: HTMLElement;
   readonly overlayBody: HTMLElement;
+  readonly score: HTMLElement;
+  readonly scoreNext: HTMLElement;
+  readonly hallOfFame: HTMLElement;
 }
 
 export function bindElements(): Elements {
@@ -85,6 +90,9 @@ export function bindElements(): Elements {
     overlay: $('overlay'),
     overlayTitle: $('overlayTitle'),
     overlayBody: $('overlayBody'),
+    score: $('score'),
+    scoreNext: $('scoreNext'),
+    hallOfFame: $('hallOfFame'),
   };
 }
 
@@ -243,10 +251,44 @@ export function refresh(el: Elements, game: Game): void {
   el.info.innerHTML = selectionInfo(game);
   el.message.textContent = game.message;
 
-  if (game.over) {
-    el.overlay.style.display = 'flex';
-    el.overlayTitle.textContent = '패배';
-    el.overlayBody.textContent =
-      `${game.round}라운드 · ${game.kills}킬 · 보스 Lv${game.bossCleared}까지 처치`;
+  el.score.textContent = game.score.toLocaleString('ko-KR');
+  const nextRound = Math.max(1, game.round);
+  el.scoreNext.textContent = `R${nextRound} 클리어 +${S.roundScore(nextRound).toLocaleString('ko-KR')}`;
+
+  if (game.over && !submitted) {
+    submitted = true;
+    showHallOfFame(el, game);
   }
+}
+
+let submitted = false;
+
+function showHallOfFame(el: Elements, game: Game): void {
+  el.overlay.style.display = 'flex';
+  el.overlayTitle.textContent = `${game.score.toLocaleString('ko-KR')}점`;
+  el.overlayBody.textContent =
+    `${game.round}라운드 · ${game.kills}킬 · 보스 Lv${game.bossCleared} · 영웅 Lv${game.hero?.level ?? '-'}`;
+
+  const mine: hallOfFame.Record = {
+    score: game.score,
+    round: game.round,
+    kills: game.kills,
+    heroLevel: game.hero?.level ?? 0,
+    at: Date.now(),
+  };
+  const records = hallOfFame.submit(mine);
+  const myRank = hallOfFame.rankOf(records, mine);
+
+  const rows = records
+    .map((r, i) => {
+      const me = i + 1 === myRank ? ' class="me"' : '';
+      return `<li${me}>
+        <span class="rank">${i + 1}</span>
+        <span>R${r.round} · ${r.kills}킬 · 영웅 Lv${r.heroLevel}</span>
+        <span class="pts">${r.score.toLocaleString('ko-KR')}</span>
+      </li>`;
+    })
+    .join('');
+
+  el.hallOfFame.innerHTML = `<h3>명예의 전당${myRank ? ` — 이번 판 ${myRank}위` : ' — 순위권 밖'}</h3><ol>${rows}</ol>`;
 }

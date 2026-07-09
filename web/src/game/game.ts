@@ -3,6 +3,7 @@
 
 import * as B from '../data/balance';
 import * as H from '../data/hero';
+import * as S from '../data/score';
 import { PATH_LENGTH, SLOT_POS, pathPos } from '../core/map';
 import { GOD_TIER, RACE_COLOR, tagLabel, type Race } from '../data/units';
 import type { Augment } from '../data/hero';
@@ -22,6 +23,11 @@ export class Game {
   kills = 0;
   probes = 0;
   over = false;
+
+  /** 누적 점수. 승리 조건이 없으므로 이게 유일한 성적표다. */
+  score = 0;
+  /** GOD 타워 보너스를 이미 받은 유닛 이름 */
+  private readonly scoredGods = new Set<string>();
   message = '소용돌이를 클릭해 유닛을 생성하세요. 같은 유닛 2기가 모이면 조합됩니다.';
 
   /** 처치한 최고 보스 레벨. Lv N+1 소환은 Lv N을 잡아야 열린다. */
@@ -212,6 +218,10 @@ export class Game {
       }
       result.slot.tower = { def: result.produced, tier: result.tier, cooldown: 0 };
       const isGod = result.tier === GOD_TIER;
+      if (isGod && !this.scoredGods.has(result.produced.name)) {
+        this.scoredGods.add(result.produced.name);
+        this.score += S.GOD_TOWER_SCORE;
+      }
       this.float(
         result.slot.x,
         result.slot.y,
@@ -273,6 +283,7 @@ export class Game {
     if (this.round >= 1) {
       const reward = B.waveReward(this.round);
       this.mineral += reward;
+      this.score += S.roundScore(this.round);
       this.float(this.slots[0].x, this.slots[0].y, `웨이브 +${reward}`, '#ffd23f');
     }
 
@@ -303,6 +314,7 @@ export class Game {
     const cost = enemy.kind === 'boss' ? B.bossLeakLives(enemy.bossLevel ?? 1) : 1;
     this.lives -= cost;
     this.mineral += B.LEAK_MINERAL;
+    this.score = Math.max(0, this.score - S.leakPenalty(this.round) * cost);
     const [x, y] = pathPos(enemy.distance);
     this.float(x, y, `Life -${cost} · 미네랄 +${B.LEAK_MINERAL}`, '#ff5a3c');
     if (enemy.kind === 'boss') {
@@ -326,6 +338,7 @@ export class Game {
       this.bossesKilled++;
       this.bossCleared = Math.max(this.bossCleared, level);
       this.float(x, y, `[ Lv${level} BOSS KILL ] +${reward}`, '#ffd23f');
+      this.score += S.bossScore(level);
       this.grantXp(H.xpPerBoss(level));
 
       const suffix = !unlocked
@@ -339,6 +352,7 @@ export class Game {
 
     const before = this.kills;
     this.kills++;
+    this.score += S.KILL_SCORE;
     const income = killIncome(before, this.kills);
     if (income.mineral > 0) {
       this.mineral += income.mineral;
@@ -354,7 +368,10 @@ export class Game {
     const hero = this.hero;
     if (!hero) return;
     const levels = hero.gainXp(amount);
-    if (levels > 0) this.float(hero.x, hero.y, `Lv${hero.level}!`, '#ffd23f');
+    if (levels > 0) {
+      this.score += S.HERO_LEVEL_SCORE * levels;
+      this.float(hero.x, hero.y, `Lv${hero.level}!`, '#ffd23f');
+    }
     if (this.augmentChoices.length === 0) this.offerAugmentIfPending();
   }
 
