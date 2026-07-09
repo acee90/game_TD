@@ -6,7 +6,7 @@ import { PATH_LENGTH, SLOT_POS, pathPos } from '../core/map';
 import { GOD_TIER, RACE_COLOR, tagLabel, type Race } from '../data/units';
 import { attackInterval, damage, isSplash, range, type UpgradeLevels } from './combat';
 import { bossKillMineral, killIncome } from './economy';
-import { PickIndex, findMerge, unitFor } from './merge';
+import { findMerge, unitFor, type Rand } from './merge';
 import type { Enemy, EnemySpec, FloatText, Shot, Slot } from './types';
 
 export class Game {
@@ -24,12 +24,9 @@ export class Game {
   bossCleared = 0;
   bossesKilled = 0;
   bossCooldown = 0;
-  /** 필드에 살아있는 보스 레벨 (동시 1기) */
-  activeBossLevel: number | null = null;
 
   upgrades: UpgradeLevels = [0, 0, 0, 0];
 
-  readonly pick = new PickIndex();
   slots: Slot[] = SLOT_POS.map(([x, y]) => ({ x, y, tower: null }));
   selected: Slot | null = null;
 
@@ -41,36 +38,51 @@ export class Game {
   private spawnTimer = 0;
   private gasFraction = 0;
 
+  /** 유닛 추첨용 난수. 테스트에서 결정적 함수를 주입한다. */
+  private readonly rand: Rand;
+
+  constructor(rand: Rand = Math.random) {
+    this.rand = rand;
+  }
+
+  /** 필드에 살아있는 보스들의 레벨 */
+  get liveBossLevels(): number[] {
+    return this.enemies.filter((e) => e.kind === 'boss').map((e) => e.bossLevel ?? 1);
+  }
+
+  /** 이번 웨이브의 잡몹을 전부 정리했는가. 보스는 라운드와 무관하므로 세지 않는다. */
+  get waveCleared(): boolean {
+    return this.spawnQueue.length === 0 && !this.enemies.some((e) => e.kind !== 'boss');
+  }
+
   // ── 소환 가능한 보스 레벨 ──
-  get nextBossLevel(): number {
+  /** 아직 열리지 않은 가장 높은 레벨. Lv N을 잡아야 Lv N+1이 열린다. */
+  get maxBossLevel(): number {
     return Math.min(this.bossCleared + 1, B.BOSS_MAX_LEVEL);
   }
 
+  /** 열린 레벨은 언제든 다시 고를 수 있다. 낮은 레벨은 안전하지만 보상이 적다. */
+  canSummonBossLevel(level: number): boolean {
+    return this.canSummonBoss && level >= 1 && level <= this.maxBossLevel;
+  }
+
+  /** 쿨타임만이 소환을 막는다. 앞선 보스와 교전 중이어도 쿨타임이 차면 또 부를 수 있다. */
   get canSummonBoss(): boolean {
-    return (
-      !this.over &&
-      this.bossCooldown <= 0 &&
-      this.activeBossLevel === null &&
-      this.bossCleared < B.BOSS_MAX_LEVEL
-    );
+    return !this.over && this.bossCooldown <= 0;
   }
 
   /**
    * 보스 소환 — 라운드 진행과 무관한 상시 액션. 비용 없음, 쿨타임만.
-   * 소환한 보스를 잡아야 다음 레벨이 열린다.
+   * 레벨을 생략하면 열려 있는 가장 높은 레벨을 부른다.
    */
-  summonBoss(): boolean {
-    if (!this.canSummonBoss) {
+  summonBoss(level: number = this.maxBossLevel): boolean {
+    if (!this.canSummonBossLevel(level)) {
       this.message =
-        this.activeBossLevel !== null
-          ? '이미 보스가 필드에 있습니다.'
-          : this.bossCleared >= B.BOSS_MAX_LEVEL
-            ? `Lv${B.BOSS_MAX_LEVEL} 보스까지 모두 처치했습니다.`
-            : `쿨타임 ${Math.ceil(this.bossCooldown)}초 남았습니다.`;
+        this.bossCooldown > 0
+          ? `쿨타임 ${Math.ceil(this.bossCooldown)}초 남았습니다.`
+          : `Lv${level} 보스는 아직 열리지 않았습니다 — Lv${this.maxBossLevel}까지 소환할 수 있습니다.`;
       return false;
     }
-    const level = this.nextBossLevel;
-    this.activeBossLevel = level;
     this.bossCooldown = B.BOSS_COOLDOWN_SECONDS;
     this.spawn({
       kind: 'boss',
@@ -81,8 +93,11 @@ export class Game {
       radius: 18,
       bossLevel: level,
     });
-    const next = level < B.BOSS_MAX_LEVEL ? ` 처치하면 Lv${level + 1} 소환이 열립니다.` : '';
-    this.message = `Lv${level} BOSS를 소환합니다.${next}`;
+    const unlocks =
+      level === this.maxBossLevel && level < B.BOSS_MAX_LEVEL
+        ? ` 처치하면 Lv${level + 1} 소환이 열립니다.`
+        : '';
+    this.message = `Lv${level} BOSS를 소환합니다. 보상 +${bossKillMineral(level)}.${unlocks}`;
     return true;
   }
 
@@ -97,7 +112,7 @@ export class Game {
       return false;
     }
     this.mineral -= B.SPAWN_UNIT_MINERAL;
-    const def = unitFor(0, this.pick.value, this.bossesKilled);
+    const def = unitFor(0, this.rand, this.bossesKilled);
     slot.tower = { def, tier: 0, cooldown: 0 };
     this.float(slot.x, slot.y, def.name, RACE_COLOR[def.race]);
     this.selected = slot;
@@ -118,7 +133,7 @@ export class Game {
   /** 연쇄 조합까지 전부 해소한다 */
   resolveMerges(): void {
     for (let guard = 0; guard < 64; guard++) {
-      const result = findMerge(this.slots, this.pick.value, this.bossesKilled);
+      const result = findMerge(this.slots, this.rand, this.bossesKilled);
       if (!result) return;
 
       let removed = 0;
@@ -231,7 +246,6 @@ export class Game {
     const [x, y] = pathPos(enemy.distance);
     this.float(x, y, `Life -${cost} · 미네랄 +${B.LEAK_MINERAL}`, '#ff5a3c');
     if (enemy.kind === 'boss') {
-      this.activeBossLevel = null;
       this.message = `${enemy.name} 돌파! 다음 레벨은 열리지 않습니다.`;
     }
     if (this.lives <= 0) {
@@ -247,16 +261,18 @@ export class Game {
     if (enemy.kind === 'boss') {
       const level = enemy.bossLevel ?? 1;
       const reward = bossKillMineral(level);
+      const unlocked = level > this.bossCleared;
       this.mineral += reward;
       this.bossesKilled++;
       this.bossCleared = Math.max(this.bossCleared, level);
-      this.activeBossLevel = null;
-      this.pick.bump(); // trigger #602~#606 — 조합 선택자를 한 칸 민다
       this.float(x, y, `[ Lv${level} BOSS KILL ] +${reward}`, '#ffd23f');
-      this.message =
-        this.bossCleared >= B.BOSS_MAX_LEVEL
-          ? `Lv${level} BOSS 처치! 모든 보스를 잡았습니다.`
-          : `Lv${level} BOSS 처치! +${reward} 미네랄 · Lv${level + 1} 소환이 열렸습니다.`;
+
+      const suffix = !unlocked
+        ? ''
+        : this.bossCleared >= B.BOSS_MAX_LEVEL
+          ? ' · 모든 보스를 잡았습니다.'
+          : ` · Lv${level + 1} 소환이 열렸습니다.`;
+      this.message = `Lv${level} BOSS 처치! +${reward} 미네랄${suffix}`;
       return;
     }
 
@@ -278,7 +294,6 @@ export class Game {
   update(dt: number): void {
     if (this.over) return;
 
-    this.pick.advanceTime(dt);
     if (this.bossCooldown > 0) this.bossCooldown = Math.max(0, this.bossCooldown - dt);
 
     this.gasFraction += this.probes * B.GAS_PER_PROBE_SECOND * dt;
@@ -299,7 +314,7 @@ export class Game {
       this.spawnTimer -= dt;
       if (this.spawnTimer <= 0) {
         this.spawn(this.spawnQueue.shift()!);
-        this.spawnTimer = 0.38;
+        this.spawnTimer = B.SPAWN_INTERVAL;
       }
     }
 
@@ -320,6 +335,12 @@ export class Game {
       }
     }
     this.enemies = this.enemies.filter((e) => !e.dead);
+
+    // 웨이브를 일찍 정리했으면 남은 시간을 기다리지 않는다.
+    // 적을 걷어낸 뒤에 판정해야 마지막 한 기가 죽은 그 프레임에 바로 반영된다.
+    if (this.round > 1 && this.waveCleared && this.roundTimer > B.INTER_ROUND_GRACE) {
+      this.roundTimer = B.INTER_ROUND_GRACE;
+    }
 
     for (const shot of this.shots) shot.life -= dt;
     this.shots = this.shots.filter((s) => s.life > 0);

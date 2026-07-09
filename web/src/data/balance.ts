@@ -10,9 +10,23 @@ import type { Tag } from './units';
 export const START_MINERAL = 55;
 export const START_GAS = 6;
 
-// ── 라운드 타이머 — trigger #266 SetCountdownTimer(57), 오프닝 #344는 20 [원본확정]
+/**
+ * 라운드 간격의 **상한**. 원본 trigger #266의 SetCountdownTimer(57)이 이 값이다. [원본확정]
+ * 원본은 이 타이머만으로 라운드를 넘기지만, 그러면 웨이브를 일찍 정리해도 계속 기다리게 된다.
+ * 그래서 아래 INTER_ROUND_GRACE를 함께 쓴다.
+ */
 export const ROUND_SECONDS = 57;
-export const OPENING_SECONDS = 20;
+
+/**
+ * 웨이브를 전부 정리했을 때 다음 라운드까지의 유예. 보스는 라운드와 무관하므로 세지 않는다.
+ * 원본에 대응하는 개념이 없다. [프로토]
+ */
+export const INTER_ROUND_GRACE = 4;
+/**
+ * 첫 라운드까지의 대기. 원본은 trigger #344에서 20초지만(그동안 명예의 전당 연출이 돈다)
+ * 연출이 없는 프로토에서는 그냥 기다리는 시간이라 짧게 줄였다. [프로토]
+ */
+export const OPENING_SECONDS = 5;
 
 // ───────── 소득 (§8.2) — 전부 Add, 플레이어 자원 차감은 원본에 0건(§8.3) ─────────
 
@@ -54,9 +68,16 @@ export const upgradeGasCost = (level: number): number => 8 + 4 * level + level *
 export const BOSS_MAX_LEVEL = 6;
 export const BOSS_COOLDOWN_SECONDS = 45; // [프로토]
 
-/** 보스 HP. 원본 UNIx는 Lv1~Lv6 전부 hp=100000이라 밸런스 근거로 못 쓴다(§4.6) [프로토] */
-export const bossHP = (level: number): number => 900 * Math.pow(2.15, level - 1);
-export const bossArmor = (level: number): number => 4 + 3 * level;
+/**
+ * 보스 HP·장갑. 원본 UNIx는 Lv1~Lv6 전부 hp=100000이라 밸런스 근거로 못 쓴다(§4.6). [프로토]
+ *
+ * Lv1은 "시작 미네랄로 산 유닛만으로 잡을 수 있어야 한다"를 기준으로 맞췄다.
+ * tests/boss-balance.test.ts가 이 기준을 지킨다 — 유닛 6기면 확실히, 4기면 아슬아슬하게 잡힌다.
+ * 장갑은 타격당 감산이라 저티어 유닛에게 특히 아프다. Lv1 장갑을 3보다 올리면
+ * Lv1 유닛의 유효 피해가 10% 바닥값으로 깔려서 초반이 막힌다.
+ */
+export const bossHP = (level: number): number => 700 * Math.pow(2.15, level - 1);
+export const bossArmor = (level: number): number => 3 * level;
 export const BOSS_SPEED = 26;
 /** 보스가 일주를 끝내면 라이프 손실이 크다 [프로토] */
 export const bossLeakLives = (level: number): number => 2 + level;
@@ -80,7 +101,17 @@ export const GOD_ENEMY_ROUNDS: Readonly<Record<number, string>> = {
 
 export const enemyHP = (round: number): number => 30 * Math.pow(1.28, round); // [프로토]
 export const enemyArmor = (round: number): number => Math.floor(round * 0.8); // [프로토]
-export const enemyCount = (round: number): number => 6 + Math.floor(round / 4); // [프로토]
+
+/**
+ * 웨이브당 잡몹 수. 원본은 스폰 로직이 EUD라 몹 수를 읽을 수 없다(§9.2, §11.1).
+ * 라인이 계속 차 있어야 타워디펜스의 속도감이 나오므로 15기에서 시작한다. [프로토]
+ */
+export const ENEMY_BASE_COUNT = 15;
+export const enemyCount = (round: number): number =>
+  ENEMY_BASE_COUNT + Math.floor(round / 4); // [프로토]
+
+/** 웨이브 내 스폰 간격(초) [프로토] */
+export const SPAWN_INTERVAL = 0.3;
 export const ENEMY_SPEED = 52; // [프로토]
 export const GOD_ENEMY_HP_MULT = 9; // [프로토]
 

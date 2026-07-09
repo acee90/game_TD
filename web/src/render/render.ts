@@ -45,6 +45,7 @@ function drawDoors(ctx: CanvasRenderingContext2D): void {
 function drawNexus(ctx: CanvasRenderingContext2D, game: Game): void {
   const [x, y] = NEXUS;
   if (game.bossCooldown <= 0) return;
+  // 쿨타임 링은 교전 중에도 계속 찬다 — 소환을 막는 건 쿨타임뿐이다.
   ctx.beginPath();
   const progress = 1 - game.bossCooldown / BOSS_COOLDOWN_SECONDS;
   ctx.arc(x, y, TILE / 2 + 5, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * progress);

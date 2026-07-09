@@ -17,10 +17,10 @@ export interface Elements {
   readonly gas: HTMLElement;
   readonly lives: HTMLElement;
   readonly kills: HTMLElement;
-  readonly pick: HTMLElement;
   readonly info: HTMLElement;
   readonly message: HTMLElement;
-  readonly boss: HTMLButtonElement;
+  readonly bossState: HTMLElement;
+  readonly bossLevels: readonly HTMLButtonElement[];
   readonly probe: HTMLButtonElement;
   readonly spawn: HTMLButtonElement;
   readonly sell: HTMLButtonElement;
@@ -38,10 +38,10 @@ export function bindElements(): Elements {
     gas: $('gas'),
     lives: $('lives'),
     kills: $('kills'),
-    pick: $('pick'),
     info: $('info'),
     message: $('message'),
-    boss: $<HTMLButtonElement>('boss'),
+    bossState: $('bossState'),
+    bossLevels: [1, 2, 3, 4, 5, 6].map((n) => $<HTMLButtonElement>(`boss${n}`)),
     probe: $<HTMLButtonElement>('probe'),
     spawn: $<HTMLButtonElement>('spawn'),
     sell: $<HTMLButtonElement>('sell'),
@@ -52,11 +52,14 @@ export function bindElements(): Elements {
   };
 }
 
-function bossLabel(game: Game): string {
-  if (game.activeBossLevel !== null) return `Lv${game.activeBossLevel} 교전 중`;
-  if (game.bossCleared >= B.BOSS_MAX_LEVEL) return '전 보스 처치';
-  if (game.bossCooldown > 0) return `쿨타임 ${Math.ceil(game.bossCooldown)}s`;
-  return `Lv${game.nextBossLevel} BOSS 소환`;
+function bossStateLabel(game: Game): string {
+  const live = game.liveBossLevels;
+  const fighting = live.length ? `교전 중 ${live.map((l) => `Lv${l}`).join(' ')} · ` : '';
+  const gate =
+    game.bossCooldown > 0
+      ? `쿨타임 ${Math.ceil(game.bossCooldown)}s`
+      : `소환 가능 Lv1~Lv${game.maxBossLevel}`;
+  return fighting + gate;
 }
 
 function selectionInfo(game: Game): string {
@@ -79,15 +82,21 @@ function selectionInfo(game: Game): string {
 export function refresh(el: Elements, game: Game): void {
   el.round.textContent = `R${game.round}`;
   el.timer.textContent = `${Math.ceil(game.roundTimer)}s`;
+  el.timer.style.color = game.round > 1 && game.waveCleared ? 'var(--gold)' : '';
   el.mineral.textContent = String(Math.floor(game.mineral));
   el.gas.textContent = String(Math.floor(game.gas));
   el.lives.textContent = String(game.lives);
   el.kills.textContent = String(game.kills);
-  el.pick.textContent = String(game.pick.value);
 
-  el.boss.textContent = bossLabel(game);
-  el.boss.disabled = !game.canSummonBoss;
-  el.boss.classList.toggle('ready', game.canSummonBoss);
+  el.bossState.textContent = bossStateLabel(game);
+  el.bossLevels.forEach((button, i) => {
+    const level = i + 1;
+    const open = level <= game.maxBossLevel;
+    button.disabled = !game.canSummonBossLevel(level);
+    button.textContent = open ? `Lv${level}\n+${B.BOSS_KILL_MINERAL[i]}` : `Lv${level} 🔒`;
+    button.classList.toggle('ready', open);
+    button.classList.toggle('top', open && level === game.maxBossLevel);
+  });
 
   el.probe.textContent = `프로브 ${B.PROBE_MINERAL} (${game.probes}/${B.PROBE_MAX})`;
   el.probe.disabled = game.probes >= B.PROBE_MAX || game.mineral < B.PROBE_MINERAL;

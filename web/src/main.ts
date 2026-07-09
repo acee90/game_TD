@@ -33,7 +33,7 @@ canvas.addEventListener('pointerdown', (event) => {
 el.spawn.addEventListener('click', () => game.spawnUnitAnywhere());
 el.probe.addEventListener('click', () => game.buyProbe());
 el.sell.addEventListener('click', () => game.sellSelected());
-el.boss.addEventListener('click', () => game.summonBoss());
+el.bossLevels.forEach((button, i) => button.addEventListener('click', () => game.summonBoss(i + 1)));
 el.upgrades.forEach((button, i) => button.addEventListener('click', () => game.upgrade(i as Race)));
 
 const KEYS: Record<string, () => void> = {

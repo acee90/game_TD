@@ -2,42 +2,26 @@
 // 출처: docs/갓타워디펜스X_VZ056_맵파일분석_v1.0.md §5
 //
 // 원본은 2단계 파이프라인이다. 같은 유닛 2기가 모이면(AtLeast 2) 요청 카운터를 올리고,
-// 별도 생성 트리거가 그 카운터를 소비해 상위 티어 1기를 만든다. 어느 유닛이 나올지는
-// 랜덤이 아니라 **공유 인덱스 unit#73**이 정한다(§5.3).
+// 별도 생성 트리거가 그 카운터를 소비해 상위 티어 1기를 만든다.
 //
-// 그 인덱스를 회전시키는 트리거는 EUD에 있어 주기를 읽을 수 없다. 여기서는 매 프레임
-// 1..7을 돌리고 생성 순간에 읽는다. 플레이어에게는 랜덤처럼 보이지만 결정적이고,
-// 보스를 잡으면 인덱스가 +1 밀려서(trigger #602~#606) 결과 분포가 실제로 바뀐다.
+// 원본에서 티어 내 유닛 선택은 공유 인덱스 unit#73으로 결정되지만(§5.3), 그 인덱스를
+// 회전시키는 트리거가 EUD에 있어 주기를 읽을 수 없다. 즉 플레이어 입장에서 관측되는
+// 동작은 랜덤과 구분되지 않는다. 이 프로토는 그냥 균등 랜덤으로 뽑는다.
 
 import * as B from '../data/balance';
 import { GOD_TIER, TIER_POOLS, godPool, type UnitDef } from '../data/units';
 import type { Slot } from './types';
 
-/** 1..PICK_INDEX_MAX 를 순환하는 공유 선택자 */
-export class PickIndex {
-  private elapsed = 0;
-  private offset = 0;
+/** 0 이상 1 미만의 난수를 돌려주는 함수 */
+export type Rand = () => number;
 
-  /** 현재 값 (1..PICK_INDEX_MAX) */
-  get value(): number {
-    const ticks = Math.floor(this.elapsed / B.PICK_INDEX_PERIOD) + this.offset;
-    return (ticks % B.PICK_INDEX_MAX) + 1;
-  }
+export const poolFor = (tier: number, bossesKilled: number): readonly UnitDef[] =>
+  tier === GOD_TIER ? godPool(bossesKilled) : TIER_POOLS[tier];
 
-  advanceTime(dt: number): void {
-    this.elapsed += dt;
-  }
-
-  /** 보스 처치 시 +1 — trigger #602~#606의 SetDeaths(unit#73, Add, 1) */
-  bump(): void {
-    this.offset += 1;
-  }
-}
-
-/** 티어 `tier`에서 인덱스 `pick`(1-base)이 가리키는 유닛 */
-export function unitFor(tier: number, pick: number, bossesKilled: number): UnitDef {
-  const pool = tier === GOD_TIER ? godPool(bossesKilled) : TIER_POOLS[tier];
-  return pool[(pick - 1) % pool.length];
+/** 티어 `tier`의 풀에서 한 유닛을 균등 랜덤으로 뽑는다 */
+export function unitFor(tier: number, rand: Rand, bossesKilled: number): UnitDef {
+  const pool = poolFor(tier, bossesKilled);
+  return pool[Math.min(pool.length - 1, Math.floor(rand() * pool.length))];
 }
 
 export interface MergeResult {
@@ -53,7 +37,7 @@ export interface MergeResult {
  */
 export function findMerge(
   slots: readonly Slot[],
-  pick: number,
+  rand: Rand,
   bossesKilled: number,
 ): MergeResult | null {
   for (let tier = 0; tier < GOD_TIER; tier++) {
@@ -68,7 +52,7 @@ export function findMerge(
       if (group.length < B.MERGE_REQUIRED) continue;
       return {
         slot: group[0],
-        produced: unitFor(tier + 1, pick, bossesKilled),
+        produced: unitFor(tier + 1, rand, bossesKilled),
         tier: tier + 1,
         consumed: name,
       };

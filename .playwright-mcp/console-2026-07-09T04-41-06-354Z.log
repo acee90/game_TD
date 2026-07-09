@@ -1,0 +1,12 @@
+[      70ms] [ERROR] Failed to load resource: the server responded with a status of 404 (Not Found) @ http://localhost:5178/favicon.ico:0
+[  142981ms] The requested module '/src/game/merge.ts?t=1783572209138' does not provide an export named 'PickIndex'
+[  153663ms] TypeError: Cannot read properties of undefined (reading 'value')
+    at refresh (http://localhost:5178/src/ui/ui.ts:60:42)
+    at frame (http://localhost:5178/src/main.ts?t=1783572219811:47:3)
+[  171348ms] TypeError: Cannot read properties of undefined (reading 'value')
+    at refresh (http://localhost:5178/src/ui/ui.ts:60:42)
+    at frame (http://localhost:5178/src/main.ts?t=1783572237573:47:3)
+[  647292ms] Error: missing element #boss
+    at $ (http://localhost:5178/src/ui/ui.ts?t=1783572450535:6:18)
+    at bindElements (http://localhost:5178/src/ui/ui.ts?t=1783572450535:19:11)
+    at http://localhost:5178/src/main.ts?t=1783572697828:9:12

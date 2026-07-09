@@ -30,10 +30,15 @@
   #message{min-height:18px;font-size:12px;color:var(--dim);padding:5px;text-align:center}
   .row{display:grid;gap:6px;margin-top:6px}
   .c2{grid-template-columns:1fr 1fr} .c4{grid-template-columns:repeat(4,1fr)}
+  .c6{grid-template-columns:repeat(6,1fr)}
   button{background:var(--panel2);color:var(--text);border:1px solid var(--line);border-radius:8px;
          padding:10px 4px;font-size:12.5px;font-family:inherit;cursor:pointer;line-height:1.4}
   button:active{transform:translateY(1px)} button:disabled{opacity:.35;cursor:default}
-  #boss{border-color:var(--line)} #boss.ready{border-color:var(--gold);background:#33324a}
+  .bossbtn{white-space:pre-line;font-size:11px;padding:8px 2px}
+  .bossbtn.ready{border-color:var(--gold)}
+  .bossbtn.top{background:#33324a}
+  #bossState:disabled{opacity:1;color:var(--dim);border-style:dashed}
+  #bossState{font-size:11.5px}
   #spawn{border-color:var(--gold)}
   #up0{border-color:var(--terran)} #up1{border-color:var(--zerg)}
   #up2{border-color:var(--toss)} #up3{border-color:var(--creature)}
@@ -53,7 +58,7 @@
     <div class="m">미네랄<b id="mineral">55</b></div>
     <div class="g">가스<b id="gas">6</b></div>
     <div class="l">라이프<b id="lives">20</b></div>
-    <div>킬 / 선택자<b><span id="kills">0</span> / <span id="pick">1</span></b></div>
+    <div>누적 킬<b id="kills">0</b></div>
   </section>
 
   <canvas id="canvas" width="420" height="470" aria-label="십자 일주 맵"></canvas>
@@ -63,11 +68,17 @@
 
   <div class="row c2">
     <button id="spawn">유닛 생성</button>
-    <button id="boss">Lv1 BOSS 소환</button>
+    <button id="probe">프로브</button>
   </div>
   <div class="row c2">
-    <button id="probe">프로브</button>
     <button id="sell">유닛 처분</button>
+    <button id="bossState" disabled>보스 대기</button>
+  </div>
+
+  <p class="note">보스 소환 (쿨타임만, 비용 없음) — 열린 레벨은 언제든 다시 부를 수 있다</p>
+  <div class="row c6">
+    <button class="bossbtn" id="boss1">Lv1</button><button class="bossbtn" id="boss2">Lv2</button><button class="bossbtn" id="boss3">Lv3</button>
+    <button class="bossbtn" id="boss4">Lv4</button><button class="bossbtn" id="boss5">Lv5</button><button class="bossbtn" id="boss6">Lv6</button>
   </div>
 
   <p class="note">파일런 업그레이드 (가스) — 종족별 공격력 +10% 복리</p>
@@ -78,9 +89,9 @@
 
   <p class="note">
     몹은 북측 왼쪽 입구에서 나와 십자 외곽선을 반시계로 한 바퀴 돌고 북측 오른쪽 출구로 나간다.<br>
-    보스는 라운드와 무관하게 언제든 소환 — 쿨타임만 있고 비용은 없다.<br>
-    Lv N 보스를 처치해야 Lv N+1이 열리고, 처치할 때마다 <b>조합 선택자</b>가 한 칸 밀린다.<br>
-    단축키 — P 생성 · B 보스 · R 프로브 · X 처분 · 1234 업그레이드
+    보스는 라운드와 무관하게 언제든 소환한다. Lv N을 처치해야 Lv N+1이 열리고,<br>
+    한번 열린 레벨은 계속 부를 수 있다 — 낮은 레벨은 안전하지만 보상(5·8·13·20·29·39)이 적다.<br>
+    단축키 — P 생성 · B 최고레벨 보스 · R 프로브 · X 처분 · 1234 업그레이드
   </p>
 </main>
 

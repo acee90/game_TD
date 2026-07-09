@@ -4,14 +4,16 @@ import { ARM_TILES, PATH_LENGTH, SLOT_POS, pathPos } from '../src/core/map';
 import { GOD_POOL_EARLY, GOD_POOL_LATE, GOD_TIER, godPool } from '../src/data/units';
 import { Game } from '../src/game/game';
 import { bossKillMineral, killIncome } from '../src/game/economy';
-import { unitFor } from '../src/game/merge';
+import { poolFor, unitFor } from '../src/game/merge';
 import type { Slot } from '../src/game/types';
 
 const emptySlot = (game: Game): Slot => game.slots.find((s) => !s.tower)!;
 
-/** pick 인덱스를 고정한 채 유닛 하나를 생성한다 */
-function spawnWithPick(game: Game, pick: number): void {
-  Object.defineProperty(game.pick, 'value', { get: () => pick, configurable: true });
+/** 항상 풀의 index번째 유닛을 뽑는 결정적 난수 */
+const fixedRand = (index: number, poolSize = 7): (() => number) => () => index / poolSize;
+
+/** 미네랄 걱정 없이 유닛 하나를 생성한다 */
+function spawn(game: Game): void {
   game.mineral += B.SPAWN_UNIT_MINERAL;
   game.spawnUnit(emptySlot(game));
 }
@@ -23,17 +25,88 @@ describe('시작 상태 — 원본 trigger #349', () => {
     expect(game.gas).toBe(6);
   });
 
-  test('오프닝 카운트다운은 20초, 이후 라운드는 57초', () => {
-    expect(B.OPENING_SECONDS).toBe(20);
+  test('라운드 간격은 원본대로 57초', () => {
     expect(B.ROUND_SECONDS).toBe(57);
+  });
+
+  test('첫 라운드는 오프닝 대기 뒤에 시작한다', () => {
+    const game = new Game();
+    expect(game.roundTimer).toBe(B.OPENING_SECONDS);
+    expect(B.OPENING_SECONDS).toBeLessThan(B.ROUND_SECONDS);
+  });
+});
+
+describe('라운드 진행 — 다 잡으면 기다리지 않는다', () => {
+  /** 오프닝을 넘겨 라운드 1의 잡몹이 전부 스폰된 상태로 만든다 */
+  function intoRound1(game: Game): void {
+    game.update(B.OPENING_SECONDS + 0.01);
+    for (let i = 0; i < 200 && !game.waveCleared; i++) game.update(0.4);
+  }
+
+  test('잡몹이 남아 있으면 타이머가 그대로 흐른다', () => {
+    const game = new Game();
+    game.update(B.OPENING_SECONDS + 0.01);
+    game.update(0.4); // 첫 몹 스폰
+
+    expect(game.waveCleared).toBe(false);
+    expect(game.roundTimer).toBeGreaterThan(B.INTER_ROUND_GRACE);
+  });
+
+  test('웨이브를 정리하면 타이머가 유예 시간으로 줄어든다', () => {
+    const game = new Game();
+    intoRound1(game);
+
+    expect(game.waveCleared).toBe(true);
+    expect(game.roundTimer).toBeLessThanOrEqual(B.INTER_ROUND_GRACE);
+  });
+
+  test('필드에 보스만 남아도 웨이브는 정리된 것으로 본다', () => {
+    const game = new Game();
+    intoRound1(game);
+    game.bossCooldown = 0;
+    game.summonBoss();
+
+    expect(game.enemies.some((e) => e.kind === 'boss')).toBe(true);
+    expect(game.waveCleared).toBe(true);
+  });
+
+  test('유예 시간이 지나면 다음 라운드가 시작된다', () => {
+    const game = new Game();
+    intoRound1(game);
+    const round = game.round;
+    game.update(B.INTER_ROUND_GRACE + 0.01);
+
+    expect(game.round).toBe(round + 1);
+    expect(game.roundTimer).toBe(B.ROUND_SECONDS);
+  });
+
+  test('일반 웨이브는 보스를 만들지 않는다 — 보스는 소환으로만 나온다', () => {
+    const game = new Game();
+    game.update(B.OPENING_SECONDS + 0.01);
+
+    for (let round = 0; round < 60; round++) {
+      for (let step = 0; step < 200; step++) {
+        game.update(0.3);
+        expect(game.enemies.every((e) => e.kind !== 'boss')).toBe(true);
+      }
+      game.lives = B.START_LIVES; // 누출로 게임이 끝나지 않게 되돌린다
+      game.over = false;
+    }
+    expect(game.round).toBeGreaterThan(10);
+  });
+
+  test('웨이브당 잡몹은 15기에서 시작한다', () => {
+    expect(B.enemyCount(1)).toBe(B.ENEMY_BASE_COUNT);
+    expect(B.ENEMY_BASE_COUNT).toBe(15);
+    expect(B.enemyCount(8)).toBeGreaterThan(B.enemyCount(1));
   });
 });
 
 describe('조합 — 같은 유닛 2기가 상위 티어 1기가 된다', () => {
   test('같은 Lv1 2기를 놓으면 Lv2 1기로 합쳐진다', () => {
-    const game = new Game();
-    spawnWithPick(game, 1);
-    spawnWithPick(game, 1);
+    const game = new Game(fixedRand(0));
+    spawn(game);
+    spawn(game);
 
     const towers = game.slots.filter((s) => s.tower).map((s) => s.tower!);
     expect(towers).toHaveLength(1);
@@ -41,9 +114,10 @@ describe('조합 — 같은 유닛 2기가 상위 티어 1기가 된다', () => 
   });
 
   test('다른 Lv1 2기는 합쳐지지 않는다', () => {
-    const game = new Game();
-    spawnWithPick(game, 1);
-    spawnWithPick(game, 2);
+    let call = 0;
+    const game = new Game(() => (call++ === 0 ? 0 / 7 : 1 / 7));
+    spawn(game);
+    spawn(game);
 
     const towers = game.slots.filter((s) => s.tower).map((s) => s.tower!);
     expect(towers).toHaveLength(2);
@@ -51,8 +125,8 @@ describe('조합 — 같은 유닛 2기가 상위 티어 1기가 된다', () => 
   });
 
   test('연쇄 조합 — Lv1 4기가 Lv3 1기가 된다', () => {
-    const game = new Game();
-    for (let i = 0; i < 4; i++) spawnWithPick(game, 3);
+    const game = new Game(fixedRand(2));
+    for (let i = 0; i < 4; i++) spawn(game);
 
     const towers = game.slots.filter((s) => s.tower).map((s) => s.tower!);
     expect(towers).toHaveLength(1);
@@ -64,24 +138,22 @@ describe('조합 — 같은 유닛 2기가 상위 티어 1기가 된다', () => 
   });
 });
 
-describe('선택자 — 결과는 랜덤이 아니라 공유 인덱스로 결정된다', () => {
-  test('같은 인덱스는 같은 유닛을 준다', () => {
-    expect(unitFor(1, 3, 0)).toBe(unitFor(1, 3, 0));
+describe('유닛 추첨 — 티어 풀에서 균등 랜덤', () => {
+  test('난수 0은 풀의 첫 유닛, 1에 가까우면 마지막 유닛', () => {
+    const pool = poolFor(1, 0);
+    expect(unitFor(1, () => 0, 0)).toBe(pool[0]);
+    expect(unitFor(1, () => 0.999, 0)).toBe(pool[pool.length - 1]);
   });
 
-  test('인덱스가 다르면 다른 유닛을 준다', () => {
-    expect(unitFor(1, 1, 0).name).not.toBe(unitFor(1, 2, 0).name);
+  test('난수가 정확히 1이어도 풀 밖으로 나가지 않는다', () => {
+    const pool = poolFor(1, 0);
+    expect(unitFor(1, () => 1, 0)).toBe(pool[pool.length - 1]);
   });
 
-  test('인덱스는 풀 크기로 순환한다', () => {
-    expect(unitFor(1, 8, 0).name).toBe(unitFor(1, 1, 0).name);
-  });
-
-  test('보스를 잡으면 선택자가 한 칸 밀린다', () => {
-    const game = new Game();
-    const before = game.pick.value;
-    game.pick.bump();
-    expect(game.pick.value).toBe((before % B.PICK_INDEX_MAX) + 1);
+  test('풀 전체가 뽑힐 수 있다', () => {
+    const pool = poolFor(0, 0);
+    const seen = new Set(pool.map((_, i) => unitFor(0, () => i / pool.length, 0).name));
+    expect(seen.size).toBe(pool.length);
   });
 });
 
@@ -111,17 +183,71 @@ describe('보스 소환 — 상시 액션, 쿨타임만, 순차 해금', () => {
     expect(game.enemies.some((e) => e.kind === 'boss')).toBe(true);
   });
 
-  test('필드에 보스가 있으면 다시 소환할 수 없다', () => {
+  test('쿨타임이 남아 있으면 소환할 수 없다', () => {
     const game = new Game();
     game.summonBoss();
     expect(game.canSummonBoss).toBe(false);
     expect(game.summonBoss()).toBe(false);
   });
 
+  test('쿨타임은 보스와 교전 중에도 흐른다', () => {
+    const game = new Game();
+    game.summonBoss();
+    const start = game.bossCooldown;
+    game.update(5);
+
+    expect(game.liveBossLevels).toEqual([1]); // 아직 교전 중
+    expect(game.bossCooldown).toBeCloseTo(start - 5, 5);
+  });
+
+  test('교전 중이어도 쿨타임이 차면 또 소환할 수 있다', () => {
+    const game = new Game();
+    game.summonBoss();
+    game.bossCooldown = 0;
+
+    expect(game.canSummonBoss).toBe(true);
+    expect(game.summonBoss(1)).toBe(true);
+    expect(game.liveBossLevels).toEqual([1, 1]);
+  });
+
   test('보스를 잡기 전에는 다음 레벨이 열리지 않는다', () => {
     const game = new Game();
     game.summonBoss();
-    expect(game.nextBossLevel).toBe(1);
+    expect(game.maxBossLevel).toBe(1);
+  });
+
+  test('열리지 않은 레벨은 소환할 수 없다', () => {
+    const game = new Game();
+    expect(game.canSummonBossLevel(1)).toBe(true);
+    expect(game.canSummonBossLevel(2)).toBe(false);
+    expect(game.summonBoss(2)).toBe(false);
+    expect(game.enemies).toHaveLength(0);
+  });
+
+  test('열린 레벨은 낮은 것도 다시 부를 수 있다', () => {
+    const game = new Game();
+    game.bossCleared = 3;
+    expect(game.maxBossLevel).toBe(4);
+    for (const level of [1, 2, 3, 4]) expect(game.canSummonBossLevel(level)).toBe(true);
+    expect(game.canSummonBossLevel(5)).toBe(false);
+
+    expect(game.summonBoss(1)).toBe(true);
+    expect(game.liveBossLevels).toEqual([1]);
+  });
+
+  test('이미 잡은 레벨을 다시 잡아도 해금 단계는 그대로다', () => {
+    const game = new Game();
+    game.bossCleared = 3;
+    game.summonBoss(1);
+    game.enemies.find((e) => e.kind === 'boss')!.hp = 0;
+    game.update(0.016);
+
+    expect(game.bossCleared).toBe(3);
+    expect(game.maxBossLevel).toBe(4);
+  });
+
+  test('낮은 레벨 보스는 보상이 적다', () => {
+    expect(bossKillMineral(1)).toBeLessThan(bossKillMineral(6));
   });
 
   test('Lv1을 잡아야 Lv2가 열린다', () => {
@@ -133,8 +259,9 @@ describe('보스 소환 — 상시 액션, 쿨타임만, 순차 해금', () => {
     game.bossCooldown = 0;
 
     expect(game.bossCleared).toBe(1);
-    expect(game.nextBossLevel).toBe(2);
-    expect(game.canSummonBoss).toBe(true);
+    expect(game.maxBossLevel).toBe(2);
+    expect(game.canSummonBossLevel(2)).toBe(true);
+    expect(game.canSummonBossLevel(3)).toBe(false);
   });
 
   test('보스 처치 보상은 원본 표를 따른다', () => {
@@ -151,7 +278,7 @@ describe('보스 소환 — 상시 액션, 쿨타임만, 순차 해금', () => {
     game.update(0.016);
 
     expect(game.bossCleared).toBe(0);
-    expect(game.activeBossLevel).toBeNull();
+    expect(game.liveBossLevels).toEqual([]);
   });
 
   test('쿨타임 중에는 소환할 수 없다', () => {
