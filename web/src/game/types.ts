@@ -37,6 +37,8 @@ export interface Enemy extends EnemySpec {
   slowTimer?: number;
   /** 감속 중일 때의 이동속도 배수 */
   slowFactor?: number;
+  /** 이번 프레임에 영웅/허수아비에게 붙잡혀 있는가 — 탱킹 기여 집계용 */
+  held?: boolean;
 }
 
 /** 영웅이 세운 미끼. 몹을 붙잡아 시간을 번다. */

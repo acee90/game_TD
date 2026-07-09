@@ -20,7 +20,7 @@ export const ALTAR_SLOT = 0;
 
 export const HERO_BASE_HP = 200;
 export const HERO_BASE_DAMAGE = 9;
-export const HERO_BASE_RANGE = 95;
+export const HERO_BASE_RANGE = 130;
 export const HERO_ATTACK_INTERVAL = 0.8;
 export const HERO_SPEED = 88;
 /** 이 거리 안이면 도착으로 본다 (경로 위 거리 기준) */
@@ -52,8 +52,8 @@ export const HERO_HP_PER_LEVEL = 90;
 // 비용은 초선형이라야 무한 스케일링이 안 된다.
 export const HERO_UPGRADE_BASE_COST = 35;
 export const HERO_UPGRADE_COST_GROWTH = 1.28;
-export const HERO_UPGRADE_DAMAGE_MULT = 1.05;
-export const HERO_UPGRADE_HP_MULT = 1.05;
+export const HERO_UPGRADE_DAMAGE_MULT = 1.12;
+export const HERO_UPGRADE_HP_MULT = 1.08;
 
 export const heroUpgradeCost = (bought: number): number =>
   Math.round(HERO_UPGRADE_BASE_COST * Math.pow(HERO_UPGRADE_COST_GROWTH, bought));
@@ -86,7 +86,7 @@ export const xpPerBoss = (level: number): number => 8 * level;
 export const HERO_RESPAWN_SECONDS = 12;
 
 /** 이 거리 안에 영웅이 보이면 몹이 멈춰서 영웅부터 친다 */
-export const HERO_AGGRO_RANGE = 62;
+export const HERO_AGGRO_RANGE = 110;
 /** 이만큼 붙으면 실제로 때린다 */
 export const ENEMY_TOUCH_RANGE = 22;
 export const ENEMY_ATTACK_INTERVAL = 1;
@@ -192,7 +192,7 @@ export interface Augment {
 
 // ───────── 등급 ─────────
 // 증강 카드마다 등급이 무작위로 붙는다. 등급이 높으면 효과가 커지는 대신
-// **몹이 영구히 강해진다.** 지금 세지느냐, 나중을 지키느냐 — 매 선택이 도박이 된다.
+// 등급은 뽑기 운이다 — 대가는 없다. 높은 등급이 뜬 순간이 그 판의 도파민이다.
 
 export type Rarity = 'silver' | 'gold' | 'platinum';
 
@@ -201,16 +201,14 @@ export interface RarityDef {
   readonly color: string;
   /** 증강 효과의 배수. 1보다 큰 부분만 증폭한다(예: 1.3배 → 1.6배). */
   readonly power: number;
-  /** 이 등급을 고르면 몹 체력이 영구히 이만큼 곱해진다 */
-  readonly enemyHpMult: number;
   /** 뽑기 가중치 */
   readonly weight: number;
 }
 
 export const RARITIES: Record<Rarity, RarityDef> = {
-  silver: { label: '실버', color: '#9aa2c0', power: 1, enemyHpMult: 1, weight: 55 },
-  gold: { label: '골드', color: '#ffd23f', power: 1.7, enemyHpMult: 1.07, weight: 33 },
-  platinum: { label: '플래티넘', color: '#7ce7ff', power: 2.6, enemyHpMult: 1.16, weight: 12 },
+  silver: { label: '실버', color: '#9aa2c0', power: 1, weight: 55 },
+  gold: { label: '골드', color: '#ffd23f', power: 2, weight: 33 },
+  platinum: { label: '플래티넘', color: '#7ce7ff', power: 3.5, weight: 12 },
 };
 
 export const RARITY_ORDER: readonly Rarity[] = ['silver', 'gold', 'platinum'];
@@ -386,27 +384,28 @@ export interface SynergyBonus {
 /** 계열별 특화(3개) / 대특화(5개) 보너스 */
 export const SYNERGIES: Record<AugmentKind, { readonly specialist: SynergyBonus; readonly master: SynergyBonus }> = {
   tank: {
-    specialist: { name: '불굴', description: '최대 체력 +30%', effect: { hpMult: 1.3 } },
-    master: { name: '불멸', description: '받는 피해 25% 추가 감소, 초당 체력 12 회복',
-      effect: { damageReduction: 0.25, regen: 12 } },
+    specialist: { name: '불굴', description: '최대 체력 +50%, 공격력 +25%',
+      effect: { hpMult: 1.5, damageMult: 1.25 } },
+    master: { name: '불멸', description: '받는 피해 30% 추가 감소, 초당 체력 20 회복, 공격력 +60%',
+      effect: { damageReduction: 0.3, regen: 20, damageMult: 1.6 } },
   },
   ranged: {
-    specialist: { name: '저격 태세', description: '공격력 +25%, 사거리 +15%',
-      effect: { damageMult: 1.25, rangeMult: 1.15 } },
-    master: { name: '일점사', description: '공격력 +40%, 공격 속도 +15%',
-      effect: { damageMult: 1.4, attackSpeedMult: 1.15 } },
+    specialist: { name: '저격 태세', description: '공격력 +50%, 사거리 +20%',
+      effect: { damageMult: 1.5, rangeMult: 1.2 } },
+    master: { name: '일점사', description: '공격력 +100%, 공격 속도 +30%',
+      effect: { damageMult: 2, attackSpeedMult: 1.3 } },
   },
   mage: {
-    specialist: { name: '연쇄 폭발', description: '광역 반경 +30, 공격력 +20%',
-      effect: { splashRadius: 30, damageMult: 1.2 } },
-    master: { name: '대마법', description: '광역 반경 +60, 공격력 +60%',
-      effect: { splashRadius: 60, damageMult: 1.6 } },
+    specialist: { name: '연쇄 폭발', description: '광역 반경 +30, 공격력 +40%',
+      effect: { splashRadius: 30, damageMult: 1.4 } },
+    master: { name: '대마법', description: '광역 반경 +70, 공격력 +120%',
+      effect: { splashRadius: 70, damageMult: 2.2 } },
   },
   stat: {
-    specialist: { name: '완숙', description: '공격력 +20%, 최대 체력 +20%',
-      effect: { damageMult: 1.2, hpMult: 1.2 } },
-    master: { name: '초월', description: '공격력 +50%, 최대 체력 +50%, 이동 속도 +20%',
-      effect: { damageMult: 1.5, hpMult: 1.5, moveSpeedMult: 1.2 } },
+    specialist: { name: '완숙', description: '공격력 +40%, 최대 체력 +30%',
+      effect: { damageMult: 1.4, hpMult: 1.3 } },
+    master: { name: '초월', description: '공격력 +90%, 최대 체력 +60%, 이동 속도 +20%',
+      effect: { damageMult: 1.9, hpMult: 1.6, moveSpeedMult: 1.2 } },
   },
   utility: {
     specialist: { name: '지휘', description: '모든 타워 공격력 +15%', effect: { towerDamageMult: 1.15 } },

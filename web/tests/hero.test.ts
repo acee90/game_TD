@@ -497,7 +497,7 @@ describe('탐욕 증강 — 처치당 미네랄', () => {
   });
 });
 
-describe('등급 — 세지는 대신 몹이 강해진다', () => {
+describe('등급 — 뽑기 운, 대가 없음', () => {
   test('등급이 높을수록 효과가 크다', () => {
     const might = augment('might');
     const silver = H.makeCard(might, 'silver');
@@ -509,31 +509,11 @@ describe('등급 — 세지는 대신 몹이 강해진다', () => {
     expect(platinum.effect.damageMult!).toBeGreaterThan(gold.effect.damageMult!);
   });
 
-  test('실버는 대가가 없고, 위 등급은 몹 체력을 올린다', () => {
-    expect(H.RARITIES.silver.enemyHpMult).toBe(1);
-    expect(H.RARITIES.gold.enemyHpMult).toBeGreaterThan(1);
-    expect(H.RARITIES.platinum.enemyHpMult).toBeGreaterThan(H.RARITIES.gold.enemyHpMult);
-  });
-
-  test('높은 등급을 고르면 몹 체력 배수가 누적된다', () => {
-    const game = new Game();
-    expect(game.enemyHpMultiplier).toBe(1);
-
-    game.augmentChoices = [H.makeCard(augment('might'), 'platinum')];
-    game.chooseAugment(0);
-    expect(game.enemyHpMultiplier).toBeCloseTo(H.RARITIES.platinum.enemyHpMult, 5);
-
-    game.augmentChoices = [H.makeCard(augment('rapid'), 'gold')];
-    game.chooseAugment(0);
-    expect(game.enemyHpMultiplier).toBeCloseTo(
-      H.RARITIES.platinum.enemyHpMult * H.RARITIES.gold.enemyHpMult, 5);
-  });
-
-  test('실버만 고르면 몹이 강해지지 않는다', () => {
-    const game = new Game();
-    game.augmentChoices = [H.makeCard(augment('might'), 'silver')];
-    game.chooseAugment(0);
-    expect(game.enemyHpMultiplier).toBe(1);
+  test('어떤 등급을 골라도 몹은 강해지지 않는다 — 대가 메커니즘은 삭제됐다', () => {
+    // GA 검증에서 대가(몹 체력 영구 +)가 구조적 함정으로 판명됐다.
+    // 보너스는 약한 축(영웅)에, 비용은 강한 축(타워)에 얹혀 합리적
+    // 플레이어는 절대 도박하지 않았다. 등급은 순수 뽑기 운으로 남긴다.
+    expect('enemyHpMult' in H.RARITIES.platinum).toBe(false);
   });
 
   test('피해 감소는 등급으로도 60%를 넘지 못한다', () => {

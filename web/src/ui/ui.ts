@@ -35,6 +35,7 @@ export interface Elements {
   readonly heroXpBar: HTMLElement;
   readonly heroXp: HTMLElement;
   readonly heroStats: HTMLElement;
+  readonly heroUp: HTMLButtonElement;
   readonly heroAugs: HTMLElement;
   readonly skill: HTMLElement;
   readonly skillCd: HTMLElement;
@@ -78,6 +79,7 @@ export function bindElements(): Elements {
     heroXpBar: $('heroXpBar'),
     heroXp: $('heroXp'),
     heroStats: $('heroStats'),
+    heroUp: $('heroUp') as HTMLButtonElement,
     heroAugs: $('heroAugs'),
     skill: $('skill'),
     skillCd: $('skillCd'),
@@ -180,6 +182,11 @@ function refreshHero(el: Elements, game: Game): void {
   ].filter(Boolean);
   el.heroStats.textContent = parts.join(' · ');
 
+  el.heroUp.textContent =
+    `영웅 강화 ${game.heroUpgradeCost} (공 +${Math.round((HD.HERO_UPGRADE_DAMAGE_MULT - 1) * 100)}% · ` +
+    `체 +${Math.round((HD.HERO_UPGRADE_HP_MULT - 1) * 100)}%) — ${hero.goldUpgrades}회`;
+  el.heroUp.disabled = !game.canUpgradeHero;
+
   el.heroAugs.innerHTML = hero.augments
     .map((card) => {
       const color = HD.AUGMENT_KIND_COLOR[card.augment.kind];
@@ -221,16 +228,12 @@ function refreshAugmentOverlay(el: Elements, game: Game): void {
   }
   el.augOverlay.style.display = 'flex';
   el.augSub.textContent =
-    `영웅 Lv${game.hero.level} — 하나를 고르세요 · 지금 몹 체력 ×${game.enemyHpMultiplier.toFixed(2)}`;
+    `영웅 Lv${game.hero.level} — 하나를 고르세요`;
   el.augCards.innerHTML = game.augmentChoices
     .map((card, i) => {
       const kindColor = HD.AUGMENT_KIND_COLOR[card.augment.kind];
       const kindLabel = HD.AUGMENT_KIND_LABEL[card.augment.kind];
       const rarity = HD.RARITIES[card.rarity];
-      const cost =
-        rarity.enemyHpMult > 1
-          ? `<div class="cost">몹 체력 +${Math.round((rarity.enemyHpMult - 1) * 100)}%</div>`
-          : '<div class="cost safe">대가 없음</div>';
       return `<button class="augcard" data-index="${i}" style="border-color:${rarity.color}">
         <div class="k">
           <span style="color:${kindColor}">${kindLabel}</span>
@@ -238,7 +241,6 @@ function refreshAugmentOverlay(el: Elements, game: Game): void {
         </div>
         <div class="n">${card.augment.name}</div>
         <div class="d">${card.augment.description}</div>
-        ${cost}
       </button>`;
     })
     .join('');

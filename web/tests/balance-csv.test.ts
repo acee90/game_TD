@@ -29,9 +29,8 @@ describe('밸런스 CSV — 코드와 일치해야 한다', () => {
     const rows = read('rarities.csv').slice(1);
     for (const rarity of H.RARITY_ORDER) {
       const row = rows.find((r) => r.startsWith(`${rarity},`))!;
-      const [, , power, enemyHp] = row.split(',');
+      const [, , power] = row.split(',');
       expect(Number(power)).toBe(H.RARITIES[rarity].power);
-      expect(Number(enemyHp)).toBe(H.RARITIES[rarity].enemyHpMult);
     }
   });
 

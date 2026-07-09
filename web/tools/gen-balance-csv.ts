@@ -96,10 +96,10 @@ const totalWeight = H.RARITY_ORDER.reduce((sum, r) => sum + H.RARITIES[r].weight
 write(
   'rarities.csv',
   toCsv(
-    ['rarity', 'label', 'powerMult', 'enemyHpMult', 'weight', 'probability'],
+    ['rarity', 'label', 'powerMult', 'weight', 'probability'],
     H.RARITY_ORDER.map((r) => {
       const d = H.RARITIES[r];
-      return [r, d.label, d.power, d.enemyHpMult, d.weight, (d.weight / totalWeight).toFixed(3)];
+      return [r, d.label, d.power, d.weight, (d.weight / totalWeight).toFixed(3)];
     }),
   ),
 );
@@ -173,7 +173,6 @@ for (const [name, ids] of builds) {
         stats.maxHp,
         Math.round(stats.maxHp / (1 - stats.damageReduction)),
         stats.splashRadius,
-        Math.pow(H.RARITIES[rarity].enemyHpMult, ids.length).toFixed(2),
       ]);
     }
   }
@@ -181,7 +180,7 @@ for (const [name, ids] of builds) {
 write(
   'hero-power-curve.csv',
   toCsv(
-    ['build', 'rarity', 'heroLevel', 'heroDps', 'vsGodTower', 'maxHp', 'effectiveHp', 'splashRadius', 'enemyHpMultCost'],
+    ['build', 'rarity', 'heroLevel', 'heroDps', 'vsGodTower', 'maxHp', 'effectiveHp', 'splashRadius'],
     curveRows,
   ),
 );

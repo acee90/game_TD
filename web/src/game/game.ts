@@ -36,6 +36,11 @@ export class Game {
   bossCleared = 0;
   bossesKilled = 0;
   bossCooldown = 0;
+  /** 피해 기여 집계 — 영웅(평타+스킬) 대 타워. 밸런스 계측과 UI용 */
+  heroDamageDealt = 0;
+  towerDamageDealt = 0;
+  /** 영웅/허수아비가 붙잡아둔 몹에게 타워가 넣은 피해 — 탱킹이 벌어준 딜 */
+  tankAssistDamage = 0;
 
   upgrades: UpgradeLevels = [0, 0, 0, 0];
 
@@ -48,7 +53,6 @@ export class Game {
    * 높은 등급 증강을 고른 대가. 몹 체력에 영구히 곱해진다.
    * 지금 세지느냐, 나중을 지키느냐 — 매 선택이 도박이다.
    */
-  enemyHpMultiplier = 1;
 
   slots: Slot[] = SLOT_POS.map(([x, y]) => ({ x, y, tower: null }));
   selected: Slot | null = null;
@@ -159,7 +163,9 @@ export class Game {
   /** 스킬 피해 한 방 */
   private skillHit(enemy: Enemy, skill: K.ResolvedSkill): void {
     const raw = this.hero.stats.damage * skill.damageMult;
-    enemy.hp -= B.effectiveDamage(raw, enemy.armor);
+    const dealt = B.effectiveDamage(raw, enemy.armor);
+    enemy.hp -= dealt;
+    this.heroDamageDealt += dealt;
     enemy.lastHitByHero = true;
     if (skill.mods.slowFactor < 1) {
       enemy.slowFactor = skill.mods.slowFactor;
@@ -251,14 +257,9 @@ export class Game {
 
     const rarity = H.RARITIES[card.rarity];
     this.hero.addAugment(card);
-    this.enemyHpMultiplier *= rarity.enemyHpMult;
     this.augmentChoices = [];
 
-    const cost =
-      rarity.enemyHpMult > 1
-        ? ` — 몹 체력 +${Math.round((rarity.enemyHpMult - 1) * 100)}% (누적 ×${this.enemyHpMultiplier.toFixed(2)})`
-        : '';
-    this.message = `[${rarity.label}] ${card.augment.name}: ${card.augment.description}${cost}`;
+    this.message = `[${rarity.label}] ${card.augment.name}: ${card.augment.description}`;
     this.offerAugmentIfPending();
     return true;
   }
@@ -465,7 +466,7 @@ export class Game {
     }
 
     this.round++;
-    const hp = B.enemyHP(this.round) * this.enemyHpMultiplier;
+    const hp = B.enemyHP(this.round);
     const armor = B.enemyArmor(this.round);
 
     for (let i = 0; i < B.enemyCount(this.round); i++) {
@@ -628,6 +629,7 @@ export class Game {
 
       // 허수아비가 먼저 붙잡는다
       if (decoy && this.isDecoyAggroed(enemy, decoy)) {
+        enemy.held = true;
         const gap = decoy.distance - enemy.distance;
         if (gap > H.ENEMY_TOUCH_RANGE) {
           enemy.distance += Math.min(speed * dt, gap - H.ENEMY_TOUCH_RANGE);
@@ -636,6 +638,7 @@ export class Game {
       }
 
       if (heroBlocks && this.isAggroed(enemy, hero)) {
+        enemy.held = true;
         const gap = hero.distance - enemy.distance;
         // 영웅에게 다가가되 지나치지 않는다
         if (gap > H.ENEMY_TOUCH_RANGE) {
@@ -643,6 +646,7 @@ export class Game {
         }
         continue;
       }
+      enemy.held = false;
       enemy.distance += speed * dt;
       if (enemy.distance >= PATH_LENGTH) {
         enemy.dead = true;
@@ -730,7 +734,9 @@ export class Game {
           for (const enemy of this.enemies) {
             const [ex, ey] = pathPos(enemy.distance);
             if (Math.hypot(ex - tx, ey - ty) <= stats.splashRadius) {
-              enemy.hp -= B.effectiveDamage(stats.damage, enemy.armor);
+              const dealt = B.effectiveDamage(stats.damage, enemy.armor);
+              enemy.hp -= dealt;
+              this.heroDamageDealt += dealt;
               enemy.lastHitByHero = true;
             }
           }
@@ -739,7 +745,9 @@ export class Game {
             color: '#c065e0', splashRadius: stats.splashRadius,
           });
         } else {
-          target.hp -= B.effectiveDamage(stats.damage, target.armor);
+          const dealt = B.effectiveDamage(stats.damage, target.armor);
+          target.hp -= dealt;
+          this.heroDamageDealt += dealt;
           target.lastHitByHero = true;
           this.shots.push({ x: hero.x, y: hero.y, tx, ty, life: 0.1, color: '#ffffff' });
         }
@@ -810,7 +818,10 @@ export class Game {
 
       if (isSplash(tower)) {
         for (const e of inReach) {
-          e.hp -= B.effectiveDamage(raw, e.armor);
+          const dealt = B.effectiveDamage(raw, e.armor);
+          e.hp -= dealt;
+          this.towerDamageDealt += dealt;
+          if (e.held) this.tankAssistDamage += dealt;
           e.lastHitByHero = false;
         }
         const [x, y] = pathPos(inReach[0].distance);
@@ -822,7 +833,10 @@ export class Game {
         const target = inReach.reduce((best, e) =>
           power ? (e.hp > best.hp ? e : best) : e.distance > best.distance ? e : best,
         );
-        target.hp -= B.effectiveDamage(raw, target.armor);
+        const dealt = B.effectiveDamage(raw, target.armor);
+        target.hp -= dealt;
+        this.towerDamageDealt += dealt;
+        if (target.held) this.tankAssistDamage += dealt;
         target.lastHitByHero = false;
         const [x, y] = pathPos(target.distance);
         this.shots.push({ x: slot.x, y: slot.y, tx: x, ty: y, life: 0.08, color });
