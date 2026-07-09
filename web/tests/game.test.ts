@@ -312,14 +312,25 @@ describe('보스 소환 — 상시 액션, 쿨타임만, 순차 해금', () => {
   });
 });
 
-describe('소득 — 차감 없는 누적형 (원본 §8)', () => {
+describe('소득 — 차감 없는 누적형', () => {
   test('200킬 마일스톤에서 보상이 나온다', () => {
     expect(killIncome(199, 200).mineral).toBeGreaterThanOrEqual(5);
   });
 
-  test('반복 20킬 보상은 1000킬을 넘으면 커진다', () => {
-    expect(killIncome(0, 20).mineral).toBe(10);
-    expect(killIncome(1000, 1020).mineral).toBe(12);
+  test('반복 20킬 보상은 없앴다 — 킬만으로는 마일스톤 전까지 무소득', () => {
+    expect(killIncome(0, 20).mineral).toBe(0);
+    expect(killIncome(0, 199).mineral).toBe(0);
+  });
+
+  test('웨이브를 넘기면 목돈이 들어오고, 라운드가 오를수록 커진다', () => {
+    expect(B.waveReward(5)).toBeGreaterThan(B.waveReward(1));
+
+    const game = new Game();
+    game.update(B.OPENING_SECONDS + 0.01); // 라운드 1 시작 — 아직 보상 없음
+    const mineral = game.mineral;
+
+    game.update(B.ROUND_SECONDS + 0.01); // 라운드 2 시작 — 라운드 1 클리어 보상
+    expect(game.mineral).toBeGreaterThanOrEqual(mineral + B.waveReward(1));
   });
 
   test('킬이 늘지 않으면 소득도 없다', () => {

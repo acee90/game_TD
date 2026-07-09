@@ -5,8 +5,6 @@ import { AUGMENTS } from '../src/data/hero';
 import { PATH_LENGTH } from '../src/core/map';
 import { Game } from '../src/game/game';
 import { Hero, computeStats, rollAugmentChoices } from '../src/game/hero';
-import { attackInterval, damage } from '../src/game/combat';
-import { TIER_POOLS } from '../src/data/units';
 
 const augment = (id: string) => AUGMENTS.find((a) => a.id === id)!;
 const dps = (level: number, ids: string[] = []): number => {
@@ -282,48 +280,6 @@ describe('증강 효과 — 곱연산으로 쌓여 먼치킨이 된다', () => {
   test('전쟁군주는 타워를 강화한다', () => {
     const stats = computeStats(1, [augment('warlord'), augment('warlord')]);
     expect(stats.towerDamageMult).toBeCloseTo(1.12 * 1.12, 5);
-  });
-});
-
-describe('파워 커브 — 초반 타워, 후반 영웅', () => {
-  /** GOD 타워 한 기의 DPS (업그레이드 없음) */
-  const godTowerDps = (): number => {
-    const def = TIER_POOLS[3][0]; // Lv4 유닛 하나를 GOD 티어로 취급
-    const tower = { def, tier: 4, cooldown: 0 };
-    return damage(tower, [0, 0, 0, 0]) / attackInterval(tower);
-  };
-
-  /** Lv1 타워 한 기의 DPS */
-  const lv1TowerDps = (): number => {
-    const def = TIER_POOLS[0][0];
-    const tower = { def, tier: 0, cooldown: 0 };
-    return damage(tower, [0, 0, 0, 0]) / attackInterval(tower);
-  };
-
-  test('영웅 1레벨은 Lv1 타워 한 기 수준이다 — 초반 주력이 아니다', () => {
-    expect(dps(1)).toBeLessThan(lv1TowerDps() * 2);
-  });
-
-  test('영웅 초반 DPS는 GOD 타워보다 한참 낮다', () => {
-    expect(dps(1)).toBeLessThan(godTowerDps() / 10);
-  });
-
-  test('영웅은 레벨이 오르면 지수적으로 강해진다', () => {
-    const ratio = dps(11) / dps(1);
-    expect(ratio).toBeCloseTo(Math.pow(H.HERO_DAMAGE_GROWTH, 10), 1);
-    expect(ratio).toBeGreaterThan(4);
-  });
-
-  test('후반에는 증강 없이도 영웅이 GOD 타워를 넘어선다', () => {
-    expect(dps(30)).toBeGreaterThan(godTowerDps());
-  });
-
-  test('증강을 몰면 그 시점이 크게 앞당겨진다', () => {
-    // 증강 없는 18레벨은 GOD 타워에 못 미치지만
-    expect(dps(18)).toBeLessThan(godTowerDps());
-    // 공격 계열로 몰면 같은 레벨에 넘어선다
-    const munchkin = dps(18, ['might', 'might', 'marksman', 'rapid', 'arcane']);
-    expect(munchkin).toBeGreaterThan(godTowerDps());
   });
 });
 

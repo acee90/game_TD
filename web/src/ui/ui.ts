@@ -2,7 +2,7 @@
 import * as B from '../data/balance';
 import { RACES, RACE_COLOR, TIER_LABEL, tagLabel, type Race } from '../data/units';
 import { attackInterval, damage, range } from '../game/combat';
-import { bossKillMineral, nextMilestone, repeatKillProgress } from '../game/economy';
+import { bossKillMineral, nextMilestone } from '../game/economy';
 import * as HD from '../data/hero';
 import type { Game } from '../game/game';
 
@@ -117,9 +117,9 @@ function selectionInfo(game: Game): string {
 
 /** 항상 보이는 보상 현황 — 원본 §8.2의 세 소득 계열 */
 function refreshMissions(el: Elements, game: Game): void {
-  const repeat = repeatKillProgress(game.kills);
-  el.repeatBar.style.width = `${(repeat.done / B.REPEAT_KILL_STEP) * 100}%`;
-  el.repeatVal.textContent = `${repeat.done}/${B.REPEAT_KILL_STEP} → +${repeat.reward}`;
+  const remaining = Math.max(0, game.roundTimer);
+  el.repeatBar.style.width = `${(1 - remaining / B.ROUND_SECONDS) * 100}%`;
+  el.repeatVal.textContent = `R${Math.max(1, game.round)} 클리어 → +${B.waveReward(Math.max(1, game.round))}`;
 
   const milestone = nextMilestone(game.kills);
   if (milestone) {

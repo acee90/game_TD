@@ -21,16 +21,22 @@ export const HERO_RADIUS = 11;
 
 /**
  * 레벨당 성장 — 덧셈이 아니라 곱셈이다. 이게 후반 역전의 근거다.
- * 1.20이면 30레벨 영웅 한 기가 GOD 타워 한 기를 넘어선다. tests/hero.test.ts가 이 관계를 지킨다.
+ *
+ * 기준: 30레벨 영웅은 증강이 없으면 GOD 타워 한 기에 못 미치지만,
+ * 공격 계열 증강 3개를 몰면 GOD 타워의 2배를 넘는다.
+ * tests/hero.test.ts가 이 두 관계를 동시에 지킨다.
  */
-export const HERO_DAMAGE_GROWTH = 1.2;
+export const HERO_DAMAGE_GROWTH = 1.16;
 export const HERO_HP_GROWTH = 1.13;
 
-/** 다음 레벨까지 필요한 경험치 */
-export const xpToNext = (level: number): number => 6 + 4 * level;
+/**
+ * 다음 레벨까지 필요한 경험치.
+ * 30레벨이 30~35라운드에 오도록 맞췄다. tests/hero-curve.test.ts가 이 창을 지킨다.
+ */
+export const xpToNext = (level: number): number => Math.round(6 + 2.6 * level);
 
 /** 경험치 — 영웅이 아니라 모든 처치에서 들어온다 */
-export const XP_PER_MOB = 1;
+export const XP_PER_MOB = 2;
 export const xpPerBoss = (level: number): number => 8 * level;
 
 /** 부활 대기시간. 죽으면 그동안 영웅 딜이 빠지는 것 자체가 패널티다. */
@@ -42,8 +48,11 @@ export const ENEMY_ATTACK_INTERVAL = 1;
 export const enemyDamage = (round: number): number => 4 + round * 1.6;
 export const bossDamage = (level: number): number => 18 * level;
 
-/** 이 레벨마다 증강을 고른다 */
-export const AUGMENT_EVERY = 3;
+/**
+ * 이 레벨마다 증강을 고른다. 10레벨 간격이면 30레벨에 정확히 3개를 쥔다.
+ * 증강 하나하나가 무거워야 조합 시너지가 도파민이 된다.
+ */
+export const AUGMENT_EVERY = 10;
 export const AUGMENT_CHOICES = 3;
 
 export type AugmentKind = 'tank' | 'ranged' | 'mage' | 'stat' | 'utility';

@@ -43,10 +43,14 @@ export const KILL_MILESTONES: readonly (readonly [kills: number, mineral: number
   [3200, 6], [3400, 6], [3600, 15], [3800, 6], [4000, 15],
 ];
 
-/** 반복 20킬 보상. trigger #544/#545. 누적킬 1000 이하 +10, 초과 +12 [원본확정] */
-export const REPEAT_KILL_STEP = 20;
-export const REPEAT_KILL_MINERAL = [10, 12] as const;
-export const REPEAT_KILL_THRESHOLD = 1000;
+/**
+ * 웨이브 클리어 보상.
+ *
+ * 원본에는 없다. 원본은 반복 20킬 보상(trigger #544/#545, +10/+12)으로 소득을 줬지만,
+ * 그러면 유닛 1기당 20킬을 모아야 해서 초반이 굶는다. 라운드마다 목돈이 들어오는 편이
+ * 타워를 세우는 리듬과 맞는다. [프로토]
+ */
+export const waveReward = (round: number): number => 14 + 3 * round;
 
 /** 누출 시 라이프 -1 · 미네랄 +5. strings:358 'Life -1 ! ! ! ! !미네랄 +5' [원본확정] */
 export const LEAK_MINERAL = 5;

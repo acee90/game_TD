@@ -269,6 +269,13 @@ export class Game {
 
   // ── 라운드 ──
   private beginRound(): void {
+    // 직전 라운드를 넘긴 대가 — 첫 라운드에는 없다
+    if (this.round >= 1) {
+      const reward = B.waveReward(this.round);
+      this.mineral += reward;
+      this.float(this.slots[0].x, this.slots[0].y, `웨이브 +${reward}`, '#ffd23f');
+    }
+
     this.round++;
     const hp = B.enemyHP(this.round);
     const armor = B.enemyArmor(this.round);
