@@ -9,6 +9,19 @@
 2. 에디터 버전 **2022.3 LTS** (2022.3.45f1 기준, 같은 2022.3.x면 됨)로 열기
 3. 프로젝트가 열리면(기본 빈 씬 그대로) **Play** 누르기
 
+### 다른 버전(Unity 6 등)만 설치돼 있다면
+
+`ProjectSettings/ProjectVersion.txt`가 2022.3.45f1로 적혀 있어 Hub가 그 버전을
+찾는 것뿐이다. **정확히 그 버전이 필요한 건 아니다** — 이 프로젝트는 씬·에셋·
+렌더파이프라인 설정이 없는 코드 전용이라 상위 버전에서 그대로 열린다.
+
+- Hub 프로젝트 목록에서 이 프로젝트의 **에디터 버전 드롭다운**을 눌러 설치된
+  버전(예: 6000.x / Unity 6.5)을 선택하고 열기
+- "Upgrade project?" 다이얼로그가 뜨면 **Confirm** — 코드만 있는 프로젝트라
+  마이그레이션 리스크가 없다 (버전을 올려 열면 ProjectVersion.txt가 자동 갱신된다)
+- 사용 API(CreatePrimitive · OnGUI · LineRenderer · Physics.Raycast)는 Unity 6에서
+  전부 동일하게 동작한다
+
 ### 빈 씬에서 Play만 누르면 되는 이유
 
 `Assets/Scripts/View/Bootstrap.cs`가
