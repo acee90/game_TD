@@ -28,13 +28,35 @@ export const HERO_ARRIVE_EPSILON = 2;
 export const HERO_RADIUS = 11;
 
 /**
- * 레벨당 성장 — 곱셈이 아니라 덧셈이다.
+ * 레벨당 성장 — 곱셈이 아니라 덧셈이다. 경험치 비용을 지수로 만든 만큼 기울기를 가파르게 뒀다.
  *
- * 기준: 30레벨 영웅은 증강이 없으면 GOD 타워 한 기의 절반쯤이고, 공격 계열 3개를 몰아
- * 특화를 터뜨리면 GOD 타워의 2배를 넘는다. tests/hero-curve.test.ts가 이 관계를 지킨다.
+ * 기준은 **타워와 영웅에 골고루 투자한 판**에서 재는 GOD 타워 한 기(DPS 1182) 대비 배수다.
+ * 궁수 기준 3증강에 1.25배, 5증강에 2.81배가 나온다. 전사는 절반쯤인데, 딜을 버리고
+ * 블로킹을 사는 타입이라 그렇다.
+ *
+ * tests/hero-curve.test.ts가 이 관계를 지킨다.
  */
-export const HERO_DAMAGE_PER_LEVEL = 18;
+export const HERO_DAMAGE_PER_LEVEL = 26;
 export const HERO_HP_PER_LEVEL = 90;
+
+// ───────── 골드 영웅 강화 ─────────
+// 미네랄로 영웅을 강화한다. **퍼센트**여야 한다.
+//
+// 영웅 공격력은 레벨당 선형으로 쌓이고 증강은 곱연산이다. 여기에 고정값을 더하면 후반엔
+// 반올림 오차가 되고, 퍼센트를 곱하면 레벨이 쌓은 기본값과 증강이 만든 배수 양쪽에
+// 다 곱해져서 **후반으로 갈수록 한 번의 강화가 커진다.**
+//
+// 그래서 두 가지가 생긴다. 타일 41칸이 다 차면 갈 곳 없던 미네랄에 무한 소비처가 생기고,
+// "유닛을 한 기 더 뽑을까 영웅을 강화할까"라는 선택이 생긴다.
+//
+// 비용은 초선형이라야 무한 스케일링이 안 된다.
+export const HERO_UPGRADE_BASE_COST = 35;
+export const HERO_UPGRADE_COST_GROWTH = 1.28;
+export const HERO_UPGRADE_DAMAGE_MULT = 1.05;
+export const HERO_UPGRADE_HP_MULT = 1.05;
+
+export const heroUpgradeCost = (bought: number): number =>
+  Math.round(HERO_UPGRADE_BASE_COST * Math.pow(HERO_UPGRADE_COST_GROWTH, bought));
 
 /**
  * 다음 레벨까지 필요한 경험치. **지수**다.
@@ -95,8 +117,8 @@ export const bossDamage = (level: number, round: number): number =>
  * **앞의 네 개는 80% 이상의 판이 받고**(핵심 빌드가 완성된다), 뒤의 두 개는 오래 버틴
  * 판만 받는 보상이다. 소진 후에는 AUGMENT_TAIL_EVERY 레벨마다 계속 준다.
  */
-export const AUGMENT_LEVELS: readonly number[] = [9, 16, 24, 32, 41, 51];
-export const AUGMENT_TAIL_EVERY = 12;
+export const AUGMENT_LEVELS: readonly number[] = [9, 16, 24, 30, 35, 42];
+export const AUGMENT_TAIL_EVERY = 8;
 export const AUGMENT_CHOICES = 3;
 
 /** 이 레벨에 도달하면 증강을 받는가 */
@@ -369,10 +391,10 @@ export const SYNERGIES: Record<AugmentKind, { readonly specialist: SynergyBonus;
       effect: { damageReduction: 0.25, regen: 12 } },
   },
   ranged: {
-    specialist: { name: '저격 태세', description: '공격력 +30%, 사거리 +15%',
-      effect: { damageMult: 1.3, rangeMult: 1.15 } },
-    master: { name: '일점사', description: '공격력 +60%, 공격 속도 +25%',
-      effect: { damageMult: 1.6, attackSpeedMult: 1.25 } },
+    specialist: { name: '저격 태세', description: '공격력 +25%, 사거리 +15%',
+      effect: { damageMult: 1.25, rangeMult: 1.15 } },
+    master: { name: '일점사', description: '공격력 +40%, 공격 속도 +15%',
+      effect: { damageMult: 1.4, attackSpeedMult: 1.15 } },
   },
   mage: {
     specialist: { name: '연쇄 폭발', description: '광역 반경 +30, 공격력 +20%',

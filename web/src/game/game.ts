@@ -10,6 +10,7 @@ import { GOD_TIER, RACE_COLOR, tagLabel, type Race } from '../data/units';
 import type { AugmentCard } from '../data/hero';
 import { attackInterval, damage, isSplash, range, slowFactor, type UpgradeLevels } from './combat';
 import { bossKillMineral, killIncome } from './economy';
+import { DEFAULT_HERO_CLASS, type HeroClassId } from '../data/hero-class';
 import { Hero, rollAugmentChoices } from './hero';
 import { findMerge, unitFor, type Rand } from './merge';
 import type { Decoy, Enemy, EnemySpec, FloatText, Shot, Slot } from './types';
@@ -67,9 +68,9 @@ export class Game {
   /** 유닛 추첨용 난수. 테스트에서 결정적 함수를 주입한다. */
   private readonly rand: Rand;
 
-  constructor(rand: Rand = Math.random) {
+  constructor(rand: Rand = Math.random, heroClass: HeroClassId = DEFAULT_HERO_CLASS) {
     this.rand = rand;
-    this.hero = new Hero();
+    this.hero = new Hero(heroClass);
   }
 
   /** 증강 선택 중에는 시간이 흐르지 않는다 */
@@ -426,6 +427,31 @@ export class Game {
 
   upgradeCost(race: Race): number {
     return B.upgradeGasCost(this.upgrades[race]);
+  }
+
+  // ── 골드 영웅 강화 ──
+  get heroUpgradeCost(): number {
+    return this.hero.nextUpgradeCost;
+  }
+
+  get canUpgradeHero(): boolean {
+    return !this.over && this.mineral >= this.heroUpgradeCost;
+  }
+
+  /** 미네랄로 영웅 공격력·체력을 퍼센트 강화한다 */
+  upgradeHero(): boolean {
+    const cost = this.heroUpgradeCost;
+    if (this.mineral < cost) {
+      this.message = `미네랄 부족 — 영웅 강화 ${cost} 필요.`;
+      return false;
+    }
+    const before = this.hero.stats.maxHp;
+    this.mineral -= cost;
+    this.hero.goldUpgrades++;
+    // 최대 체력이 오른 만큼 현재 체력도 같이 올린다
+    this.hero.hp += this.hero.stats.maxHp - before;
+    this.message = `영웅 강화 +${this.hero.goldUpgrades} · 다음 ${this.heroUpgradeCost}`;
+    return true;
   }
 
   // ── 라운드 ──

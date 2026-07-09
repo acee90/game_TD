@@ -29,6 +29,13 @@ const GOD_TOWER_DPS = (() => {
 /** 공격 계열 3개를 몰았을 때 — 완력은 최대 3스택이라 이게 최고 조합이다 */
 const ATTACK_THREE = ['might', 'might', 'might'];
 
+/** 궁수가 자연스럽게 쥐는 원거리 3종 — 저격 태세가 터진다 */
+const ARCHER_THREE = ['marksman', 'marksman', 'marksman'];
+const archerDps = (level: number, ids: string[], goldUpgrades = 0): number => {
+  const stats = computeStats(level, ids.map(card), goldUpgrades, 'archer');
+  return stats.damage / stats.attackInterval;
+};
+
 /** 전형적인 판에서 영웅이 막타를 치는 비율 */
 const TYPICAL_LASTHIT_RATE = 0.3;
 
@@ -125,32 +132,34 @@ describe('레벨 30 도달 시점 — R30~35', () => {
 
 describe('증강 스케줄 — 80/20', () => {
   test('앞의 네 개는 진행률 절반 안에 들어온다', () => {
-    // 네 번째 증강 레벨이 30레벨 언저리 — 대부분의 판이 도달한다
-    expect(H.AUGMENT_LEVELS[3]).toBeLessThanOrEqual(35);
+    expect(H.AUGMENT_LEVELS[3]).toBeLessThanOrEqual(32);
   });
 
-  test('레벨이 오를수록 간격이 벌어진다 — 뒤로 갈수록 귀해진다', () => {
-    const gaps = H.AUGMENT_LEVELS.slice(1).map((lv, i) => lv - H.AUGMENT_LEVELS[i]);
-    for (let i = 0; i < gaps.length - 1; i++) {
-      expect(gaps[i + 1]).toBeGreaterThanOrEqual(gaps[i]);
-    }
+  test('다섯 번째는 35레벨 안쪽 — 각성이 늦지 않게', () => {
+    expect(H.AUGMENT_LEVELS[4]).toBeLessThanOrEqual(35);
   });
 
-  test('30레벨이면 증강 세 개를 쥔다', () => {
-    expect(H.augmentsByLevel(30)).toBe(3);
+  test('여섯 번째도 실제로 도달 가능한 레벨이다', () => {
+    // 경험치 비용이 지수라 레벨은 45 언저리에서 멎는다
+    expect(H.AUGMENT_LEVELS[5]).toBeLessThan(45);
+  });
+
+  test('24레벨이면 증강 세 개를 쥔다', () => {
+    expect(H.augmentsByLevel(23)).toBe(2);
+    expect(H.augmentsByLevel(24)).toBe(3);
   });
 
   test('실제로 세 번 고르게 된다', () => {
     const hero = new Hero();
     let picks = 0;
-    while (hero.level < 30) {
+    while (hero.level < 24) {
       hero.gainXp(hero.xpNeeded);
       while (hero.pendingAugmentPicks > 0) {
         hero.addAugment(card('might'));
         picks++;
       }
     }
-    expect(hero.level).toBe(30);
+    expect(hero.level).toBe(24);
     expect(picks).toBe(3);
   });
 });
@@ -161,12 +170,8 @@ describe('레벨은 선형, 역전은 시너지가 만든다', () => {
     expect(heroDps(40) - heroDps(30)).toBeCloseTo(step, 5);
   });
 
-  test('증강이 없으면 50레벨이 되어도 GOD 타워를 못 넘는다', () => {
-    expect(heroDps(50)).toBeLessThan(GOD_TOWER_DPS);
-  });
-
-  test('공격 계열 3개를 몰면 30레벨에 GOD 타워의 2배를 넘는다', () => {
-    expect(heroDps(30, ATTACK_THREE)).toBeGreaterThan(GOD_TOWER_DPS * 2);
+  test('증강이 없으면 40레벨이 되어도 GOD 타워를 못 넘는다', () => {
+    expect(heroDps(40)).toBeLessThan(GOD_TOWER_DPS);
   });
 
   test('계열을 흩으면 시너지가 없어 무증강과 같다', () => {
@@ -180,6 +185,43 @@ describe('레벨은 선형, 역전은 시너지가 만든다', () => {
     const augmentGain = heroDps(30, ATTACK_THREE) / heroDps(30);
     expect(levelGain).toBeLessThan(2);
     expect(augmentGain).toBeGreaterThan(3);
+  });
+});
+
+// 기준선은 **혼합 빌드**(계열을 다 못 몰아 특화가 안 터진 평범한 판)로 잡는다.
+// 시뮬레이션에서 증강 3·5번째 시점의 골드 강화 중앙값은 0이었다 — 타일 41칸이
+// 다 차기 전까지 미네랄은 전부 유닛으로 간다. 그래서 골드 0을 기준으로 잰다.
+const MIXED_THREE = ['marksman', 'rapid', 'vigor']; // 원거리 2 — 특화(3) 미달
+const MIXED_FIVE = ['marksman', 'rapid', 'vigor', 'longbow', 'might'];
+const FOCUSED_FIVE = ['marksman', 'marksman', 'marksman', 'rapid', 'longbow'];
+
+describe('궁수 기준선 — 3증강에 GOD 타워 한 기, 5증강에 각성', () => {
+  test('혼합 3증강(24레벨)이면 GOD 타워 1~1.5기 수준이다', () => {
+    const ratio = archerDps(24, MIXED_THREE, 0) / GOD_TOWER_DPS;
+    expect(ratio).toBeGreaterThan(1);
+    expect(ratio).toBeLessThan(1.5);
+  });
+
+  test('혼합 5증강(35레벨)이면 1.5~5기 수준으로 각성한다', () => {
+    const ratio = archerDps(35, MIXED_FIVE, 0) / GOD_TOWER_DPS;
+    expect(ratio).toBeGreaterThan(1.5);
+    expect(ratio).toBeLessThan(5);
+  });
+
+  test('계열을 몰아 특화를 터뜨리면 혼합 빌드를 넘어선다 — 그게 몰빵의 값어치다', () => {
+    expect(archerDps(24, ARCHER_THREE, 0)).toBeGreaterThan(archerDps(24, MIXED_THREE, 0));
+    expect(archerDps(35, FOCUSED_FIVE, 0)).toBeGreaterThan(archerDps(35, MIXED_FIVE, 0));
+  });
+
+  test('골드 강화는 증강을 대체하지 못한다 — 12번 사서도 혼합 5증강에 못 미친다', () => {
+    // 12번이면 누적 2,292 미네랄. 비용이 1.28배씩 붙어 더 사기도 어렵다.
+    expect(archerDps(35, [], 12)).toBeLessThan(archerDps(35, MIXED_FIVE, 0));
+  });
+
+  test('골드 강화 비용은 초선형이라 무한정 살 수 없다', () => {
+    const cum = (n: number) =>
+      Array.from({ length: n }, (_, i) => H.heroUpgradeCost(i)).reduce((a, b) => a + b, 0);
+    expect(cum(20)).toBeGreaterThan(10 * cum(10));
   });
 });
 

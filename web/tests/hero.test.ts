@@ -41,7 +41,7 @@ describe('제단 — 공짜로 주어진다', () => {
 
 describe('영웅 이동 — 경로 위에서만', () => {
   test('클릭 지점을 경로에 투영해 그리로 걸어간다', () => {
-    const hero = new Hero(0);
+    const hero = new Hero('warrior', 0);
     const [tx, ty] = pathPos(300);
     hero.moveTo(tx, ty);
 
@@ -52,7 +52,7 @@ describe('영웅 이동 — 경로 위에서만', () => {
   });
 
   test('경로에서 멀리 떨어진 곳을 찍어도 경로 위 최근접점으로 간다', () => {
-    const hero = new Hero(0);
+    const hero = new Hero('warrior', 0);
     hero.moveTo(210, 250); // 십자 중앙 — 경로가 아니다
     const [hx, hy] = pathPos(hero.targetDistance);
 
@@ -80,7 +80,7 @@ describe('영웅 이동 — 경로 위에서만', () => {
   });
 
   test('목적지에 도착하면 멈춘다', () => {
-    const hero = new Hero(0);
+    const hero = new Hero('warrior', 0);
     hero.moveToDistance(40);
     for (let i = 0; i < 40; i++) hero.step(0.1);
 
@@ -88,14 +88,14 @@ describe('영웅 이동 — 경로 위에서만', () => {
   });
 
   test('뒤로도 갈 수 있다', () => {
-    const hero = new Hero(300);
+    const hero = new Hero('warrior', 300);
     hero.moveToDistance(100);
     hero.step(1);
     expect(hero.distance).toBeLessThan(300);
   });
 
   test('경로 밖으로는 목적지를 잡을 수 없다', () => {
-    const hero = new Hero(0);
+    const hero = new Hero('warrior', 0);
     hero.moveToDistance(-500);
     expect(hero.targetDistance).toBe(0);
     hero.moveToDistance(PATH_LENGTH + 500);
@@ -216,7 +216,7 @@ describe('레벨 — 모든 처치에서 경험치를 얻는다', () => {
 
 describe('사망과 부활 — 패널티는 대기시간뿐', () => {
   test('죽으면 부활 타이머가 걸린다', () => {
-    const hero = new Hero(200);
+    const hero = new Hero('warrior', 200);
     hero.moveToDistance(400);
     for (let i = 0; i < 10; i++) hero.step(0.1);
     hero.takeDamage(99999);
@@ -226,7 +226,7 @@ describe('사망과 부활 — 패널티는 대기시간뿐', () => {
   });
 
   test('대기시간이 끝나면 제단 자리에서 만피로 부활한다', () => {
-    const hero = new Hero(200);
+    const hero = new Hero('warrior', 200);
     hero.moveToDistance(400);
     for (let i = 0; i < 10; i++) hero.step(0.1);
     expect(hero.distance).toBeGreaterThan(200);
