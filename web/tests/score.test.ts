@@ -94,18 +94,17 @@ describe('점수 적립', () => {
 
   test('영웅 레벨업마다 점수가 붙는다', () => {
     const game = new Game();
-    game.buildAltar();
     const before = game.score;
 
     // 잡몹 하나를 잡아 경험치를 준 뒤, 레벨업을 강제한다
-    game.hero!.xp = game.hero!.xpNeeded;
+    game.hero.xp = game.hero.xpNeeded;
     game.enemies.push({
       kind: 'mob', name: 'x', maxHp: 1, hp: 0, armor: 0,
       speed: 0, radius: 8, distance: 10,
     });
     game.update(0.016);
 
-    expect(game.hero!.level).toBeGreaterThan(1);
+    expect(game.hero.level).toBeGreaterThan(1);
     expect(game.score).toBeGreaterThanOrEqual(before + S.HERO_LEVEL_SCORE);
   });
 

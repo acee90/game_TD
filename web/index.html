@@ -29,7 +29,7 @@
   .dim{color:var(--dim)}
   #message{min-height:18px;font-size:12px;color:var(--dim);padding:5px;text-align:center}
   .row{display:grid;gap:6px;margin-top:6px}
-  .c1{grid-template-columns:1fr} .c2{grid-template-columns:1fr 1fr} .c4{grid-template-columns:repeat(4,1fr)}
+  .c2{grid-template-columns:1fr 1fr} .c4{grid-template-columns:repeat(4,1fr)}
   .c6{grid-template-columns:repeat(6,1fr)}
   button{background:var(--panel2);color:var(--text);border:1px solid var(--line);border-radius:8px;
          padding:10px 4px;font-size:12.5px;font-family:inherit;cursor:pointer;line-height:1.4}
@@ -43,7 +43,6 @@
   #up0{border-color:var(--terran)} #up1{border-color:var(--zerg)}
   #up2{border-color:var(--toss)} #up3{border-color:var(--creature)}
   .note{font-size:11px;color:var(--dim);text-align:center;margin-top:8px;line-height:1.7}
-  #altar{border-color:#b08cff}
   #heroPanel{background:var(--panel);border:1px solid #3a2f5c;border-radius:8px;
              padding:9px 10px;margin-top:6px;font-size:11.5px;display:grid;gap:7px}
   .hrow{display:grid;grid-template-columns:70px 1fr auto;align-items:center;gap:8px}
@@ -139,13 +138,10 @@
   </div>
   <div class="row c2">
     <button id="sell">유닛 처분</button>
-    <button id="altar">제단 건설</button>
-  </div>
-  <div class="row c1">
     <button id="bossState" disabled>보스 대기</button>
   </div>
 
-  <section id="heroPanel" hidden aria-label="영웅">
+  <section id="heroPanel" aria-label="영웅">
     <div class="hrow">
       <span class="hname">영웅 <b id="heroLevel">Lv1</b></span>
       <span class="hbar"><i id="heroHpBar"></i></span>

@@ -37,8 +37,8 @@ export class Game {
 
   upgrades: UpgradeLevels = [0, 0, 0, 0];
 
-  /** 제단을 세우면 영웅이 생긴다. 세우기 전에는 null. */
-  hero: Hero | null = null;
+  /** 제단과 영웅은 시작부터 있다 */
+  readonly hero: Hero;
   /** 증강 선택지가 떠 있으면 게임이 멈춘다 */
   augmentChoices: Augment[] = [];
 
@@ -59,6 +59,7 @@ export class Game {
 
   constructor(rand: Rand = Math.random) {
     this.rand = rand;
+    this.hero = new Hero();
   }
 
   /** 증강 선택 중에는 시간이 흐르지 않는다 */
@@ -67,42 +68,19 @@ export class Game {
   }
 
   // ── 제단 · 영웅 ──
+  /** 제단은 게임 시작과 함께 십자 중앙 타일에 주어진다. 그 자리에는 타워를 놓을 수 없다. */
   get altarSlot(): Slot {
     return this.slots[H.ALTAR_SLOT];
   }
 
-  get canBuildAltar(): boolean {
-    return this.hero === null && !this.altarSlot.tower && this.mineral >= H.ALTAR_MINERAL;
-  }
-
-  /** 제단은 십자 중앙 타일을 차지한다. 그 자리에는 타워를 놓을 수 없게 된다. */
-  buildAltar(): boolean {
-    if (this.hero) {
-      this.message = '제단은 하나뿐입니다.';
-      return false;
-    }
-    if (this.altarSlot.tower) {
-      this.message = '중앙 타일을 비워야 제단을 세울 수 있습니다.';
-      return false;
-    }
-    if (this.mineral < H.ALTAR_MINERAL) {
-      this.message = `미네랄 부족 — 제단 ${H.ALTAR_MINERAL} 필요.`;
-      return false;
-    }
-    this.mineral -= H.ALTAR_MINERAL;
-    this.hero = new Hero();
-    this.message = '제단을 세웠습니다. 맵을 클릭해 영웅을 움직이세요.';
-    return true;
-  }
-
   moveHero(x: number, y: number): void {
-    this.hero?.moveTo(x, y);
+    this.hero.moveTo(x, y);
   }
 
   /** 증강 하나를 고른다. 남은 선택이 있으면 다음 선택지를 띄운다. */
   chooseAugment(index: number): boolean {
     const augment = this.augmentChoices[index];
-    if (!augment || !this.hero) return false;
+    if (!augment) return false;
 
     this.hero.addAugment(augment);
     this.augmentChoices = [];
@@ -113,7 +91,7 @@ export class Game {
 
   private offerAugmentIfPending(): void {
     const hero = this.hero;
-    if (!hero || hero.pendingAugmentPicks <= 0) return;
+    if (hero.pendingAugmentPicks <= 0) return;
     this.augmentChoices = rollAugmentChoices(hero, this.rand);
     if (this.augmentChoices.length === 0) hero.pendingAugmentPicks = 0;
   }
@@ -171,7 +149,7 @@ export class Game {
 
   // ── 유닛 생성 / 조합 / 판매 ──
   spawnUnit(slot: Slot): boolean {
-    if (this.hero && slot === this.altarSlot) {
+    if (slot === this.altarSlot) {
       this.message = '제단 타일에는 유닛을 놓을 수 없습니다.';
       return false;
     }
@@ -194,7 +172,7 @@ export class Game {
   }
 
   spawnUnitAnywhere(): boolean {
-    const empty = this.slots.find((s) => !s.tower && !(this.hero && s === this.altarSlot));
+    const empty = this.slots.find((s) => !s.tower && s !== this.altarSlot);
     if (!empty) {
       this.message = '빈 타일이 없습니다 — 조합하거나 판매하세요.';
       return false;
@@ -359,14 +337,13 @@ export class Game {
       this.float(x, y, `+${income.mineral}`, '#8fd6ff');
       if (income.notes.length) this.message = income.notes.join(' · ');
     }
-    this.mineral += this.hero?.stats.mineralPerKill ?? 0;
-    this.grantXp(H.XP_PER_MOB);
+    this.mineral += this.hero.stats.mineralPerKill;
+    this.grantXp(enemy.lastHitByHero ? H.XP_PER_MOB * H.HERO_LASTHIT_XP_MULT : H.XP_PER_MOB);
   }
 
   /** 경험치는 타워가 잡든 영웅이 잡든 들어온다. 레벨업 시 증강 선택을 띄운다. */
   private grantXp(amount: number): void {
     const hero = this.hero;
-    if (!hero) return;
     const levels = hero.gainXp(amount);
     if (levels > 0) {
       this.score += S.HERO_LEVEL_SCORE * levels;
@@ -436,7 +413,7 @@ export class Game {
    */
   private advanceEnemies(dt: number): void {
     const hero = this.hero;
-    const heroBlocks = hero !== null && hero.alive;
+    const heroBlocks = hero.alive;
 
     for (const enemy of this.enemies) {
       const speed = enemy.speed * this.slowAt(enemy.distance);
@@ -484,8 +461,6 @@ export class Game {
   /** 영웅 이동 · 공격, 그리고 적의 반격 */
   private stepHero(dt: number): void {
     const hero = this.hero;
-    if (!hero) return;
-
     hero.step(dt);
     if (!hero.alive) return;
 
@@ -501,6 +476,7 @@ export class Game {
             const [ex, ey] = pathPos(enemy.distance);
             if (Math.hypot(ex - tx, ey - ty) <= stats.splashRadius) {
               enemy.hp -= B.effectiveDamage(stats.damage, enemy.armor);
+              enemy.lastHitByHero = true;
             }
           }
           this.shots.push({
@@ -509,6 +485,7 @@ export class Game {
           });
         } else {
           target.hp -= B.effectiveDamage(stats.damage, target.armor);
+          target.lastHitByHero = true;
           this.shots.push({ x: hero.x, y: hero.y, tx, ty, life: 0.1, color: '#ffffff' });
         }
         hero.attackCooldown = stats.attackInterval;
@@ -568,11 +545,14 @@ export class Game {
       });
       if (!inReach.length) continue;
 
-      const raw = damage(tower, this.upgrades) * (this.hero?.stats.towerDamageMult ?? 1);
+      const raw = damage(tower, this.upgrades) * this.hero.stats.towerDamageMult;
       const color = RACE_COLOR[tower.def.race];
 
       if (isSplash(tower)) {
-        for (const e of inReach) e.hp -= B.effectiveDamage(raw, e.armor);
+        for (const e of inReach) {
+          e.hp -= B.effectiveDamage(raw, e.armor);
+          e.lastHitByHero = false;
+        }
         const [x, y] = pathPos(inReach[0].distance);
         this.shots.push({ x: slot.x, y: slot.y, tx: x, ty: y, life: 0.08, color, splashRadius: reach });
       } else {
@@ -583,6 +563,7 @@ export class Game {
           power ? (e.hp > best.hp ? e : best) : e.distance > best.distance ? e : best,
         );
         target.hp -= B.effectiveDamage(raw, target.armor);
+        target.lastHitByHero = false;
         const [x, y] = pathPos(target.distance);
         this.shots.push({ x: slot.x, y: slot.y, tx: x, ty: y, life: 0.08, color });
       }

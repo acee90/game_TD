@@ -28,7 +28,7 @@ canvas.addEventListener('pointerdown', (event) => {
     game.moveHero(x, y);
     return;
   }
-  if (game.hero && hit === game.altarSlot) {
+  if (hit === game.altarSlot) {
     game.moveHero(x, y);
     return;
   }
@@ -41,7 +41,6 @@ el.probe.addEventListener('click', () => game.buyProbe());
 el.sell.addEventListener('click', () => game.sellSelected());
 el.bossLevels.forEach((button, i) => button.addEventListener('click', () => game.summonBoss(i + 1)));
 el.upgrades.forEach((button, i) => button.addEventListener('click', () => game.upgrade(i as Race)));
-el.altar.addEventListener('click', () => game.buildAltar());
 el.augCards.addEventListener('click', (event) => {
   const card = (event.target as HTMLElement).closest<HTMLElement>('.augcard');
   if (card?.dataset.index) game.chooseAugment(Number(card.dataset.index));
@@ -56,7 +55,6 @@ const KEYS: Record<string, () => void> = {
   '2': () => game.upgrade(1),
   '3': () => game.upgrade(2),
   '4': () => game.upgrade(3),
-  a: () => game.buildAltar(),
 };
 window.addEventListener('keydown', (event) => KEYS[event.key.toLowerCase()]?.());
 

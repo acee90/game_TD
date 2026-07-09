@@ -7,14 +7,9 @@
 import type { Tag } from './units';
 
 // ── 시작 자원 — trigger #349 SetResources(SetTo, 55, ore) / (SetTo, 6, gas) [원본확정]
-export const ORIGINAL_START_MINERAL = 55;
+// 제단은 공짜로 주어지므로 원본 값을 그대로 쓴다.
+export const START_MINERAL = 55;
 export const START_GAS = 6;
-
-/**
- * 시작 미네랄. 원본은 55지만 원본에는 제단이 없다.
- * 제단(40)을 세우고도 유닛 몇 기를 깔 수 있어야 초반이 성립한다. [프로토]
- */
-export const START_MINERAL = 80;
 
 /** 원본 trigger #266의 SetCountdownTimer(57). [원본확정] */
 export const ORIGINAL_ROUND_SECONDS = 57;

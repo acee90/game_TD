@@ -8,7 +8,7 @@ import { bossKillMineral, killIncome } from '../src/game/economy';
 import { poolFor, unitFor } from '../src/game/merge';
 import type { Slot } from '../src/game/types';
 
-const emptySlot = (game: Game): Slot => game.slots.find((s) => !s.tower)!;
+const emptySlot = (game: Game): Slot => game.slots.find((s) => !s.tower && s !== game.altarSlot)!;
 
 /** 항상 풀의 index번째 유닛을 뽑는 결정적 난수 */
 const fixedRand = (index: number, poolSize = 7): (() => number) => () => index / poolSize;
@@ -20,24 +20,17 @@ function spawn(game: Game): void {
 }
 
 describe('시작 상태', () => {
-  test('원본 시작 미네랄은 55, 가스 6', () => {
-    expect(B.ORIGINAL_START_MINERAL).toBe(55);
-    expect(B.START_GAS).toBe(6);
+  test('원본대로 미네랄 55, 가스 6으로 시작한다', () => {
+    const game = new Game();
+    expect(B.START_MINERAL).toBe(55);
+    expect(game.mineral).toBe(55);
+    expect(game.gas).toBe(6);
   });
 
-  test('프로토는 제단 값만큼 시작 미네랄을 더 준다', () => {
+  test('제단과 영웅은 공짜로 주어진다', () => {
     const game = new Game();
+    expect(game.hero).not.toBeNull();
     expect(game.mineral).toBe(B.START_MINERAL);
-    expect(B.START_MINERAL).toBeGreaterThan(B.ORIGINAL_START_MINERAL);
-    expect(game.gas).toBe(B.START_GAS);
-  });
-
-  test('시작 미네랄로 제단을 세우고도 유닛 세 기는 산다', () => {
-    const game = new Game();
-    expect(game.buildAltar()).toBe(true);
-    let bought = 0;
-    while (game.spawnUnitAnywhere()) bought++;
-    expect(bought).toBeGreaterThanOrEqual(3);
   });
 
   test('원본 라운드 간격은 57초이고, 프로토는 그보다 짧다', () => {

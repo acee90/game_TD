@@ -31,6 +31,8 @@ export interface Enemy extends EnemySpec {
   /** 입구에서 이동한 거리. PATH_LENGTH 도달 시 돌파 */
   distance: number;
   dead?: boolean;
+  /** 마지막으로 때린 게 영웅인가 — 막타 경험치 보너스 판정 */
+  lastHitByHero?: boolean;
 }
 
 export interface Shot {

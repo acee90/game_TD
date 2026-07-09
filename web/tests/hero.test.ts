@@ -12,52 +12,28 @@ const dps = (level: number, ids: string[] = []): number => {
   return stats.damage / stats.attackInterval;
 };
 
-describe('제단 — 영웅의 출발점', () => {
-  test('제단을 세워야 영웅이 생긴다', () => {
+describe('제단 — 공짜로 주어진다', () => {
+  test('게임을 시작하면 영웅이 이미 있다', () => {
     const game = new Game();
-    expect(game.hero).toBeNull();
-    expect(game.canBuildAltar).toBe(true);
-
-    const mineral = game.mineral;
-    expect(game.buildAltar()).toBe(true);
-    expect(game.mineral).toBe(mineral - H.ALTAR_MINERAL);
-    expect(game.hero).not.toBeNull();
+    expect(game.hero).toBeDefined();
+    expect(game.hero.level).toBe(1);
+    expect(game.hero.alive).toBe(true);
   });
 
-  test('미네랄이 모자라면 못 세운다', () => {
-    const game = new Game();
-    game.mineral = H.ALTAR_MINERAL - 1;
-    expect(game.canBuildAltar).toBe(false);
-    expect(game.buildAltar()).toBe(false);
-    expect(game.hero).toBeNull();
-  });
-
-  test('제단은 하나뿐이다', () => {
-    const game = new Game();
-    game.buildAltar();
-    game.mineral = 999;
-    expect(game.buildAltar()).toBe(false);
+  test('제단은 시작 미네랄을 쓰지 않는다', () => {
+    expect(new Game().mineral).toBe(B.START_MINERAL);
   });
 
   test('제단 타일에는 유닛을 놓을 수 없다', () => {
     const game = new Game();
-    game.buildAltar();
     game.mineral = 999;
 
     expect(game.spawnUnit(game.altarSlot)).toBe(false);
     expect(game.altarSlot.tower).toBeNull();
 
     // 자동 배치도 제단을 피한다
-    for (let i = 0; i < 16; i++) game.spawnUnitAnywhere();
+    for (let i = 0; i < 45; i++) game.spawnUnitAnywhere();
     expect(game.altarSlot.tower).toBeNull();
-  });
-
-  test('중앙 타일에 타워가 있으면 제단을 못 세운다', () => {
-    const game = new Game();
-    game.mineral = 999;
-    game.spawnUnit(game.altarSlot);
-    expect(game.altarSlot.tower).not.toBeNull();
-    expect(game.buildAltar()).toBe(false);
   });
 });
 
@@ -85,10 +61,9 @@ describe('영웅 이동 — 경로 위에서만', () => {
   test('영웅은 언제나 경로 위에 있다 — 타워 타일 위로 못 올라간다', () => {
     const game = new Game();
     game.mineral = 999;
-    game.buildAltar();
     for (let i = 0; i < 8; i++) game.spawnUnitAnywhere();
 
-    const hero = game.hero!;
+    const hero = game.hero;
     const occupied = game.slots.find((s) => s.tower)!;
     hero.moveTo(occupied.x, occupied.y);
     for (let i = 0; i < 200; i++) hero.step(0.1);
@@ -134,8 +109,7 @@ describe('어그로 — 몹이 영웅을 보면 멈춘다', () => {
 
   test('시야 안에 영웅이 있으면 전진하지 않는다', () => {
     const game = new Game();
-    game.buildAltar();
-    const hero = game.hero!;
+    const hero = game.hero;
 
     // 영웅 바로 앞(뒤쪽)에 몹을 둔다
     game.enemies.push(mob(hero.distance - 30));
@@ -150,8 +124,7 @@ describe('어그로 — 몹이 영웅을 보면 멈춘다', () => {
 
   test('시야 밖이면 그냥 지나간다', () => {
     const game = new Game();
-    game.buildAltar();
-    const hero = game.hero!;
+    const hero = game.hero;
 
     game.enemies.push(mob(hero.distance - H.HERO_AGGRO_RANGE - 50));
     const before = game.enemies[0].distance;
@@ -162,8 +135,7 @@ describe('어그로 — 몹이 영웅을 보면 멈춘다', () => {
 
   test('영웅을 지나친 몹은 되돌아오지 않는다', () => {
     const game = new Game();
-    game.buildAltar();
-    const hero = game.hero!;
+    const hero = game.hero;
 
     game.enemies.push(mob(hero.distance + 40));
     const before = game.enemies[0].distance;
@@ -174,8 +146,7 @@ describe('어그로 — 몹이 영웅을 보면 멈춘다', () => {
 
   test('영웅이 죽으면 몹이 다시 흐른다', () => {
     const game = new Game();
-    game.buildAltar();
-    const hero = game.hero!;
+    const hero = game.hero;
 
     game.enemies.push(mob(hero.distance - 30));
     game.update(0.2);
@@ -190,8 +161,7 @@ describe('어그로 — 몹이 영웅을 보면 멈춘다', () => {
 
   test('어그로는 몹을 한곳에 모은다', () => {
     const game = new Game();
-    game.buildAltar();
-    const hero = game.hero!;
+    const hero = game.hero;
 
     for (let i = 0; i < 5; i++) game.enemies.push(mob(hero.distance - 60 + i * 8));
     for (let i = 0; i < 30; i++) game.update(0.05);
@@ -205,8 +175,7 @@ describe('어그로 — 몹이 영웅을 보면 멈춘다', () => {
 describe('레벨 — 모든 처치에서 경험치를 얻는다', () => {
   test('타워가 잡은 적도 영웅 경험치가 된다', () => {
     const game = new Game();
-    game.buildAltar();
-    const hero = game.hero!;
+    const hero = game.hero;
 
     game.enemies.push({
       kind: 'mob', name: 'x', maxHp: 1, hp: 0, armor: 0,
@@ -296,8 +265,7 @@ describe('증강 — 선택 동안 게임이 멈춘다', () => {
 
   test('선택지가 떠 있으면 update가 시간을 흘리지 않는다', () => {
     const game = new Game();
-    game.buildAltar();
-    const hero = game.hero!;
+    const hero = game.hero;
 
     // 증강 레벨까지 한 방에 올린다
     game.enemies.push({
@@ -313,8 +281,7 @@ describe('증강 — 선택 동안 게임이 멈춘다', () => {
 
   test('증강을 고르면 게임이 다시 흐른다', () => {
     const game = new Game();
-    game.buildAltar();
-    game.hero!.pendingAugmentPicks = 1;
+    game.hero.pendingAugmentPicks = 1;
     game.update(0.016);
 
     expect(game.paused).toBe(true);
@@ -392,8 +359,7 @@ describe('증강 효과 — 곱연산으로 쌓여 먼치킨이 된다', () => {
 describe('적이 영웅을 때린다', () => {
   test('붙은 적이 영웅 체력을 깎는다', () => {
     const game = new Game();
-    game.buildAltar();
-    const hero = game.hero!;
+    const hero = game.hero;
     const full = hero.hp;
 
     game.enemies.push({
@@ -418,8 +384,7 @@ describe('적이 영웅을 때린다', () => {
 
   test('멀리 있는 적은 못 때린다', () => {
     const game = new Game();
-    game.buildAltar();
-    const hero = game.hero!;
+    const hero = game.hero;
     const full = hero.hp;
 
     game.enemies.push({
@@ -433,7 +398,6 @@ describe('적이 영웅을 때린다', () => {
 
   test('돌파한 적은 영웅을 때리지 못한다 — 이미 사라졌다', () => {
     const game = new Game();
-    game.buildAltar();
     game.enemies.push({
       kind: 'mob', name: 'x', maxHp: 10, hp: 10, armor: 0,
       speed: 0, radius: 8, distance: PATH_LENGTH,
@@ -509,8 +473,7 @@ describe('탐욕 증강 — 처치당 미네랄', () => {
 
   test('탐욕을 쌓으면 처치당 미네랄이 붙는다', () => {
     const game = new Game();
-    game.buildAltar();
-    game.hero!.addAugment(augment('greed'));
+    game.hero.addAugment(augment('greed'));
     const mineral = game.mineral;
 
     game.enemies.push({
@@ -523,8 +486,29 @@ describe('탐욕 증강 — 처치당 미네랄', () => {
   });
 });
 
-describe('원본 경제는 그대로', () => {
-  test('제단 비용은 시작 미네랄로 감당된다', () => {
-    expect(H.ALTAR_MINERAL).toBeLessThanOrEqual(B.START_MINERAL);
+describe('막타 경험치', () => {
+  test('영웅이 막타를 치면 경험치가 더 들어온다', () => {
+    expect(H.HERO_LASTHIT_XP_MULT).toBeGreaterThan(1);
+
+    const towerKill = new Game();
+    towerKill.enemies.push({
+      kind: 'mob', name: 'x', maxHp: 1, hp: 0, armor: 0,
+      speed: 0, radius: 8, distance: 10,
+    });
+    towerKill.update(0.016);
+
+    const heroKill = new Game();
+    heroKill.enemies.push({
+      kind: 'mob', name: 'x', maxHp: 1, hp: 0, armor: 0,
+      speed: 0, radius: 8, distance: 10, lastHitByHero: true,
+    });
+    heroKill.update(0.016);
+
+    expect(towerKill.hero.xp).toBe(H.XP_PER_MOB);
+    expect(heroKill.hero.xp).toBe(H.XP_PER_MOB * H.HERO_LASTHIT_XP_MULT);
+  });
+
+  test('편차가 크지 않다 — 막타를 다 쳐도 두 배까지', () => {
+    expect(H.HERO_LASTHIT_XP_MULT).toBeLessThanOrEqual(2);
   });
 });

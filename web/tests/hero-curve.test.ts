@@ -27,14 +27,24 @@ const GOD_TOWER_DPS = (() => {
 /** 공격 계열 3개를 몰았을 때 — 완력은 최대 3스택이라 이게 최고 조합이다 */
 const ATTACK_THREE = ['might', 'might', 'might'];
 
+/** 전형적인 판에서 영웅이 막타를 치는 비율 */
+const TYPICAL_LASTHIT_RATE = 0.3;
+
+const xpPerMob = (lastHitRate: number): number =>
+  H.XP_PER_MOB * (1 - lastHitRate) + H.XP_PER_MOB * H.HERO_LASTHIT_XP_MULT * lastHitRate;
+
 /**
- * 잡몹을 전부 잡고 보스를 쿨타임마다 부른다는 가정 아래
+ * 잡몹을 전부 잡고 보스를 주기적으로 부른다는 가정 아래
  * 영웅이 목표 레벨에 도달하는 라운드를 구한다.
  */
-function roundAtLevel(targetLevel: number, bossEveryRounds: number): number {
+function roundAtLevel(
+  targetLevel: number,
+  bossEveryRounds: number,
+  lastHitRate = TYPICAL_LASTHIT_RATE,
+): number {
   const hero = new Hero();
-  for (let round = 1; round <= 200; round++) {
-    hero.gainXp(B.enemyCount(round) * H.XP_PER_MOB);
+  for (let round = 1; round <= 300; round++) {
+    hero.gainXp(B.enemyCount(round) * xpPerMob(lastHitRate));
     if (bossEveryRounds > 0 && round % bossEveryRounds === 0) {
       const bossLevel = Math.min(B.BOSS_MAX_LEVEL, 1 + Math.floor(round / 10));
       hero.gainXp(H.xpPerBoss(bossLevel));
@@ -46,21 +56,49 @@ function roundAtLevel(targetLevel: number, bossEveryRounds: number): number {
   return Infinity;
 }
 
-describe('레벨 30 도달 시점 — R30~35', () => {
-  test('보스를 안 부르면 조금 늦게, 그래도 창을 크게 벗어나지 않는다', () => {
-    const round = roundAtLevel(30, 0);
-    expect(round).toBeGreaterThanOrEqual(30);
-    expect(round).toBeLessThanOrEqual(40);
+/** 라운드 `round`이 끝났을 때의 영웅 레벨 */
+function levelAtRound(round: number, lastHitRate = TYPICAL_LASTHIT_RATE): number {
+  const hero = new Hero();
+  for (let r = 1; r <= round; r++) {
+    hero.gainXp(B.enemyCount(r) * xpPerMob(lastHitRate));
+    if (r % 2 === 0) hero.gainXp(H.xpPerBoss(Math.min(B.BOSS_MAX_LEVEL, 1 + Math.floor(r / 10))));
+    hero.pendingAugmentPicks = 0;
+  }
+  return hero.level;
+}
+
+describe('초반 레벨업 속도 — 라운드당 한 레벨 남짓', () => {
+  test('첫 두 라운드에 폭발적으로 오르지 않는다', () => {
+    expect(levelAtRound(1)).toBeLessThanOrEqual(2);
+    expect(levelAtRound(2)).toBeLessThanOrEqual(3);
   });
 
+  test('R5에 첫 증강(Lv10)을 못 받는다', () => {
+    expect(levelAtRound(5)).toBeLessThan(H.AUGMENT_EVERY);
+  });
+
+  test('R10 언저리에 첫 증강이 온다', () => {
+    expect(levelAtRound(10)).toBeGreaterThanOrEqual(H.AUGMENT_EVERY);
+    expect(levelAtRound(10)).toBeLessThan(H.AUGMENT_EVERY * 2);
+  });
+});
+
+describe('레벨 30 도달 시점 — R30~35', () => {
   test('보스를 2라운드마다 부르면 R30~35 안에 30레벨이 된다', () => {
     const round = roundAtLevel(30, 2);
     expect(round).toBeGreaterThanOrEqual(30);
     expect(round).toBeLessThanOrEqual(35);
   });
 
-  test('보스는 성장을 앞당긴다', () => {
-    expect(roundAtLevel(30, 2)).toBeLessThanOrEqual(roundAtLevel(30, 0));
+  test('보스를 안 부르면 한참 늦다 — 보스가 성장의 페달이다', () => {
+    expect(roundAtLevel(30, 0)).toBeGreaterThan(roundAtLevel(30, 2));
+  });
+
+  test('막타를 많이 칠수록 빨라진다 — 다만 편차는 두 배 안쪽', () => {
+    const lazy = roundAtLevel(30, 2, 0);
+    const active = roundAtLevel(30, 2, 1);
+    expect(active).toBeLessThan(lazy);
+    expect(lazy / active).toBeLessThan(2);
   });
 });
 

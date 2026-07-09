@@ -5,8 +5,7 @@
 // 대신 몹은 영웅을 보면 진행을 멈추고 영웅부터 처치한 뒤 지나간다.
 // 그래서 영웅은 딜러이자 **어그로 블로커**다 — 몹을 한곳에 모으고 시간을 번다.
 
-export const ALTAR_MINERAL = 40;
-/** 제단이 놓이는 타일 인덱스 — 십자 중앙 (core/map.ts SLOT_POS[0]) */
+/** 제단은 게임 시작과 함께 주어진다. 십자 중앙 타일을 차지한다. (core/map.ts SLOT_POS[0]) */
 export const ALTAR_SLOT = 0;
 
 // ── 파워 커브 ──
@@ -35,12 +34,20 @@ export const HERO_HP_GROWTH = 1.13;
 
 /**
  * 다음 레벨까지 필요한 경험치.
- * 30레벨이 30~35라운드에 오도록 맞췄다. tests/hero-curve.test.ts가 이 창을 지킨다.
+ *
+ * 30레벨이 R30~35에 오도록 맞췄다(막타 30%, 보스 2라운드마다 기준). 초반이 너무 빠르지
+ * 않게 기본값을 크게 잡았다 — R2에 Lv3, R5에 Lv7, R10에 Lv12쯤 된다.
+ * tests/hero-curve.test.ts가 이 창을 지킨다.
  */
-export const xpToNext = (level: number): number => Math.round(6 + 2.6 * level);
+export const xpToNext = (level: number): number => Math.round(14 + 1.5 * level);
 
-/** 경험치 — 영웅이 아니라 모든 처치에서 들어온다 */
-export const XP_PER_MOB = 2;
+/**
+ * 경험치. 타워가 잡아도 들어오지만, 영웅이 막타를 치면 더 많이 들어온다.
+ * 배수를 크게 두면 영웅을 최전선에 던지는 게 항상 정답이 되고 판마다 편차가 커진다.
+ * 2배 정도면 "영웅을 굴리면 조금 빨리 큰다" 수준에서 멈춘다.
+ */
+export const XP_PER_MOB = 1;
+export const HERO_LASTHIT_XP_MULT = 2;
 export const xpPerBoss = (level: number): number => 8 * level;
 
 /** 부활 대기시간. 죽으면 그동안 영웅 딜이 빠지는 것 자체가 패널티다. */

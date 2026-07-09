@@ -28,7 +28,6 @@ export interface Elements {
   readonly milestoneBar: HTMLElement;
   readonly milestoneVal: HTMLElement;
   readonly bossReward: HTMLElement;
-  readonly altar: HTMLButtonElement;
   readonly heroPanel: HTMLElement;
   readonly heroLevel: HTMLElement;
   readonly heroHpBar: HTMLElement;
@@ -69,7 +68,6 @@ export function bindElements(): Elements {
     milestoneBar: $('milestoneBar'),
     milestoneVal: $('milestoneVal'),
     bossReward: $('bossReward'),
-    altar: $<HTMLButtonElement>('altar'),
     heroPanel: $('heroPanel'),
     heroLevel: $('heroLevel'),
     heroHpBar: $('heroHpBar'),
@@ -153,14 +151,6 @@ function refreshMissions(el: Elements, game: Game): void {
 
 function refreshHero(el: Elements, game: Game): void {
   const hero = game.hero;
-  el.altar.hidden = hero !== null;
-  el.heroPanel.hidden = hero === null;
-  if (!hero) {
-    el.altar.textContent = `제단 건설 ${HD.ALTAR_MINERAL}`;
-    el.altar.disabled = !game.canBuildAltar;
-    return;
-  }
-
   const stats = hero.stats;
   el.heroLevel.textContent = `Lv${hero.level}`;
 
@@ -267,13 +257,13 @@ function showHallOfFame(el: Elements, game: Game): void {
   el.overlay.style.display = 'flex';
   el.overlayTitle.textContent = `${game.score.toLocaleString('ko-KR')}점`;
   el.overlayBody.textContent =
-    `${game.round}라운드 · ${game.kills}킬 · 보스 Lv${game.bossCleared} · 영웅 Lv${game.hero?.level ?? '-'}`;
+    `${game.round}라운드 · ${game.kills}킬 · 보스 Lv${game.bossCleared} · 영웅 Lv${game.hero.level}`;
 
   const mine: hallOfFame.Record = {
     score: game.score,
     round: game.round,
     kills: game.kills,
-    heroLevel: game.hero?.level ?? 0,
+    heroLevel: game.hero.level,
     at: Date.now(),
   };
   const records = hallOfFame.submit(mine);
