@@ -46,8 +46,7 @@ unity/
     │   ├── Balance.cs      # ← web/src/data/balance.ts
     │   ├── Units.cs        # ← web/src/data/units.ts
     │   ├── HeroData.cs     # ← web/src/data/hero.ts (상수·커브)
-    │   ├── Augments.cs     # ← web/src/data/hero.ts (증강·등급·시너지)
-    │   ├── HeroClasses.cs  # ← web/src/data/hero-class.ts
+    │   ├── Augments.cs     # ← web/src/data/hero.ts (증강·등급·시너지·적응형 가중치)
     │   ├── Skills.cs       # ← web/src/data/skills.ts
     │   ├── Score.cs        # ← web/src/data/score.ts
     │   ├── GameTypes.cs    # ← web/src/game/types.ts
@@ -66,14 +65,18 @@ unity/
 - Core는 `System.Random` 주입(`Func<double>`)으로 난수를 받아 시드 고정 테스트가 가능하다.
 - 상수는 웹 원본과 동일하며 `[원본확정]`/`[프로토]` 주석도 그대로 옮겼다.
 
-## 웹 원본과 의도적으로 다른 것 하나 — Lv5 전직
+## 영웅 빌드 — 타입 없음, 적응형 드래프트
 
-웹은 게임 시작에 영웅 타입(전사/궁수/마법사)을 골랐지만, 이 포팅은 최신 설계대로
-**영웅 Lv5에 "전직"을 고른다** (`HeroData.CLASS_CHANGE_LEVEL`).
+영웅 타입(전사/궁수/마법사)과 전직은 없다. 영웅은 하나의 스탯 라인으로 시작하고
+(배수 없음 — 기본 상수 그대로), 빌드 방향은 **증강 드래프트의 관성**이 만든다.
 
-- 전직 전에는 중립 스탯 — 배수 전부 1 (`HeroClasses.NEUTRAL`)
-- Lv5 도달 시 증강 오버레이와 같은 방식으로 3장 카드가 뜨고, 고를 때까지 일시정지
-- 첫 증강이 Lv9라 전직이 항상 먼저 온다 — 증강 가중치는 언제나 전직된 타입이 정한다
+- 뽑기 가중치는 적응형이다: `weight = 1 + ADAPTIVE_KIND_WEIGHT(0.9) × (그 계열 보유 수)`
+  (`Augments.ADAPTIVE_KIND_WEIGHT`, `Hero.RollAugmentChoices`)
+- 이미 든 계열일수록 더 잘 뜬다 — 특화(3개)·대특화(5개)는 강제가 아니라 관성으로 완성된다
+- 남는 제약은 넷뿐: maxStacks / 대폭발은 충격파 필요(requiresSplash) /
+  스킬은 하나만(skillGate) / 스킬 개조는 그 스킬 보유 시만
+- 타입 배수가 사라져 단일 영웅 기준 DPS가 올랐기 때문에 `HERO_DAMAGE_PER_LEVEL`은
+  26 → 22로 내려 초반 가드를 지킨다 (web/src/data/hero.ts와 동일)
 
 ## 포팅 범위
 
@@ -88,7 +91,8 @@ unity/
 - 영웅: 경로 위 이동, 어그로 블로킹, XP·레벨(선형 성장 + 지수 XP 비용), 부활,
   골드 강화(35×1.28ⁿ, 공×1.12/체×1.08)
 - 증강 26종 · 등급(실버 1.0/골드 2.0/플래티넘 3.5, 대가 없음) ·
-  시너지(특화 3 / 대특화 5) · AUGMENT_LEVELS=[9,16,24,30,35,42] + 이후 8레벨마다
+  시너지(특화 3 / 대특화 5) · AUGMENT_LEVELS=[9,16,24,30,35,42] + 이후 8레벨마다 ·
+  적응형 드래프트 가중치(ADAPTIVE_KIND_WEIGHT=0.9)
 - 액티브 스킬 4종(소용돌이/일제 사격/유성/허수아비) 자동 시전 + 개조(SkillMods/FoldMods)
 - 피해 기여 집계(heroDamageDealt/towerDamageDealt/tankAssistDamage), 점수, 게임오버
 
@@ -111,4 +115,5 @@ dotnet build   # csproj에 Assets/Scripts/Core/*.cs 포함, TargetFramework nets
 ```
 
 이 저장소 작성 시 검증 완료: Core/View 전 파일 0 에러 0 경고,
-Core 헤드리스 스모크 런(봇 자동 플레이 R73, 전직·증강·보스·GOD 타워 전부 통과).
+Core 헤드리스 스모크 런(봇 자동 플레이 R79, 증강 드래프트·보스·GOD 타워 전부 통과,
+적응형 가중치는 탱커 2개 보유 시 탱커 계열 출현 21.9% → 42.0%로 확인).

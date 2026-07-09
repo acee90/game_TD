@@ -1,10 +1,7 @@
 // 원본: web/src/game/hero.ts
 // ───────── 영웅 ─────────
 // 제단에서 부활하고, 경로 위에서만 움직이며, 처치 경험치로 레벨을 올리고,
-// 일정 레벨마다 증강을 고른다.
-//
-// 웹 원본과 다른 점 하나: 영웅 타입은 시작 선택이 아니라 **Lv5 전직**이다.
-// 전직 전에는 중립 스탯(HeroClasses.NEUTRAL, 배수 전부 1)으로 싸운다. [Unity 신규]
+// 일정 레벨마다 증강을 고른다. 타입/전직은 없다 — 빌드 방향은 적응형 드래프트가 만든다.
 
 using System;
 using System.Collections.Generic;
@@ -66,11 +63,6 @@ namespace GodTD.Core
         /// <summary>미네랄로 산 강화 횟수</summary>
         public int GoldUpgrades;
 
-        /// <summary>전직한 타입. null이면 아직 중립(견습). Lv5에 고른다. [Unity 신규]</summary>
-        public HeroClassId? ClassId;
-        /// <summary>Lv5에 도달해 전직 선택이 밀려 있는가</summary>
-        public bool PendingClassPick;
-
         public readonly List<AugmentCard> AugmentCards = new List<AugmentCard>();
         /// <summary>아직 고르지 않은 증강 선택 횟수</summary>
         public int PendingAugmentPicks;
@@ -85,14 +77,10 @@ namespace GodTD.Core
             Hp = Stats.MaxHp;
         }
 
-        /// <summary>현재 타입 정의. 전직 전에는 중립.</summary>
-        public HeroClassDef Klass =>
-            ClassId.HasValue ? HeroClasses.HERO_CLASSES[ClassId.Value] : HeroClasses.NEUTRAL;
-
         public float X => MapData.PathPos(Distance).X;
         public float Y => MapData.PathPos(Distance).Y;
 
-        public HeroStats Stats => ComputeStats(Level, AugmentCards, GoldUpgrades, ClassId);
+        public HeroStats Stats => ComputeStats(Level, AugmentCards, GoldUpgrades);
 
         /// <summary>다음 강화 비용</summary>
         public int NextUpgradeCost => HeroData.HeroUpgradeCost(GoldUpgrades);
@@ -160,8 +148,6 @@ namespace GodTD.Core
                 Level++;
                 gained++;
                 if (HeroData.GrantsAugment(Level)) PendingAugmentPicks++;
-                // Lv5 = 전직. 웹의 시작 선택 대신 여기서 타입이 갈린다. [Unity 신규]
-                if (Level == HeroData.CLASS_CHANGE_LEVEL && !ClassId.HasValue) PendingClassPick = true;
             }
             if (gained > 0) Hp = Stats.MaxHp; // 레벨업 시 완전 회복
             return gained;
@@ -184,14 +170,6 @@ namespace GodTD.Core
             AugmentCards.Add(card);
             if (PendingAugmentPicks > 0) PendingAugmentPicks--;
             Hp = MathF.Min(Stats.MaxHp, Hp + (Stats.MaxHp - Hp) * 0.5f);
-        }
-
-        /// <summary>전직 확정. 스탯 배수가 바뀌므로 체력은 가득 채워 준다. [Unity 신규]</summary>
-        public void ChooseClass(HeroClassId id)
-        {
-            ClassId = id;
-            PendingClassPick = false;
-            Hp = Stats.MaxHp;
         }
 
         /// <summary>이동 · 재생 · 부활. 전투는 Game이 처리한다.</summary>
@@ -231,22 +209,17 @@ namespace GodTD.Core
         public static HeroStats ComputeStats(
             int level,
             IReadOnlyList<AugmentCard> cards,
-            int goldUpgrades = 0,
-            HeroClassId? classId = null)
+            int goldUpgrades = 0)
         {
-            var klass = classId.HasValue ? HeroClasses.HERO_CLASSES[classId.Value] : HeroClasses.NEUTRAL;
-
             // 골드 강화는 퍼센트다 — 레벨이 쌓은 기본값에 곱해진다
             float maxHp =
                 (HeroData.HERO_BASE_HP + HeroData.HERO_HP_PER_LEVEL * (level - 1)) *
-                MathF.Pow(HeroData.HERO_UPGRADE_HP_MULT, goldUpgrades) *
-                klass.HpMult;
+                MathF.Pow(HeroData.HERO_UPGRADE_HP_MULT, goldUpgrades);
             float damage =
                 (HeroData.HERO_BASE_DAMAGE + HeroData.HERO_DAMAGE_PER_LEVEL * (level - 1)) *
-                MathF.Pow(HeroData.HERO_UPGRADE_DAMAGE_MULT, goldUpgrades) *
-                klass.DamageMult;
-            float range = HeroData.HERO_BASE_RANGE * klass.RangeMult;
-            float attackSpeed = klass.AttackSpeedMult;
+                MathF.Pow(HeroData.HERO_UPGRADE_DAMAGE_MULT, goldUpgrades);
+            float range = HeroData.HERO_BASE_RANGE;
+            float attackSpeed = 1f;
             float moveSpeed = HeroData.HERO_SPEED;
             float regen = 0f;
             float splashRadius = 0f;
@@ -290,18 +263,12 @@ namespace GodTD.Core
                 towerDamageMult: towerDamageMult);
         }
 
-        /// <summary>이 영웅에게 뜰 수 있는 증강인가</summary>
+        /// <summary>이 영웅에게 뜰 수 있는 증강인가 — 타입 제한은 없다, 스킬은 하나만</summary>
         public static bool AugmentAllowed(Hero hero, Augment augment)
         {
             if (hero.StacksOf(augment.Id) >= augment.MaxStacks) return false;
             if (Augments.RequiresSplash(augment) && !hero.HasSplash) return false;
             if (!Augments.SkillGateAllows(augment, hero.SkillIdHeld)) return false;
-
-            var klass = hero.Klass;
-            // 타입이 못 배우는 스킬은 아예 안 뜬다
-            if (augment.GrantsSkill.HasValue && !klass.CanLearn(augment.GrantsSkill.Value)) return false;
-            // 가중치 0인 계열도 안 뜬다 — 단, 스킬 개조는 스킬을 든 이상 계열과 무관하게 허용한다
-            if (augment.SkillMod == null && klass.KindWeights[augment.Kind] <= 0f) return false;
             return true;
         }
 
@@ -322,8 +289,9 @@ namespace GodTD.Core
         /// <summary>
         /// 증강 카드 3장을 뽑는다. 카드마다 등급이 따로 굴려진다.
         ///
-        /// 영웅 타입이 계열 가중치를 정하므로 뽑기가 빌드 방향으로 기운다.
-        /// 스킬 개조 증강은 이미 그 스킬을 든 영웅에게만 뜨므로 가중치를 1로 둔다.
+        /// 가중치는 적응형이다 — 이미 든 계열일수록 더 잘 뜬다(ADAPTIVE_KIND_WEIGHT).
+        /// 그래서 특화는 강제가 아니라 드래프트의 관성으로 만들어진다.
+        /// 스킬 개조 증강은 이미 그 스킬을 든 영웅에게만 뜨므로 보유 스킬 계열만큼 기운다.
         /// </summary>
         public static List<AugmentCard> RollAugmentChoices(Hero hero, Func<double> rand)
         {
@@ -331,8 +299,13 @@ namespace GodTD.Core
             foreach (var augment in Augments.AUGMENTS)
                 if (AugmentAllowed(hero, augment)) remaining.Add(augment);
 
+            var heldByKind = new Dictionary<AugmentKind, int>();
+            foreach (var c in hero.AugmentCards)
+                heldByKind[c.Augment.Kind] = heldByKind.TryGetValue(c.Augment.Kind, out int n) ? n + 1 : 1;
+
             float WeightOf(Augment augment) =>
-                augment.SkillMod != null ? 1f : hero.Klass.KindWeights[augment.Kind];
+                1f + Augments.ADAPTIVE_KIND_WEIGHT *
+                (heldByKind.TryGetValue(augment.Kind, out int held) ? held : 0);
 
             var cards = new List<AugmentCard>();
             while (cards.Count < HeroData.AUGMENT_CHOICES && remaining.Count > 0)

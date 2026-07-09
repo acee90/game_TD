@@ -36,7 +36,7 @@ export const HERO_RADIUS = 11;
  *
  * tests/hero-curve.test.ts가 이 관계를 지킨다.
  */
-export const HERO_DAMAGE_PER_LEVEL = 26;
+export const HERO_DAMAGE_PER_LEVEL = 22;
 export const HERO_HP_PER_LEVEL = 90;
 
 // ───────── 골드 영웅 강화 ─────────
@@ -371,6 +371,14 @@ export function skillGateAllows(augment: Augment, currentSkill: SkillId | null):
 // 5를 한 계열에 몰면 대특화가 터진다. 그게 도박의 이유가 된다.
 
 /** 같은 계열 증강이 이만큼 모이면 특화가 발동한다 */
+/**
+ * 적응형 뽑기 가중치 — 이미 든 계열일수록 더 잘 뜬다.
+ * weight = 1 + ADAPTIVE_KIND_WEIGHT × (그 계열 보유 수).
+ * 타입 선택 없이도 드래프트가 방향을 만든다: 첫 증강에 특화를 시작해도 되고,
+ * 범용을 집은 뒤 2번째부터 몰아도 된다. 강제가 아니라 관성이다.
+ */
+export const ADAPTIVE_KIND_WEIGHT = 0.9;
+
 export const SYNERGY_THRESHOLD = 3;
 /** 이만큼 모이면 대특화 */
 export const MASTERY_THRESHOLD = 5;

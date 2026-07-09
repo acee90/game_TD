@@ -1,8 +1,6 @@
-// ───────── 부트스트랩: 타입 선택 → 입력 + 루프 ─────────
+// ───────── 부트스트랩: 입력 + 루프 ─────────
 import { TILE } from './core/map';
 import type { Race } from './data/units';
-import { HERO_CLASS_IDS, HERO_CLASSES } from './data/hero-class';
-import { SKILLS } from './data/skills';
 import { Game } from './game/game';
 import { render } from './render/render';
 import { bindElements, refresh } from './ui/ui';
@@ -13,29 +11,6 @@ if (!ctx) throw new Error('2d context unavailable');
 
 const game = new Game();
 const el = bindElements();
-
-// ── 전직 카드 (Lv5에 오버레이로 뜬다 — 표시는 refresh가 게임 상태로 토글) ──
-el.classCards.innerHTML = HERO_CLASS_IDS.map((id) => {
-  const k = HERO_CLASSES[id];
-  const skills = k.skills.map((sid) => SKILLS[sid].name).join(' · ');
-  const hint = [
-    k.hpMult !== 1 ? `체력 ×${k.hpMult}` : null,
-    k.damageMult !== 1 ? `공격 ×${k.damageMult}` : null,
-    k.rangeMult !== 1 ? `사거리 ×${k.rangeMult}` : null,
-    k.attackSpeedMult !== 1 ? `공속 ×${k.attackSpeedMult}` : null,
-  ].filter(Boolean).join(' · ');
-  return `<button class="augcard" data-class="${id}">
-    <div class="n">${k.name}</div>
-    <div class="d">${k.blurb}</div>
-    <div class="d" style="margin-top:4px">${hint}</div>
-    <div class="d" style="margin-top:2px">배울 수 있는 스킬 — ${skills}</div>
-  </button>`;
-}).join('');
-el.classCards.addEventListener('click', (event) => {
-  const card = (event.target as HTMLElement).closest<HTMLElement>('.augcard');
-  const id = card?.dataset.class as (typeof HERO_CLASS_IDS)[number] | undefined;
-  if (id) game.chooseClass(id);
-});
 
 // ── 캔버스 클릭 → 슬롯 선택 / 유닛 생성 ──
 canvas.addEventListener('pointerdown', (event) => {

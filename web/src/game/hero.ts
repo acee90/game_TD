@@ -5,7 +5,6 @@
 import { ALTAR_PATH_DISTANCE, PATH_LENGTH, nearestPathDistance, pathPos } from '../core/map';
 import * as H from '../data/hero';
 import type { AugmentCard, AugmentEffect } from '../data/hero';
-import { CLASS_PICK_LEVEL, HERO_CLASSES, NOVICE, type HeroClassId } from '../data/hero-class';
 import { foldMods, resolveSkill, type ResolvedSkill, type SkillId } from '../data/skills';
 
 export interface HeroStats {
@@ -28,21 +27,16 @@ export function computeStats(
   level: number,
   cards: readonly AugmentCard[],
   goldUpgrades = 0,
-  classId: HeroClassId | null = null,
 ): HeroStats {
-  const klass = classId ? HERO_CLASSES[classId] : NOVICE;
-
   // 골드 강화는 퍼센트다 — 레벨이 쌓은 기본값에 곱해진다
   let maxHp =
     (H.HERO_BASE_HP + H.HERO_HP_PER_LEVEL * (level - 1)) *
-    Math.pow(H.HERO_UPGRADE_HP_MULT, goldUpgrades) *
-    klass.hpMult;
+    Math.pow(H.HERO_UPGRADE_HP_MULT, goldUpgrades);
   let damage =
     (H.HERO_BASE_DAMAGE + H.HERO_DAMAGE_PER_LEVEL * (level - 1)) *
-    Math.pow(H.HERO_UPGRADE_DAMAGE_MULT, goldUpgrades) *
-    klass.damageMult;
-  let range = H.HERO_BASE_RANGE * klass.rangeMult;
-  let attackSpeed = klass.attackSpeedMult;
+    Math.pow(H.HERO_UPGRADE_DAMAGE_MULT, goldUpgrades);
+  let range = H.HERO_BASE_RANGE;
+  let attackSpeed = 1;
   let moveSpeed = H.HERO_SPEED;
   let regen = 0;
   let splashRadius = 0;
@@ -112,36 +106,10 @@ export class Hero {
   /** 아직 고르지 않은 증강 선택 횟수 */
   pendingAugmentPicks = 0;
 
-  /** 전직 전에는 null — Lv5에 고른다 */
-  classId: HeroClassId | null;
-
-  constructor(
-    classId: HeroClassId | null = null,
-    readonly altarDistance: number = ALTAR_PATH_DISTANCE,
-  ) {
-    this.classId = classId;
+  constructor(readonly altarDistance: number = ALTAR_PATH_DISTANCE) {
     this.distance = altarDistance;
     this.targetDistance = altarDistance;
     this.hp = this.stats.maxHp;
-  }
-
-  get klass() {
-    return this.classId ? HERO_CLASSES[this.classId] : NOVICE;
-  }
-
-  /** 전직 선택이 떠 있는가 — Lv5에 도달했는데 아직 타입이 없다 */
-  get pendingClassPick(): boolean {
-    return this.classId === null && this.level >= CLASS_PICK_LEVEL;
-  }
-
-  /** 전직한다. 체력은 최대치 증가분만큼 채워준다. */
-  promote(id: HeroClassId): void {
-    if (this.classId !== null) return;
-    const before = this.stats.maxHp;
-    this.classId = id;
-    const after = this.stats.maxHp;
-    if (after > before) this.hp += after - before;
-    else this.hp = Math.min(this.hp, after);
   }
 
   get x(): number {
@@ -153,7 +121,7 @@ export class Hero {
   }
 
   get stats(): HeroStats {
-    return computeStats(this.level, this.augments, this.goldUpgrades, this.classId);
+    return computeStats(this.level, this.augments, this.goldUpgrades);
   }
 
   /** 다음 강화 비용 */
@@ -265,17 +233,11 @@ export class Hero {
   }
 }
 
-/** 이 영웅에게 뜰 수 있는 증강인가 */
+/** 이 영웅에게 뜰 수 있는 증강인가 — 타입 제한은 없다, 스킬은 하나만 */
 export function augmentAllowed(hero: Hero, augment: H.Augment): boolean {
   if (hero.stacksOf(augment.id) >= augment.maxStacks) return false;
   if (H.requiresSplash(augment) && !hero.hasSplash) return false;
   if (!H.skillGateAllows(augment, hero.skillId)) return false;
-
-  const klass = hero.klass;
-  // 타입이 못 배우는 스킬은 아예 안 뜬다
-  if (augment.grantsSkill && !klass.skills.includes(augment.grantsSkill)) return false;
-  // 가중치 0인 계열도 안 뜬다 — 단, 스킬 개조는 스킬을 든 이상 계열과 무관하게 허용한다
-  if (!augment.skillMod && klass.kindWeights[augment.kind] <= 0) return false;
   return true;
 }
 
@@ -293,13 +255,18 @@ function weightedIndex(weights: readonly number[], rand: () => number): number {
 /**
  * 증강 카드 3장을 뽑는다. 카드마다 등급이 따로 굴려진다.
  *
- * 영웅 타입이 계열 가중치를 정하므로 뽑기가 빌드 방향으로 기운다.
- * 스킬 개조 증강은 이미 그 스킬을 든 영웅에게만 뜨므로 가중치를 1로 둔다.
+ * 가중치는 적응형이다 — 이미 든 계열일수록 더 잘 뜬다(ADAPTIVE_KIND_WEIGHT).
+ * 그래서 특화는 강제가 아니라 드래프트의 관성으로 만들어진다.
+ * 스킬 개조 증강은 이미 그 스킬을 든 영웅에게만 뜨므로 보유 스킬 계열만큼 기운다.
  */
 export function rollAugmentChoices(hero: Hero, rand: () => number): AugmentCard[] {
   const remaining = H.AUGMENTS.filter((augment) => augmentAllowed(hero, augment));
+  const heldByKind = new Map<H.AugmentKind, number>();
+  for (const c of hero.augments) {
+    heldByKind.set(c.augment.kind, (heldByKind.get(c.augment.kind) ?? 0) + 1);
+  }
   const weightOf = (augment: H.Augment): number =>
-    augment.skillMod ? 1 : hero.klass.kindWeights[augment.kind];
+    1 + H.ADAPTIVE_KIND_WEIGHT * (heldByKind.get(augment.kind) ?? 0);
 
   const cards: AugmentCard[] = [];
   while (cards.length < H.AUGMENT_CHOICES && remaining.length > 0) {

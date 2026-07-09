@@ -1,9 +1,7 @@
-// 원본: web/src/ui/ui.ts + web/index.html의 패널 구성 (+ main.ts의 타입 선택 오버레이)
+// 원본: web/src/ui/ui.ts + web/index.html의 패널 구성
 // ───────── OnGUI 즉시모드 HUD ─────────
 // 자원/라운드/점수 · 버튼(유닛 생성, 보스 Lv1~6, 프로브, 종족 업그레이드, 영웅 강화, 판매)
-// · 영웅 패널 · 증강 선택 오버레이 · 전직 오버레이(Lv5) · 게임오버.
-//
-// 웹은 시작할 때 영웅 타입을 골랐지만 여기서는 Lv5 전직 오버레이로 고른다. [Unity 신규]
+// · 영웅 패널 · 증강 선택 오버레이 · 게임오버.
 
 using GodTD.Core;
 using UnityEngine;
@@ -77,8 +75,7 @@ namespace GodTD.View
             DrawHeroPanel(game);
             DrawMessage(game);
 
-            if (game.ClassChoices.Count > 0) DrawClassOverlay(game);
-            else if (game.AugmentChoices.Count > 0) DrawAugmentOverlay(game);
+            if (game.AugmentChoices.Count > 0) DrawAugmentOverlay(game);
             if (game.Over) DrawGameOver(game);
         }
 
@@ -180,8 +177,7 @@ namespace GodTD.View
 
             var hero = game.Hero;
             var stats = hero.Stats;
-            string klassName = hero.ClassId.HasValue ? hero.Klass.Name : "견습 (Lv5 전직)";
-            GUILayout.Label($"<b>영웅 Lv{hero.Level}</b> · {klassName}", label);
+            GUILayout.Label($"<b>영웅 Lv{hero.Level}</b>", label);
 
             string hpText = hero.Alive
                 ? $"HP {Mathf.CeilToInt(hero.Hp)}/{stats.MaxHp:0}"
@@ -298,36 +294,6 @@ namespace GodTD.View
                     game.ChooseAugment(i);
             }
             GUI.backgroundColor = Color.white;
-        }
-
-        // ───────── 전직 오버레이 (Lv5) [Unity 신규] ─────────
-        void DrawClassOverlay(Game game)
-        {
-            DimScreen();
-            GUI.Label(new Rect(0, Screen.height / 2f - 160, Screen.width, 30),
-                $"<color=#b08cff>전직</color> — 영웅 Lv{HeroData.CLASS_CHANGE_LEVEL}, 타입을 고르세요", title);
-
-            for (int i = 0; i < game.ClassChoices.Count; i++)
-            {
-                var k = game.ClassChoices[i];
-                var hints = new System.Text.StringBuilder();
-                if (k.HpMult != 1f) hints.Append($"체력 ×{k.HpMult} · ");
-                if (k.DamageMult != 1f) hints.Append($"공격 ×{k.DamageMult} · ");
-                if (k.RangeMult != 1f) hints.Append($"사거리 ×{k.RangeMult} · ");
-                if (k.AttackSpeedMult != 1f) hints.Append($"공속 ×{k.AttackSpeedMult} · ");
-                if (hints.Length >= 3) hints.Length -= 3;
-
-                var skillNames = new System.Text.StringBuilder();
-                foreach (var sid in k.Skills)
-                {
-                    if (skillNames.Length > 0) skillNames.Append(" · ");
-                    skillNames.Append(Skills.SKILLS[sid].Name);
-                }
-
-                string text = $"<b>{k.Name}</b>\n\n{k.Blurb}\n\n{hints}\n\n배울 수 있는 스킬 — {skillNames}";
-                if (GUI.Button(OverlayCardRect(i, game.ClassChoices.Count), text, card))
-                    game.ChooseClass(i);
-            }
         }
 
         // ───────── 게임오버 ─────────

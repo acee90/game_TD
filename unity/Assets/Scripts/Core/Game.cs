@@ -1,9 +1,6 @@
 // 원본: web/src/game/game.ts
 // ───────── 게임 로직 (UnityEngine 없음 — 순수 C#, 테스트 가능) ─────────
 // 출처: docs/갓타워디펜스X_VZ056_맵파일분석_v1.0.md
-//
-// 웹 원본과 다른 점 하나: 영웅 타입은 시작 선택이 아니라 **Lv5 전직**이다.
-// 전직 선택지가 떠 있는 동안에도 증강과 똑같이 게임이 멈춘다. [Unity 신규]
 
 using System;
 using System.Collections.Generic;
@@ -44,8 +41,6 @@ namespace GodTD.Core
         public readonly Hero Hero;
         /// <summary>증강 선택지가 떠 있으면 게임이 멈춘다</summary>
         public List<AugmentCard> AugmentChoices = new List<AugmentCard>();
-        /// <summary>Lv5 전직 선택지. 떠 있으면 게임이 멈춘다. [Unity 신규]</summary>
-        public List<HeroClassDef> ClassChoices = new List<HeroClassDef>();
 
         public readonly List<Slot> Slots;
         public Slot Selected;
@@ -74,38 +69,14 @@ namespace GodTD.Core
             foreach (var p in MapData.SLOT_POS) Slots.Add(new Slot(p.X, p.Y));
         }
 
-        /// <summary>증강·전직 선택 중에는 시간이 흐르지 않는다</summary>
-        public bool Paused => AugmentChoices.Count > 0 || ClassChoices.Count > 0;
+        /// <summary>증강 선택 중에는 시간이 흐르지 않는다</summary>
+        public bool Paused => AugmentChoices.Count > 0;
 
         // ── 제단 · 영웅 ──
         /// <summary>제단은 게임 시작과 함께 십자 중앙 타일에 주어진다. 그 자리에는 타워를 놓을 수 없다.</summary>
         public Slot AltarSlot => Slots[HeroData.ALTAR_SLOT];
 
         public void MoveHero(float x, float y) => Hero.MoveTo(x, y);
-
-        // ── 전직 (Lv5) [Unity 신규] ──
-        void OfferClassIfPending()
-        {
-            if (!Hero.PendingClassPick || ClassChoices.Count > 0) return;
-            ClassChoices = new List<HeroClassDef>
-            {
-                HeroClasses.HERO_CLASSES[HeroClassId.Warrior],
-                HeroClasses.HERO_CLASSES[HeroClassId.Archer],
-                HeroClasses.HERO_CLASSES[HeroClassId.Mage],
-            };
-        }
-
-        /// <summary>전직 하나를 고른다. 남은 증강 선택이 있으면 이어서 띄운다.</summary>
-        public bool ChooseClass(int index)
-        {
-            if (index < 0 || index >= ClassChoices.Count) return false;
-            var def = ClassChoices[index];
-            Hero.ChooseClass(def.Id);
-            ClassChoices.Clear();
-            Message = $"[전직] {def.Name} — {def.Blurb}";
-            OfferAugmentIfPending();
-            return true;
-        }
 
         /// <summary>증강 하나를 고른다. 남은 선택이 있으면 다음 선택지를 띄운다.</summary>
         public bool ChooseAugment(int index)
@@ -405,7 +376,7 @@ namespace GodTD.Core
                 : HeroData.XP_PER_MOB);
         }
 
-        /// <summary>경험치는 타워가 잡든 영웅이 잡든 들어온다. 레벨업 시 전직·증강 선택을 띄운다.</summary>
+        /// <summary>경험치는 타워가 잡든 영웅이 잡든 들어온다. 레벨업 시 증강 선택을 띄운다.</summary>
         void GrantXp(int amount)
         {
             var hero = Hero;
@@ -415,8 +386,7 @@ namespace GodTD.Core
                 ScoreValue += Score.HERO_LEVEL_SCORE * levels;
                 Float(hero.X, hero.Y, $"Lv{hero.Level}!", "#ffd23f");
             }
-            OfferClassIfPending();
-            if (AugmentChoices.Count == 0 && ClassChoices.Count == 0) OfferAugmentIfPending();
+            if (AugmentChoices.Count == 0) OfferAugmentIfPending();
         }
 
         public void Float(float x, float y, string text, string color)
@@ -427,9 +397,8 @@ namespace GodTD.Core
         // ── 프레임 ──
         public void Update(float dt)
         {
-            // 밀린 전직·증강 선택이 있으면 먼저 띄운다 — 그래야 아래에서 일시정지된다
-            OfferClassIfPending();
-            if (AugmentChoices.Count == 0 && ClassChoices.Count == 0) OfferAugmentIfPending();
+            // 밀린 증강 선택이 있으면 먼저 띄운다 — 그래야 아래에서 일시정지된다
+            if (AugmentChoices.Count == 0) OfferAugmentIfPending();
             if (Over || Paused) return;
 
             if (BossCooldown > 0f) BossCooldown = MathF.Max(0f, BossCooldown - dt);

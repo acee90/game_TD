@@ -10,7 +10,6 @@ import { GOD_TIER, RACE_COLOR, tagLabel, type Race } from '../data/units';
 import type { AugmentCard } from '../data/hero';
 import { attackInterval, damage, isSplash, range, slowFactor, type UpgradeLevels } from './combat';
 import { bossKillMineral, killIncome } from './economy';
-import { type HeroClassId } from '../data/hero-class';
 import { Hero, rollAugmentChoices } from './hero';
 import { findMerge, unitFor, type Rand } from './merge';
 import type { Decoy, Enemy, EnemySpec, FloatText, Shot, Slot } from './types';
@@ -72,28 +71,14 @@ export class Game {
   /** 유닛 추첨용 난수. 테스트에서 결정적 함수를 주입한다. */
   private readonly rand: Rand;
 
-  /** heroClass를 주면 전직을 건너뛴다 — 시뮬레이션·테스트용 */
-  constructor(rand: Rand = Math.random, heroClass: HeroClassId | null = null) {
+  constructor(rand: Rand = Math.random) {
     this.rand = rand;
-    this.hero = new Hero(heroClass);
+    this.hero = new Hero();
   }
 
-  /** 전직 선택이 떠 있는가 (Lv5, 타입 미정) */
-  get pendingClassPick(): boolean {
-    return this.hero.pendingClassPick;
-  }
-
-  /** 전직한다. 선택 중에는 시간이 멈춰 있다. */
-  chooseClass(id: HeroClassId): boolean {
-    if (!this.pendingClassPick) return false;
-    this.hero.promote(id);
-    this.message = `[전직] ${this.hero.klass.name} — ${this.hero.klass.blurb}`;
-    return true;
-  }
-
-  /** 증강·전직 선택 중에는 시간이 흐르지 않는다 */
+  /** 증강 선택 중에는 시간이 흐르지 않는다 */
   get paused(): boolean {
-    return this.augmentChoices.length > 0 || this.pendingClassPick;
+    return this.augmentChoices.length > 0;
   }
 
   // ── 제단 · 영웅 ──

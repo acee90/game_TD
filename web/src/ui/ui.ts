@@ -36,8 +36,6 @@ export interface Elements {
   readonly heroXp: HTMLElement;
   readonly heroStats: HTMLElement;
   readonly heroUp: HTMLButtonElement;
-  readonly classOverlay: HTMLElement;
-  readonly classCards: HTMLElement;
   readonly heroAugs: HTMLElement;
   readonly skill: HTMLElement;
   readonly skillCd: HTMLElement;
@@ -82,8 +80,6 @@ export function bindElements(): Elements {
     heroXp: $('heroXp'),
     heroStats: $('heroStats'),
     heroUp: $('heroUp') as HTMLButtonElement,
-    classOverlay: $('classOverlay'),
-    classCards: $('classCards'),
     heroAugs: $('heroAugs'),
     skill: $('skill'),
     skillCd: $('skillCd'),
@@ -226,8 +222,6 @@ function refreshHero(el: Elements, game: Game): void {
 }
 
 function refreshAugmentOverlay(el: Elements, game: Game): void {
-  el.classOverlay.style.display = game.pendingClassPick ? 'flex' : 'none';
-
   if (game.augmentChoices.length === 0) {
     el.augOverlay.style.display = 'none';
     return;

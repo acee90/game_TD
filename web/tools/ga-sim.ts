@@ -11,15 +11,12 @@
 
 import { Game } from '../src/game/game';
 import * as B from '../src/data/balance';
-import { HERO_CLASS_IDS, type HeroClassId } from '../src/data/hero-class';
 import type { AugmentCard } from '../src/data/hero';
 import type { Race } from '../src/game/types';
 
 // ── 유전자 ──
 // 연속값은 [0,1]로 정규화해 두고 쓰는 곳에서 스케일한다.
 interface Genome {
-  /** 영웅 타입 */
-  cls: HeroClassId;
   /** 프로브(가스 채취) 목표 기수 0~8. 0이면 가스 경제를 버린다 */
   probeTarget: number;
   /** 영웅 강화 전에 남겨둘 미네랄 (0~400). 낮을수록 영웅 몰빵 */
@@ -88,7 +85,7 @@ const MAX_TICKS = 60 * 60 * 45; // 45분 상한 (≈ R122)
 const DECIDE_EVERY = 30; // 0.5초마다 의사결정
 
 function runGame(g: Genome, seed: number): RunResult {
-  const game = new Game(lcg(seed), g.cls);
+  const game = new Game(lcg(seed));
   let lastRound = 0;
 
   for (let t = 0; t < MAX_TICKS && !game.over; t++) {
@@ -143,7 +140,6 @@ function fitness(g: Genome, seeds: number[]): number {
 // ── GA 연산 ──
 function randomGenome(r: () => number): Genome {
   return {
-    cls: HERO_CLASS_IDS[Math.floor(r() * 3)],
     probeTarget: Math.floor(r() * (B.PROBE_MAX + 1)),
     heroReserve: Math.floor(r() * 400),
     focus: r(),
@@ -156,7 +152,6 @@ function randomGenome(r: () => number): Genome {
 function crossover(a: Genome, b: Genome, r: () => number): Genome {
   const pick = <K extends keyof Genome>(k: K): Genome[K] => (r() < 0.5 ? a[k] : b[k]);
   return {
-    cls: pick('cls'),
     probeTarget: pick('probeTarget'),
     heroReserve: pick('heroReserve'),
     focus: pick('focus'),
@@ -169,7 +164,6 @@ function crossover(a: Genome, b: Genome, r: () => number): Genome {
 function mutate(g: Genome, r: () => number): Genome {
   const m = { ...g };
   const gauss = () => (r() + r() + r() - 1.5) * 0.4; // 대략 N(0, 0.35)
-  if (r() < 0.25) m.cls = HERO_CLASS_IDS[Math.floor(r() * 3)];
   if (r() < 0.25) m.probeTarget = clamp(m.probeTarget + Math.round(gauss() * 8), 0, B.PROBE_MAX);
   if (r() < 0.25) m.heroReserve = clamp(Math.round(m.heroReserve + gauss() * 400), 0, 400);
   if (r() < 0.25) m.focus = clamp(m.focus + gauss(), 0, 1);
@@ -192,28 +186,24 @@ function tournament(pop: Genome[], fits: number[], r: () => number): Genome {
 const ARCHETYPES: Record<string, Genome> = {
   // 축 하나씩만 다르게 — 프로브를 4로 고정해 가스 경제 교란을 없앤다
   '안정형(실버만)': {
-    cls: 'archer', probeTarget: 4, heroReserve: 150,
+    probeTarget: 4, heroReserve: 150,
     focus: 1, rarityGreed: 0, bossBack: 1, bossSafety: 10,
   },
   '탐욕형(플래티넘 우선)': {
-    cls: 'archer', probeTarget: 4, heroReserve: 150,
+    probeTarget: 4, heroReserve: 150,
     focus: 1, rarityGreed: 1, bossBack: 1, bossSafety: 10,
   },
   '타워몰빵(영웅 강화 없음)': {
-    cls: 'archer', probeTarget: 4, heroReserve: 400,
+    probeTarget: 4, heroReserve: 400,
     focus: 1, rarityGreed: 0.5, bossBack: 1, bossSafety: 10,
   },
   '영웅몰빵(예비금 0)': {
-    cls: 'archer', probeTarget: 4, heroReserve: 0,
+    probeTarget: 4, heroReserve: 0,
     focus: 1, rarityGreed: 0.5, bossBack: 1, bossSafety: 10,
   },
   '분산증강(계열 안 몰기)': {
-    cls: 'archer', probeTarget: 4, heroReserve: 150,
+    probeTarget: 4, heroReserve: 150,
     focus: 0, rarityGreed: 0.5, bossBack: 1, bossSafety: 10,
-  },
-  '마법사 균형': {
-    cls: 'mage', probeTarget: 4, heroReserve: 150,
-    focus: 1, rarityGreed: 0.5, bossBack: 1, bossSafety: 10,
   },
 };
 
@@ -228,7 +218,7 @@ const gaRand = lcg(777);
 
 function fmt(g: Genome): string {
   return (
-    `${g.cls} 프로브${g.probeTarget} 예비금${g.heroReserve} ` +
+    `프로브${g.probeTarget} 예비금${g.heroReserve} ` +
     `몰기${g.focus.toFixed(2)} 탐욕${g.rarityGreed.toFixed(2)} ` +
     `보스-${g.bossBack} 안전${g.bossSafety}`
   );

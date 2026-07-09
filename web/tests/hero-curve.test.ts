@@ -14,9 +14,8 @@ const augment = (id: string) => AUGMENTS.find((a) => a.id === id)!;
 /** 실버 등급 카드 — 등급 배수 1이라 원래 효과 그대로 */
 const card = (id: string) => H.makeCard(augment(id), 'silver');
 
-// 전직(Lv5) 이후를 다루는 기준선이므로 전사를 명시한다 — 기본값은 전직 전 '견습'이다
 const heroDps = (level: number, ids: string[] = []): number => {
-  const stats = computeStats(level, ids.map(card), 0, 'warrior');
+  const stats = computeStats(level, ids.map(card));
   return stats.damage / stats.attackInterval;
 };
 
@@ -30,10 +29,10 @@ const GOD_TOWER_DPS = (() => {
 /** 공격 계열 3개를 몰았을 때 — 완력은 최대 3스택이라 이게 최고 조합이다 */
 const ATTACK_THREE = ['might', 'might', 'might'];
 
-/** 궁수가 자연스럽게 쥐는 원거리 3종 — 저격 태세가 터진다 */
+/** 원거리 계열을 몰았을 때 — 저격 태세가 터진다 */
 const ARCHER_THREE = ['marksman', 'marksman', 'marksman'];
 const archerDps = (level: number, ids: string[], goldUpgrades = 0): number => {
-  const stats = computeStats(level, ids.map(card), goldUpgrades, 'archer');
+  const stats = computeStats(level, ids.map(card), goldUpgrades);
   return stats.damage / stats.attackInterval;
 };
 
