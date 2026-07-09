@@ -4,7 +4,7 @@
 
 import { ALTAR_PATH_DISTANCE, PATH_LENGTH, nearestPathDistance, pathPos } from '../core/map';
 import * as H from '../data/hero';
-import type { Augment, AugmentEffect } from '../data/hero';
+import type { AugmentCard, AugmentEffect } from '../data/hero';
 
 export interface HeroStats {
   readonly maxHp: number;
@@ -21,8 +21,8 @@ export interface HeroStats {
   readonly towerDamageMult: number;
 }
 
-/** 증강 스택을 접어서 최종 스탯을 만든다. 순수 함수 — 테스트하기 쉽다. */
-export function computeStats(level: number, augments: readonly Augment[]): HeroStats {
+/** 증강 카드를 접어서 최종 스탯을 만든다. 순수 함수 — 테스트하기 쉽다. */
+export function computeStats(level: number, cards: readonly AugmentCard[]): HeroStats {
   let maxHp = H.HERO_BASE_HP * Math.pow(H.HERO_HP_GROWTH, level - 1);
   let damage = H.HERO_BASE_DAMAGE * Math.pow(H.HERO_DAMAGE_GROWTH, level - 1);
   let range = H.HERO_BASE_RANGE;
@@ -37,8 +37,12 @@ export function computeStats(level: number, augments: readonly Augment[]): HeroS
   // 피해 감소는 곱연산으로 쌓아 100%에 도달하지 않게 한다
   let damageTaken = 1;
 
-  for (const augment of augments) {
-    const e: AugmentEffect = augment.effect;
+  const effects: AugmentEffect[] = [
+    ...cards.map((c) => c.effect),
+    ...H.activeSynergies(cards).map((s) => s.effect),
+  ];
+
+  for (const e of effects) {
     if (e.hpMult) maxHp *= e.hpMult;
     if (e.damageMult) damage *= e.damageMult;
     if (e.rangeMult) range *= e.rangeMult;
@@ -84,7 +88,7 @@ export class Hero {
   respawnTimer = 0;
   attackCooldown = 0;
 
-  readonly augments: Augment[] = [];
+  readonly augments: AugmentCard[] = [];
   /** 아직 고르지 않은 증강 선택 횟수 */
   pendingAugmentPicks = 0;
 
@@ -112,7 +116,7 @@ export class Hero {
 
   /** 증강을 몇 개 쌓았는지 */
   stacksOf(id: string): number {
-    return this.augments.filter((a) => a.id === id).length;
+    return this.augments.filter((c) => c.augment.id === id).length;
   }
 
   get hasSplash(): boolean {
@@ -138,7 +142,7 @@ export class Hero {
       this.xp -= this.xpNeeded;
       this.level++;
       gained++;
-      if (this.level % H.AUGMENT_EVERY === 0) this.pendingAugmentPicks++;
+      if (H.grantsAugment(this.level)) this.pendingAugmentPicks++;
     }
     if (gained > 0) this.hp = this.stats.maxHp; // 레벨업 시 완전 회복
     return gained;
@@ -154,8 +158,8 @@ export class Hero {
     }
   }
 
-  addAugment(augment: Augment): void {
-    this.augments.push(augment);
+  addAugment(card: AugmentCard): void {
+    this.augments.push(card);
     if (this.pendingAugmentPicks > 0) this.pendingAugmentPicks--;
     this.hp = Math.min(this.stats.maxHp, this.hp + (this.stats.maxHp - this.hp) * 0.5);
   }
@@ -190,21 +194,22 @@ export class Hero {
 }
 
 /**
- * 증강 선택지 3개를 뽑는다. 최대 스택에 도달한 것과, 선행 조건을 못 채운 것은 제외한다.
+ * 증강 카드 3장을 뽑는다. 카드마다 등급이 따로 굴려진다.
+ * 최대 스택에 도달한 것과 선행 조건을 못 채운 것은 제외한다.
  */
-export function rollAugmentChoices(hero: Hero, rand: () => number): Augment[] {
+export function rollAugmentChoices(hero: Hero, rand: () => number): AugmentCard[] {
   const pool = H.AUGMENTS.filter((augment) => {
     if (hero.stacksOf(augment.id) >= augment.maxStacks) return false;
     if (H.requiresSplash(augment) && !hero.hasSplash) return false;
     return true;
   });
 
-  const choices: Augment[] = [];
+  const cards: AugmentCard[] = [];
   const remaining = [...pool];
-  while (choices.length < H.AUGMENT_CHOICES && remaining.length > 0) {
+  while (cards.length < H.AUGMENT_CHOICES && remaining.length > 0) {
     const index = Math.min(remaining.length - 1, Math.floor(rand() * remaining.length));
-    choices.push(remaining[index]);
+    cards.push(H.makeCard(remaining[index], H.rollRarity(rand)));
     remaining.splice(index, 1);
   }
-  return choices;
+  return cards;
 }

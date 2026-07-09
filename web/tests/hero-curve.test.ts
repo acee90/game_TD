@@ -11,9 +11,11 @@ import { attackInterval, damage } from '../src/game/combat';
 import { TIER_POOLS } from '../src/data/units';
 
 const augment = (id: string) => AUGMENTS.find((a) => a.id === id)!;
+/** 실버 등급 카드 — 등급 배수 1이라 원래 효과 그대로 */
+const card = (id: string) => H.makeCard(augment(id), 'silver');
 
 const heroDps = (level: number, ids: string[] = []): number => {
-  const stats = computeStats(level, ids.map(augment));
+  const stats = computeStats(level, ids.map(card));
   return stats.damage / stats.attackInterval;
 };
 
@@ -73,13 +75,13 @@ describe('초반 레벨업 속도 — 라운드당 한 레벨 남짓', () => {
     expect(levelAtRound(2)).toBeLessThanOrEqual(3);
   });
 
-  test('R5에 첫 증강(Lv10)을 못 받는다', () => {
-    expect(levelAtRound(5)).toBeLessThan(H.AUGMENT_EVERY);
+  test('R5에는 아직 첫 증강을 못 받는다', () => {
+    expect(levelAtRound(5)).toBeLessThan(H.AUGMENT_LEVELS[0]);
   });
 
   test('R10 언저리에 첫 증강이 온다', () => {
-    expect(levelAtRound(10)).toBeGreaterThanOrEqual(H.AUGMENT_EVERY);
-    expect(levelAtRound(10)).toBeLessThan(H.AUGMENT_EVERY * 2);
+    expect(levelAtRound(10)).toBeGreaterThanOrEqual(H.AUGMENT_LEVELS[0]);
+    expect(levelAtRound(10)).toBeLessThan(H.AUGMENT_LEVELS[1]);
   });
 });
 
@@ -102,24 +104,35 @@ describe('레벨 30 도달 시점 — R30~35', () => {
   });
 });
 
-describe('레벨 30에 증강 3개', () => {
-  test('증강은 10레벨마다 주어진다', () => {
-    expect(H.AUGMENT_EVERY).toBe(10);
+describe('증강 스케줄 — 80/20', () => {
+  test('앞의 네 개는 진행률 절반 안에 들어온다', () => {
+    // 네 번째 증강 레벨이 30레벨 언저리 — 대부분의 판이 도달한다
+    expect(H.AUGMENT_LEVELS[3]).toBeLessThanOrEqual(35);
   });
 
-  test('30레벨까지 정확히 3번 고른다', () => {
+  test('레벨이 오를수록 간격이 벌어진다 — 뒤로 갈수록 귀해진다', () => {
+    const gaps = H.AUGMENT_LEVELS.slice(1).map((lv, i) => lv - H.AUGMENT_LEVELS[i]);
+    for (let i = 0; i < gaps.length - 1; i++) {
+      expect(gaps[i + 1]).toBeGreaterThanOrEqual(gaps[i]);
+    }
+  });
+
+  test('30레벨이면 증강 세 개를 쥔다', () => {
+    expect(H.augmentsByLevel(30)).toBe(3);
+  });
+
+  test('실제로 세 번 고르게 된다', () => {
     const hero = new Hero();
     let picks = 0;
     while (hero.level < 30) {
       hero.gainXp(hero.xpNeeded);
       while (hero.pendingAugmentPicks > 0) {
-        hero.addAugment(augment('might'));
+        hero.addAugment(card('might'));
         picks++;
       }
     }
     expect(hero.level).toBe(30);
     expect(picks).toBe(3);
-    expect(hero.augments).toHaveLength(3);
   });
 });
 

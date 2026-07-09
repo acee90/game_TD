@@ -62,7 +62,12 @@
   .augcard{background:var(--panel);border:1px solid var(--line);border-radius:10px;
            padding:12px 14px;text-align:left;cursor:pointer;font-family:inherit;color:var(--text)}
   .augcard:hover{border-color:var(--gold)}
-  .augcard .k{font-size:10.5px;font-weight:700;letter-spacing:.03em}
+  .augcard .k{font-size:10.5px;font-weight:700;letter-spacing:.03em;
+              display:flex;justify-content:space-between}
+  .augcard .cost{font-size:11px;margin-top:6px;color:var(--danger);font-weight:600}
+  .augcard .cost.safe{color:var(--dim);font-weight:400}
+  .syn{padding:1px 7px;border-radius:9px;font-size:10.5px;font-weight:700;
+       background:#3a2f5c;color:#e8d9ff}
   .augcard .n{font-size:15px;font-weight:700;margin:3px 0 2px}
   .augcard .d{font-size:12px;color:var(--dim)}
   #scorebar{display:flex;align-items:baseline;gap:8px;justify-content:center;

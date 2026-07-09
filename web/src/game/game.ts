@@ -6,7 +6,7 @@ import * as H from '../data/hero';
 import * as S from '../data/score';
 import { PATH_LENGTH, SLOT_POS, pathPos } from '../core/map';
 import { GOD_TIER, RACE_COLOR, tagLabel, type Race } from '../data/units';
-import type { Augment } from '../data/hero';
+import type { AugmentCard } from '../data/hero';
 import { attackInterval, damage, isSplash, range, slowFactor, type UpgradeLevels } from './combat';
 import { bossKillMineral, killIncome } from './economy';
 import { Hero, rollAugmentChoices } from './hero';
@@ -40,7 +40,13 @@ export class Game {
   /** 제단과 영웅은 시작부터 있다 */
   readonly hero: Hero;
   /** 증강 선택지가 떠 있으면 게임이 멈춘다 */
-  augmentChoices: Augment[] = [];
+  augmentChoices: AugmentCard[] = [];
+
+  /**
+   * 높은 등급 증강을 고른 대가. 몹 체력에 영구히 곱해진다.
+   * 지금 세지느냐, 나중을 지키느냐 — 매 선택이 도박이다.
+   */
+  enemyHpMultiplier = 1;
 
   slots: Slot[] = SLOT_POS.map(([x, y]) => ({ x, y, tower: null }));
   selected: Slot | null = null;
@@ -79,12 +85,19 @@ export class Game {
 
   /** 증강 하나를 고른다. 남은 선택이 있으면 다음 선택지를 띄운다. */
   chooseAugment(index: number): boolean {
-    const augment = this.augmentChoices[index];
-    if (!augment) return false;
+    const card = this.augmentChoices[index];
+    if (!card) return false;
 
-    this.hero.addAugment(augment);
+    const rarity = H.RARITIES[card.rarity];
+    this.hero.addAugment(card);
+    this.enemyHpMultiplier *= rarity.enemyHpMult;
     this.augmentChoices = [];
-    this.message = `증강 획득 — ${augment.name}: ${augment.description}`;
+
+    const cost =
+      rarity.enemyHpMult > 1
+        ? ` — 몹 체력 +${Math.round((rarity.enemyHpMult - 1) * 100)}% (누적 ×${this.enemyHpMultiplier.toFixed(2)})`
+        : '';
+    this.message = `[${rarity.label}] ${card.augment.name}: ${card.augment.description}${cost}`;
     this.offerAugmentIfPending();
     return true;
   }
@@ -266,7 +279,7 @@ export class Game {
     }
 
     this.round++;
-    const hp = B.enemyHP(this.round);
+    const hp = B.enemyHP(this.round) * this.enemyHpMultiplier;
     const armor = B.enemyArmor(this.round);
 
     for (let i = 0; i < B.enemyCount(this.round); i++) {

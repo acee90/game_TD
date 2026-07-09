@@ -7,8 +7,10 @@ import { Game } from '../src/game/game';
 import { Hero, computeStats, rollAugmentChoices } from '../src/game/hero';
 
 const augment = (id: string) => AUGMENTS.find((a) => a.id === id)!;
+/** 실버 등급 카드 — 등급 배수 1이라 원래 효과 그대로 */
+const card = (id: string) => H.makeCard(augment(id), 'silver');
 const dps = (level: number, ids: string[] = []): number => {
-  const stats = computeStats(level, ids.map(augment));
+  const stats = computeStats(level, ids.map(card));
   return stats.damage / stats.attackInterval;
 };
 
@@ -249,18 +251,31 @@ describe('사망과 부활 — 패널티는 대기시간뿐', () => {
 
   test('불사조 증강은 부활 대기를 줄인다', () => {
     const base = computeStats(1, []);
-    const fast = computeStats(1, [augment('phoenix')]);
+    const fast = computeStats(1, [card('phoenix')]);
     expect(fast.respawnSeconds).toBeLessThan(base.respawnSeconds);
   });
 });
 
 describe('증강 — 선택 동안 게임이 멈춘다', () => {
-  test('AUGMENT_EVERY 레벨마다 선택이 뜬다', () => {
+  test('스케줄에 적힌 레벨에서 선택이 뜬다', () => {
+    const first = H.AUGMENT_LEVELS[0];
     const hero = new Hero();
-    while (hero.level < H.AUGMENT_EVERY) hero.gainXp(hero.xpNeeded);
+    while (hero.level < first) hero.gainXp(hero.xpNeeded);
 
-    expect(hero.level).toBe(H.AUGMENT_EVERY);
+    expect(hero.level).toBe(first);
     expect(hero.pendingAugmentPicks).toBe(1);
+  });
+
+  test('스케줄에 없는 레벨에서는 안 뜬다', () => {
+    const hero = new Hero();
+    while (hero.level < H.AUGMENT_LEVELS[0] - 1) hero.gainXp(hero.xpNeeded);
+    expect(hero.pendingAugmentPicks).toBe(0);
+  });
+
+  test('스케줄을 소진하면 일정 간격으로 계속 준다', () => {
+    const last = H.AUGMENT_LEVELS[H.AUGMENT_LEVELS.length - 1];
+    expect(H.grantsAugment(last + H.AUGMENT_TAIL_EVERY)).toBe(true);
+    expect(H.grantsAugment(last + 1)).toBe(false);
   });
 
   test('선택지가 떠 있으면 update가 시간을 흘리지 않는다', () => {
@@ -301,17 +316,17 @@ describe('증강 — 선택 동안 게임이 멈춘다', () => {
   test('최대 스택에 도달한 증강은 다시 나오지 않는다', () => {
     const hero = new Hero();
     const swift = augment('swift');
-    for (let i = 0; i < swift.maxStacks; i++) hero.addAugment(swift);
+    for (let i = 0; i < swift.maxStacks; i++) hero.addAugment(card('swift'));
 
     const choices = rollAugmentChoices(hero, () => 0);
-    expect(choices.every((a) => a.id !== 'swift')).toBe(true);
+    expect(choices.every((c) => c.augment.id !== 'swift')).toBe(true);
   });
 
   test('대폭발은 충격파를 먼저 잡아야 나온다', () => {
     const hero = new Hero();
-    expect(rollAugmentChoices(hero, () => 0).every((a) => a.id !== 'novabig')).toBe(true);
+    expect(rollAugmentChoices(hero, () => 0).every((c) => c.augment.id !== 'novabig')).toBe(true);
 
-    hero.addAugment(augment('novasmall'));
+    hero.addAugment(card('novasmall'));
     expect(hero.hasSplash).toBe(true);
 
     const pool = AUGMENTS.filter((a) => a.id === 'novabig');
@@ -322,14 +337,14 @@ describe('증강 — 선택 동안 게임이 멈춘다', () => {
     const hero = new Hero();
     let call = 0;
     const choices = rollAugmentChoices(hero, () => (call++ % 7) / 7);
-    const ids = new Set(choices.map((a) => a.id));
+    const ids = new Set(choices.map((c) => c.augment.id));
     expect(ids.size).toBe(choices.length);
   });
 });
 
 describe('증강 효과 — 곱연산으로 쌓여 먼치킨이 된다', () => {
   test('피해 감소는 곱연산이라 100%에 도달하지 않는다', () => {
-    const plating = augment('plating');
+    const plating = card('plating');
     const stats = computeStats(1, [plating, plating]);
     expect(stats.damageReduction).toBeCloseTo(1 - 0.8 * 0.8, 5);
     expect(stats.damageReduction).toBeLessThan(1);
@@ -346,12 +361,12 @@ describe('증강 효과 — 곱연산으로 쌓여 먼치킨이 된다', () => {
   });
 
   test('광역 증강은 반경을 더한다', () => {
-    const stats = computeStats(1, [augment('novasmall'), augment('novabig')]);
+    const stats = computeStats(1, [card('novasmall'), card('novabig')]);
     expect(stats.splashRadius).toBe(45 + 40);
   });
 
   test('전쟁군주는 타워를 강화한다', () => {
-    const stats = computeStats(1, [augment('warlord'), augment('warlord')]);
+    const stats = computeStats(1, [card('warlord'), card('warlord')]);
     expect(stats.towerDamageMult).toBeCloseTo(1.12 * 1.12, 5);
   });
 });
@@ -409,7 +424,7 @@ describe('적이 영웅을 때린다', () => {
 
 describe('빌드 정체성 — 탱커는 버티고 원거리는 때린다', () => {
   const aug = (id: string) => AUGMENTS.find((a) => a.id === id)!;
-  const build = (ids: string[]) => computeStats(30, ids.map(aug));
+  const build = (ids: string[]) => computeStats(30, ids.map((id) => H.makeCard(aug(id), 'silver')));
 
   const TANK = ['bulwark', 'bulwark', 'plating'];
   const RANGED = ['might', 'might', 'might'];
@@ -419,7 +434,7 @@ describe('빌드 정체성 — 탱커는 버티고 원거리는 때린다', () =
 
   /** 몹 10기가 붙었을 때 버티는 시간 (그 라운드의 전형적 레벨 기준) */
   const blockSeconds = (ids: string[], round: number): number => {
-    const s = computeStats(typicalLevel(round), ids.map(aug));
+    const s = computeStats(typicalLevel(round), ids.map((id) => H.makeCard(aug(id), 'silver')));
     const effectiveHp = s.maxHp / (1 - s.damageReduction);
     return effectiveHp / (10 * H.enemyDamage(round));
   };
@@ -473,7 +488,7 @@ describe('탐욕 증강 — 처치당 미네랄', () => {
 
   test('탐욕을 쌓으면 처치당 미네랄이 붙는다', () => {
     const game = new Game();
-    game.hero.addAugment(augment('greed'));
+    game.hero.addAugment(card('greed'));
     const mineral = game.mineral;
 
     game.enemies.push({
@@ -483,6 +498,101 @@ describe('탐욕 증강 — 처치당 미네랄', () => {
     game.update(0.016);
 
     expect(game.mineral).toBe(mineral + 1);
+  });
+});
+
+describe('등급 — 세지는 대신 몹이 강해진다', () => {
+  test('등급이 높을수록 효과가 크다', () => {
+    const might = augment('might');
+    const silver = H.makeCard(might, 'silver');
+    const gold = H.makeCard(might, 'gold');
+    const platinum = H.makeCard(might, 'platinum');
+
+    expect(silver.effect.damageMult).toBe(might.effect.damageMult);
+    expect(gold.effect.damageMult!).toBeGreaterThan(silver.effect.damageMult!);
+    expect(platinum.effect.damageMult!).toBeGreaterThan(gold.effect.damageMult!);
+  });
+
+  test('실버는 대가가 없고, 위 등급은 몹 체력을 올린다', () => {
+    expect(H.RARITIES.silver.enemyHpMult).toBe(1);
+    expect(H.RARITIES.gold.enemyHpMult).toBeGreaterThan(1);
+    expect(H.RARITIES.platinum.enemyHpMult).toBeGreaterThan(H.RARITIES.gold.enemyHpMult);
+  });
+
+  test('높은 등급을 고르면 몹 체력 배수가 누적된다', () => {
+    const game = new Game();
+    expect(game.enemyHpMultiplier).toBe(1);
+
+    game.augmentChoices = [H.makeCard(augment('might'), 'platinum')];
+    game.chooseAugment(0);
+    expect(game.enemyHpMultiplier).toBeCloseTo(H.RARITIES.platinum.enemyHpMult, 5);
+
+    game.augmentChoices = [H.makeCard(augment('rapid'), 'gold')];
+    game.chooseAugment(0);
+    expect(game.enemyHpMultiplier).toBeCloseTo(
+      H.RARITIES.platinum.enemyHpMult * H.RARITIES.gold.enemyHpMult, 5);
+  });
+
+  test('실버만 고르면 몹이 강해지지 않는다', () => {
+    const game = new Game();
+    game.augmentChoices = [H.makeCard(augment('might'), 'silver')];
+    game.chooseAugment(0);
+    expect(game.enemyHpMultiplier).toBe(1);
+  });
+
+  test('피해 감소는 등급으로도 60%를 넘지 못한다', () => {
+    const platinum = H.makeCard(augment('plating'), 'platinum');
+    expect(platinum.effect.damageReduction!).toBeLessThanOrEqual(0.6);
+  });
+
+  test('등급 뽑기는 가중치를 따른다 — 실버가 가장 흔하다', () => {
+    let seed = 1;
+    const rand = () => {
+      seed = (seed * 1664525 + 1013904223) >>> 0;
+      return seed / 4294967296;
+    };
+    const counts = { silver: 0, gold: 0, platinum: 0 };
+    for (let i = 0; i < 3000; i++) counts[H.rollRarity(rand)]++;
+
+    expect(counts.silver).toBeGreaterThan(counts.gold);
+    expect(counts.gold).toBeGreaterThan(counts.platinum);
+  });
+});
+
+describe('특화 시너지 — 같은 계열을 모으면 터진다', () => {
+  const dps = (ids: string[]) => {
+    const s = computeStats(30, ids.map((id) => H.makeCard(augment(id), 'silver')));
+    return s.damage / s.attackInterval;
+  };
+
+  test('두 개까지는 시너지가 없다', () => {
+    expect(H.activeSynergies([augment('might'), augment('vigor')].map((a) => H.makeCard(a, 'silver'))))
+      .toHaveLength(0);
+  });
+
+  test('같은 계열 세 개면 특화가 붙는다', () => {
+    const cards = ['might', 'vigor', 'swift'].map((id) => H.makeCard(augment(id), 'silver'));
+    const synergies = H.activeSynergies(cards);
+    expect(synergies).toHaveLength(1);
+    expect(synergies[0]).toBe(H.SYNERGIES.stat.specialist);
+  });
+
+  test('다섯 개면 대특화까지 붙는다', () => {
+    const cards = ['might', 'might', 'might', 'vigor', 'vigor'].map((id) => H.makeCard(augment(id), 'silver'));
+    const synergies = H.activeSynergies(cards);
+    expect(synergies).toContain(H.SYNERGIES.stat.specialist);
+    expect(synergies).toContain(H.SYNERGIES.stat.master);
+  });
+
+  test('세 번째를 같은 계열로 고르면 눈에 띄게 세진다', () => {
+    const scattered = dps(['might', 'might', 'longbow']); // stat 2 + ranged 1 — 시너지 없음
+    const focused = dps(['might', 'might', 'vigor']); // stat 3 — 특화 발동
+    expect(focused).toBeGreaterThan(scattered);
+  });
+
+  test('계열을 흩으면 시너지가 없다', () => {
+    const cards = ['bulwark', 'longbow', 'novasmall'].map((id) => H.makeCard(augment(id), 'silver'));
+    expect(H.activeSynergies(cards)).toHaveLength(0);
   });
 });
 

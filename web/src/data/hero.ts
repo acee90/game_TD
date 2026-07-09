@@ -80,11 +80,32 @@ export const bossDamage = (level: number, round: number): number =>
   enemyDamage(round) * (1.5 + 0.5 * level);
 
 /**
- * 이 레벨마다 증강을 고른다. 10레벨 간격이면 30레벨에 정확히 3개를 쥔다.
- * 증강 하나하나가 무거워야 조합 시너지가 도파민이 된다.
+ * 증강을 받는 영웅 레벨.
+ *
+ * 10레벨 고정 간격이면 증강이 게임 앞쪽에 몰린다. 측정해 보니 3번째 증강이 진행률 47%,
+ * 4번째가 61%에 왔고 median 4개에서 멈췄다. 뒤쪽 40%가 아무 선택 없는 구간이 됐다.
+ *
+ * 그래서 레벨 간격을 벌려가며 게임 전체에 고르게 뿌린다. 80/20 기준으로,
+ * **앞의 네 개는 80% 이상의 판이 받고**(핵심 빌드가 완성된다), 뒤의 두 개는 오래 버틴
+ * 판만 받는 보상이다. 소진 후에는 AUGMENT_TAIL_EVERY 레벨마다 계속 준다.
  */
-export const AUGMENT_EVERY = 10;
+export const AUGMENT_LEVELS: readonly number[] = [9, 16, 24, 32, 41, 51];
+export const AUGMENT_TAIL_EVERY = 12;
 export const AUGMENT_CHOICES = 3;
+
+/** 이 레벨에 도달하면 증강을 받는가 */
+export function grantsAugment(level: number): boolean {
+  if (AUGMENT_LEVELS.includes(level)) return true;
+  const last = AUGMENT_LEVELS[AUGMENT_LEVELS.length - 1];
+  return level > last && (level - last) % AUGMENT_TAIL_EVERY === 0;
+}
+
+/** `level`까지 올렸을 때 받은 증강 개수 */
+export function augmentsByLevel(level: number): number {
+  let count = 0;
+  for (let l = 2; l <= level; l++) if (grantsAugment(l)) count++;
+  return count;
+}
 
 export type AugmentKind = 'tank' | 'ranged' | 'mage' | 'stat' | 'utility';
 
@@ -135,6 +156,83 @@ export interface Augment {
   readonly effect: AugmentEffect;
 }
 
+// ───────── 등급 ─────────
+// 증강 카드마다 등급이 무작위로 붙는다. 등급이 높으면 효과가 커지는 대신
+// **몹이 영구히 강해진다.** 지금 세지느냐, 나중을 지키느냐 — 매 선택이 도박이 된다.
+
+export type Rarity = 'silver' | 'gold' | 'platinum';
+
+export interface RarityDef {
+  readonly label: string;
+  readonly color: string;
+  /** 증강 효과의 배수. 1보다 큰 부분만 증폭한다(예: 1.3배 → 1.6배). */
+  readonly power: number;
+  /** 이 등급을 고르면 몹 체력이 영구히 이만큼 곱해진다 */
+  readonly enemyHpMult: number;
+  /** 뽑기 가중치 */
+  readonly weight: number;
+}
+
+export const RARITIES: Record<Rarity, RarityDef> = {
+  silver: { label: '실버', color: '#9aa2c0', power: 1, enemyHpMult: 1, weight: 55 },
+  gold: { label: '골드', color: '#ffd23f', power: 1.7, enemyHpMult: 1.07, weight: 33 },
+  platinum: { label: '플래티넘', color: '#7ce7ff', power: 2.6, enemyHpMult: 1.16, weight: 12 },
+};
+
+export const RARITY_ORDER: readonly Rarity[] = ['silver', 'gold', 'platinum'];
+
+/** 가중치에 따라 등급 하나를 뽑는다 */
+export function rollRarity(rand: () => number): Rarity {
+  const total = RARITY_ORDER.reduce((sum, r) => sum + RARITIES[r].weight, 0);
+  let roll = rand() * total;
+  for (const rarity of RARITY_ORDER) {
+    roll -= RARITIES[rarity].weight;
+    if (roll < 0) return rarity;
+  }
+  return 'silver';
+}
+
+/**
+ * 등급에 따라 효과를 키운다.
+ * 배수형(1.3 → 1.51)은 1을 넘는 부분만, 가산형(regen 6 → 10)은 값 자체를 키운다.
+ * 피해 감소는 100%에 닿지 않게 상한을 둔다.
+ */
+export function scaleEffect(effect: AugmentEffect, power: number): AugmentEffect {
+  if (power === 1) return effect;
+  const mult = (v: number | undefined) => (v === undefined ? undefined : 1 + (v - 1) * power);
+  const add = (v: number | undefined) => (v === undefined ? undefined : v * power);
+  return {
+    hpMult: mult(effect.hpMult),
+    damageMult: mult(effect.damageMult),
+    rangeMult: mult(effect.rangeMult),
+    attackSpeedMult: mult(effect.attackSpeedMult),
+    moveSpeedMult: mult(effect.moveSpeedMult),
+    towerDamageMult: mult(effect.towerDamageMult),
+    regen: add(effect.regen),
+    splashRadius: add(effect.splashRadius),
+    mineralPerKill: effect.mineralPerKill === undefined ? undefined : Math.round(add(effect.mineralPerKill)!),
+    respawnCut: add(effect.respawnCut),
+    damageReduction:
+      effect.damageReduction === undefined
+        ? undefined
+        : Math.min(0.6, effect.damageReduction * power),
+  };
+}
+
+/** 등급이 매겨진 증강 카드 */
+export interface AugmentCard {
+  readonly augment: Augment;
+  readonly rarity: Rarity;
+  /** 등급이 반영된 최종 효과 */
+  readonly effect: AugmentEffect;
+}
+
+export const makeCard = (augment: Augment, rarity: Rarity): AugmentCard => ({
+  augment,
+  rarity,
+  effect: scaleEffect(augment.effect, RARITIES[rarity].power),
+});
+
 export const AUGMENTS: readonly Augment[] = [
   // ── 탱커
   { id: 'bulwark', kind: 'tank', name: '방벽', description: '최대 체력 +40%', maxStacks: 3,
@@ -179,3 +277,66 @@ export const AUGMENTS: readonly Augment[] = [
 
 /** 광역 증강은 '충격파'를 먼저 잡아야 의미가 있다 */
 export const requiresSplash = (augment: Augment): boolean => augment.id === 'novabig';
+
+// ───────── 특화 시너지 ─────────
+// 증강 하나하나는 곱연산이라 이미 복리로 붙는다. 여기에 "같은 계열을 모으면 더 준다"를
+// 얹으면, 세 번째 증강을 고르는 순간 눈에 띄게 세지는 구간이 생긴다 — 파워 인플레의 체감.
+//
+// 다섯 개를 받는 판에서 3+2로 나누면 주특화 하나와 부특화 하나가 나오고,
+// 5를 한 계열에 몰면 대특화가 터진다. 그게 도박의 이유가 된다.
+
+/** 같은 계열 증강이 이만큼 모이면 특화가 발동한다 */
+export const SYNERGY_THRESHOLD = 3;
+/** 이만큼 모이면 대특화 */
+export const MASTERY_THRESHOLD = 5;
+
+export interface SynergyBonus {
+  readonly name: string;
+  readonly description: string;
+  readonly effect: AugmentEffect;
+}
+
+/** 계열별 특화(3개) / 대특화(5개) 보너스 */
+export const SYNERGIES: Record<AugmentKind, { readonly specialist: SynergyBonus; readonly master: SynergyBonus }> = {
+  tank: {
+    specialist: { name: '불굴', description: '최대 체력 +30%', effect: { hpMult: 1.3 } },
+    master: { name: '불멸', description: '받는 피해 25% 추가 감소, 초당 체력 12 회복',
+      effect: { damageReduction: 0.25, regen: 12 } },
+  },
+  ranged: {
+    specialist: { name: '저격 태세', description: '공격력 +30%, 사거리 +15%',
+      effect: { damageMult: 1.3, rangeMult: 1.15 } },
+    master: { name: '일점사', description: '공격력 +60%, 공격 속도 +25%',
+      effect: { damageMult: 1.6, attackSpeedMult: 1.25 } },
+  },
+  mage: {
+    specialist: { name: '연쇄 폭발', description: '광역 반경 +30, 공격력 +20%',
+      effect: { splashRadius: 30, damageMult: 1.2 } },
+    master: { name: '대마법', description: '광역 반경 +60, 공격력 +60%',
+      effect: { splashRadius: 60, damageMult: 1.6 } },
+  },
+  stat: {
+    specialist: { name: '완숙', description: '공격력 +20%, 최대 체력 +20%',
+      effect: { damageMult: 1.2, hpMult: 1.2 } },
+    master: { name: '초월', description: '공격력 +50%, 최대 체력 +50%, 이동 속도 +20%',
+      effect: { damageMult: 1.5, hpMult: 1.5, moveSpeedMult: 1.2 } },
+  },
+  utility: {
+    specialist: { name: '지휘', description: '모든 타워 공격력 +15%', effect: { towerDamageMult: 1.15 } },
+    master: { name: '군주', description: '모든 타워 공격력 +35%, 부활 대기 4초 감소',
+      effect: { towerDamageMult: 1.35, respawnCut: 4 } },
+  },
+};
+
+/** 보유 증강에서 발동한 시너지들 */
+export function activeSynergies(cards: readonly AugmentCard[]): SynergyBonus[] {
+  const counts = new Map<AugmentKind, number>();
+  for (const c of cards) counts.set(c.augment.kind, (counts.get(c.augment.kind) ?? 0) + 1);
+
+  const active: SynergyBonus[] = [];
+  for (const [kind, count] of counts) {
+    if (count >= SYNERGY_THRESHOLD) active.push(SYNERGIES[kind].specialist);
+    if (count >= MASTERY_THRESHOLD) active.push(SYNERGIES[kind].master);
+  }
+  return active;
+}

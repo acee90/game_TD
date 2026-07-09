@@ -175,11 +175,19 @@ function refreshHero(el: Elements, game: Game): void {
   el.heroStats.textContent = parts.join(' · ');
 
   el.heroAugs.innerHTML = hero.augments
-    .map((a) => {
-      const color = HD.AUGMENT_KIND_COLOR[a.kind];
-      return `<span class="aug" style="background:${color}">${a.name}</span>`;
+    .map((card) => {
+      const color = HD.AUGMENT_KIND_COLOR[card.augment.kind];
+      const border = HD.RARITIES[card.rarity].color;
+      return `<span class="aug" style="background:${color};box-shadow:0 0 0 1.5px ${border}">${card.augment.name}</span>`;
     })
     .join('');
+
+  const synergies = HD.activeSynergies(hero.augments);
+  if (synergies.length) {
+    el.heroAugs.innerHTML += synergies
+      .map((s) => `<span class="syn">★ ${s.name}</span>`)
+      .join('');
+  }
 }
 
 function refreshAugmentOverlay(el: Elements, game: Game): void {
@@ -190,13 +198,22 @@ function refreshAugmentOverlay(el: Elements, game: Game): void {
   el.augOverlay.style.display = 'flex';
   el.augSub.textContent = `영웅 Lv${game.hero?.level} — 하나를 고르세요 (게임 일시정지)`;
   el.augCards.innerHTML = game.augmentChoices
-    .map((a, i) => {
-      const color = HD.AUGMENT_KIND_COLOR[a.kind];
-      const kind = HD.AUGMENT_KIND_LABEL[a.kind];
-      return `<button class="augcard" data-index="${i}">
-        <div class="k" style="color:${color}">${kind}</div>
-        <div class="n">${a.name}</div>
-        <div class="d">${a.description}</div>
+    .map((card, i) => {
+      const kindColor = HD.AUGMENT_KIND_COLOR[card.augment.kind];
+      const kindLabel = HD.AUGMENT_KIND_LABEL[card.augment.kind];
+      const rarity = HD.RARITIES[card.rarity];
+      const cost =
+        rarity.enemyHpMult > 1
+          ? `<div class="cost">몹 체력 +${Math.round((rarity.enemyHpMult - 1) * 100)}%</div>`
+          : '<div class="cost safe">대가 없음</div>';
+      return `<button class="augcard" data-index="${i}" style="border-color:${rarity.color}">
+        <div class="k">
+          <span style="color:${kindColor}">${kindLabel}</span>
+          <span class="rar" style="color:${rarity.color}">${rarity.label}</span>
+        </div>
+        <div class="n">${card.augment.name}</div>
+        <div class="d">${card.augment.description}</div>
+        ${cost}
       </button>`;
     })
     .join('');
