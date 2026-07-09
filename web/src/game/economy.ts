@@ -43,3 +43,17 @@ export function killIncome(before: number, after: number): KillIncome {
 /** 보스 처치 보상. trigger #601~#606 */
 export const bossKillMineral = (level: number): number =>
   B.BOSS_KILL_MINERAL[Math.min(level, B.BOSS_MAX_LEVEL) - 1] ?? 0;
+
+/** 반복 20킬 보상까지 남은 킬 수와 그때 받을 금액 */
+export function repeatKillProgress(kills: number): { done: number; reward: number } {
+  const done = kills % B.REPEAT_KILL_STEP;
+  const next = kills - done + B.REPEAT_KILL_STEP;
+  const tier = next > B.REPEAT_KILL_THRESHOLD ? 1 : 0;
+  return { done, reward: B.REPEAT_KILL_MINERAL[tier] };
+}
+
+/** 아직 지나지 않은 다음 킬 마일스톤. 전부 지났으면 null */
+export function nextMilestone(kills: number): { kills: number; reward: number } | null {
+  const found = B.KILL_MILESTONES.find(([threshold]) => threshold > kills);
+  return found ? { kills: found[0], reward: found[1] } : null;
+}

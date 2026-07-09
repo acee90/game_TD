@@ -25,59 +25,65 @@ describe('시작 상태 — 원본 trigger #349', () => {
     expect(game.gas).toBe(6);
   });
 
-  test('라운드 간격은 원본대로 57초', () => {
-    expect(B.ROUND_SECONDS).toBe(57);
+  test('원본 라운드 간격은 57초이고, 프로토는 그보다 짧다', () => {
+    expect(B.ORIGINAL_ROUND_SECONDS).toBe(57);
+    expect(B.ROUND_SECONDS).toBeLessThan(B.ORIGINAL_ROUND_SECONDS);
   });
 
   test('첫 라운드는 오프닝 대기 뒤에 시작한다', () => {
     const game = new Game();
+    expect(game.round).toBe(0);
     expect(game.roundTimer).toBe(B.OPENING_SECONDS);
     expect(B.OPENING_SECONDS).toBeLessThan(B.ROUND_SECONDS);
+
+    game.update(B.OPENING_SECONDS + 0.01);
+    expect(game.round).toBe(1);
+  });
+
+  test('round는 진행 중인 라운드를 가리킨다 — 웨이브가 도는 동안 숫자가 앞서지 않는다', () => {
+    const game = new Game();
+    game.update(B.OPENING_SECONDS + 0.01);
+    // 라운드 1의 몹이 스폰되는 동안 round는 계속 1이어야 한다
+    for (let i = 0; i < 10; i++) {
+      game.update(0.3);
+      expect(game.round).toBe(1);
+    }
   });
 });
 
-describe('라운드 진행 — 다 잡으면 기다리지 않는다', () => {
-  /** 오프닝을 넘겨 라운드 1의 잡몹이 전부 스폰된 상태로 만든다 */
-  function intoRound1(game: Game): void {
-    game.update(B.OPENING_SECONDS + 0.01);
-    for (let i = 0; i < 200 && !game.waveCleared; i++) game.update(0.4);
-  }
-
-  test('잡몹이 남아 있으면 타이머가 그대로 흐른다', () => {
+describe('라운드 진행 — 고정 간격', () => {
+  test('웨이브를 다 정리해도 다음 라운드가 앞당겨지지 않는다', () => {
     const game = new Game();
     game.update(B.OPENING_SECONDS + 0.01);
-    game.update(0.4); // 첫 몹 스폰
+    expect(game.round).toBe(1);
 
-    expect(game.waveCleared).toBe(false);
-    expect(game.roundTimer).toBeGreaterThan(B.INTER_ROUND_GRACE);
+    // 라운드 1의 몹을 전부 지워버려도
+    for (let i = 0; i < 60; i++) game.update(0.3);
+    game.enemies = [];
+    game.lives = B.START_LIVES;
+    game.over = false;
+
+    // 남은 시간만큼은 그대로 기다린다
+    const remaining = game.roundTimer;
+    expect(remaining).toBeGreaterThan(0);
+    game.update(remaining - 0.01);
+    expect(game.round).toBe(1);
+
+    game.update(0.02);
+    expect(game.round).toBe(2);
   });
 
-  test('웨이브를 정리하면 타이머가 유예 시간으로 줄어든다', () => {
+  test('라운드 간격은 항상 ROUND_SECONDS다 — 느리게 잡아도 이득이 없다', () => {
     const game = new Game();
-    intoRound1(game);
+    game.update(B.OPENING_SECONDS + 0.01);
 
-    expect(game.waveCleared).toBe(true);
-    expect(game.roundTimer).toBeLessThanOrEqual(B.INTER_ROUND_GRACE);
-  });
-
-  test('필드에 보스만 남아도 웨이브는 정리된 것으로 본다', () => {
-    const game = new Game();
-    intoRound1(game);
-    game.bossCooldown = 0;
-    game.summonBoss();
-
-    expect(game.enemies.some((e) => e.kind === 'boss')).toBe(true);
-    expect(game.waveCleared).toBe(true);
-  });
-
-  test('유예 시간이 지나면 다음 라운드가 시작된다', () => {
-    const game = new Game();
-    intoRound1(game);
-    const round = game.round;
-    game.update(B.INTER_ROUND_GRACE + 0.01);
-
-    expect(game.round).toBe(round + 1);
-    expect(game.roundTimer).toBe(B.ROUND_SECONDS);
+    for (let round = 1; round <= 5; round++) {
+      expect(game.round).toBe(round);
+      expect(game.roundTimer).toBeCloseTo(B.ROUND_SECONDS, 1);
+      game.update(B.ROUND_SECONDS);
+      game.lives = B.START_LIVES;
+      game.over = false;
+    }
   });
 
   test('일반 웨이브는 보스를 만들지 않는다 — 보스는 소환으로만 나온다', () => {
@@ -85,7 +91,7 @@ describe('라운드 진행 — 다 잡으면 기다리지 않는다', () => {
     game.update(B.OPENING_SECONDS + 0.01);
 
     for (let round = 0; round < 60; round++) {
-      for (let step = 0; step < 200; step++) {
+      for (let step = 0; step < 100; step++) {
         game.update(0.3);
         expect(game.enemies.every((e) => e.kind !== 'boss')).toBe(true);
       }
@@ -99,6 +105,19 @@ describe('라운드 진행 — 다 잡으면 기다리지 않는다', () => {
     expect(B.enemyCount(1)).toBe(B.ENEMY_BASE_COUNT);
     expect(B.ENEMY_BASE_COUNT).toBe(15);
     expect(B.enemyCount(8)).toBeGreaterThan(B.enemyCount(1));
+  });
+
+  test('모든 라운드가 잡몹만 낸다 — 특별 웨이브는 없다', () => {
+    for (const round of [1, 7, 22, 41, 93]) {
+      const game = new Game();
+      game.round = round - 1;
+      game.roundTimer = 0.001;
+      game.update(0.002);
+
+      expect(game.round).toBe(round);
+      for (let i = 0; i < 3; i++) game.update(B.SPAWN_INTERVAL + 0.001);
+      expect(game.enemies.every((e) => e.kind === 'mob')).toBe(true);
+    }
   });
 });
 

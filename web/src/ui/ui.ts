@@ -2,6 +2,7 @@
 import * as B from '../data/balance';
 import { RACES, RACE_COLOR, TIER_LABEL, tagLabel, type Race } from '../data/units';
 import { attackInterval, damage, range } from '../game/combat';
+import { bossKillMineral, nextMilestone, repeatKillProgress } from '../game/economy';
 import type { Game } from '../game/game';
 
 const $ = <T extends HTMLElement>(id: string): T => {
@@ -19,6 +20,11 @@ export interface Elements {
   readonly kills: HTMLElement;
   readonly info: HTMLElement;
   readonly message: HTMLElement;
+  readonly repeatBar: HTMLElement;
+  readonly repeatVal: HTMLElement;
+  readonly milestoneBar: HTMLElement;
+  readonly milestoneVal: HTMLElement;
+  readonly bossReward: HTMLElement;
   readonly bossState: HTMLElement;
   readonly bossLevels: readonly HTMLButtonElement[];
   readonly probe: HTMLButtonElement;
@@ -40,6 +46,11 @@ export function bindElements(): Elements {
     kills: $('kills'),
     info: $('info'),
     message: $('message'),
+    repeatBar: $('repeatBar'),
+    repeatVal: $('repeatVal'),
+    milestoneBar: $('milestoneBar'),
+    milestoneVal: $('milestoneVal'),
+    bossReward: $('bossReward'),
     bossState: $('bossState'),
     bossLevels: [1, 2, 3, 4, 5, 6].map((n) => $<HTMLButtonElement>(`boss${n}`)),
     probe: $<HTMLButtonElement>('probe'),
@@ -79,10 +90,37 @@ function selectionInfo(game: Game): string {
       · DPS ${dps} · 사거리 ${range(tower).toFixed(0)}</div>`;
 }
 
+/** 항상 보이는 보상 현황 — 원본 §8.2의 세 소득 계열 */
+function refreshMissions(el: Elements, game: Game): void {
+  const repeat = repeatKillProgress(game.kills);
+  el.repeatBar.style.width = `${(repeat.done / B.REPEAT_KILL_STEP) * 100}%`;
+  el.repeatVal.textContent = `${repeat.done}/${B.REPEAT_KILL_STEP} → +${repeat.reward}`;
+
+  const milestone = nextMilestone(game.kills);
+  if (milestone) {
+    const previous = milestone.kills - 200;
+    const span = milestone.kills - Math.max(0, previous);
+    const done = game.kills - Math.max(0, previous);
+    el.milestoneBar.style.width = `${Math.min(100, (done / span) * 100)}%`;
+    el.milestoneVal.textContent = `${game.kills}/${milestone.kills} → +${milestone.reward}`;
+  } else {
+    el.milestoneBar.style.width = '100%';
+    el.milestoneVal.textContent = '전부 달성';
+  }
+
+  const levels = Array.from({ length: B.BOSS_MAX_LEVEL }, (_, i) => i + 1);
+  el.bossReward.innerHTML = levels
+    .map((level) => {
+      const open = level <= game.maxBossLevel;
+      const text = `Lv${level} +${bossKillMineral(level)}`;
+      return open ? `<b style="color:var(--gold)">${text}</b>` : `<span class="dim">${text}</span>`;
+    })
+    .join(' · ');
+}
+
 export function refresh(el: Elements, game: Game): void {
-  el.round.textContent = `R${game.round}`;
+  el.round.textContent = `R${Math.max(1, game.round)}`;
   el.timer.textContent = `${Math.ceil(game.roundTimer)}s`;
-  el.timer.style.color = game.round > 1 && game.waveCleared ? 'var(--gold)' : '';
   el.mineral.textContent = String(Math.floor(game.mineral));
   el.gas.textContent = String(Math.floor(game.gas));
   el.lives.textContent = String(game.lives);
@@ -113,6 +151,7 @@ export function refresh(el: Elements, game: Game): void {
     button.disabled = game.gas < cost;
   });
 
+  refreshMissions(el, game);
   el.info.innerHTML = selectionInfo(game);
   el.message.textContent = game.message;
 

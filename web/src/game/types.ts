@@ -13,7 +13,7 @@ export interface Slot {
   tower: Tower | null;
 }
 
-export type EnemyKind = 'mob' | 'god' | 'boss';
+export type EnemyKind = 'mob' | 'boss';
 
 export interface EnemySpec {
   readonly kind: EnemyKind;

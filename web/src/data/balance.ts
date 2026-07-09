@@ -10,18 +10,20 @@ import type { Tag } from './units';
 export const START_MINERAL = 55;
 export const START_GAS = 6;
 
-/**
- * 라운드 간격의 **상한**. 원본 trigger #266의 SetCountdownTimer(57)이 이 값이다. [원본확정]
- * 원본은 이 타이머만으로 라운드를 넘기지만, 그러면 웨이브를 일찍 정리해도 계속 기다리게 된다.
- * 그래서 아래 INTER_ROUND_GRACE를 함께 쓴다.
- */
-export const ROUND_SECONDS = 57;
+/** 원본 trigger #266의 SetCountdownTimer(57). [원본확정] */
+export const ORIGINAL_ROUND_SECONDS = 57;
 
 /**
- * 웨이브를 전부 정리했을 때 다음 라운드까지의 유예. 보스는 라운드와 무관하므로 세지 않는다.
- * 원본에 대응하는 개념이 없다. [프로토]
+ * 라운드 간격. 원본과 똑같이 **고정 간격**이다 — 웨이브를 빨리 정리해도 다음 라운드가
+ * 앞당겨지지 않는다.
+ *
+ * 웨이브를 다 잡으면 곧장 넘기는 방식은 쓰지 않는다. 그러면 천천히 잡을수록 라운드가
+ * 느려지고, 쉬운 웨이브에 머물면서 쿨타임(45초)만 도는 보스를 계속 소환하는 게 이득이 된다.
+ * 고정 간격이면 시간당 보스 소환 횟수가 라운드 진행과 무관하게 일정하다.
+ *
+ * 원본 57초는 연출과 조합 시간이 있을 때의 값이라 프로토에서는 짧게 잡았다. [프로토]
  */
-export const INTER_ROUND_GRACE = 4;
+export const ROUND_SECONDS = 22;
 /**
  * 첫 라운드까지의 대기. 원본은 trigger #344에서 20초지만(그동안 명예의 전당 연출이 돈다)
  * 연출이 없는 프로토에서는 그냥 기다리는 시간이라 짧게 줄였다. [프로토]
@@ -83,22 +85,9 @@ export const BOSS_SPEED = 26;
 export const bossLeakLives = (level: number): number => 2 + level;
 
 // ───────── 적 웨이브 (§9) ─────────
-// 스폰 게이트는 P7의 가스 누적값 = 라운드 번호로 분기한다 [원본확정].
-// 아래 라운드에서 특수 GOD 적이 나오는 것까지가 원본이고, 그 사이 라운드의
-// 몹 구성과 HP 곡선은 EUD라 미확인이라 프로토용 곡선을 썼다.
-export const GOD_ENEMY_ROUNDS: Readonly<Record<number, string>> = {
-  7: 'God Zealot',
-  22: 'God Lv22',
-  41: 'God Lv41',
-  42: 'God Lv42',
-  45: 'God Lv45',
-  46: 'God Arbiter',
-  51: 'God Lv51',
-  53: 'God Carrier',
-  91: 'God Scout',
-  93: 'God Dark Templer',
-};
-
+// 원본은 특정 라운드에 이름 붙은 GOD 적이 나오지만(trigger #268~#286), 그 사이 라운드의
+// 몹 구성·수·HP 곡선이 전부 EUD라 웨이브를 재현할 근거가 없다. 이 프로토는 모든 웨이브를
+// 같은 잡몹으로 두고, 특별한 적은 플레이어가 부르는 보스로만 등장시킨다.
 export const enemyHP = (round: number): number => 30 * Math.pow(1.28, round); // [프로토]
 export const enemyArmor = (round: number): number => Math.floor(round * 0.8); // [프로토]
 
@@ -113,7 +102,6 @@ export const enemyCount = (round: number): number =>
 /** 웨이브 내 스폰 간격(초) [프로토] */
 export const SPAWN_INTERVAL = 0.3;
 export const ENEMY_SPEED = 52; // [프로토]
-export const GOD_ENEMY_HP_MULT = 9; // [프로토]
 
 // ───────── 전투 (전부 [프로토]) ─────────
 // 원본은 무기슬롯→유닛 바인딩 정보가 없어 실제 공격력을 읽을 수 없다(§11.3).
@@ -135,11 +123,3 @@ export const effectiveDamage = (raw: number, armor: number): number =>
 
 /** 조합 요구 수량. trigger #207/#209/#258/#260 전부 AtLeast 2 [원본확정] */
 export const MERGE_REQUIRED = 2;
-
-/**
- * 티어 내 선택 인덱스의 순환 주기(초).
- * 원본은 공유 인덱스 unit#73(1..7)으로 결정되며(§5.3), 이를 회전시키는 트리거는
- * EUD에 있어 주기를 읽을 수 없다. 짧게 돌려 플레이어에게는 랜덤처럼 보이게 한다. [프로토]
- */
-export const PICK_INDEX_PERIOD = 0.11;
-export const PICK_INDEX_MAX = 7;

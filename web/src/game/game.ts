@@ -13,7 +13,8 @@ export class Game {
   mineral = B.START_MINERAL;
   gas = B.START_GAS;
   lives = B.START_LIVES;
-  round = 1;
+  /** 진행 중인 라운드. 첫 웨이브가 시작되기 전에는 0이다. */
+  round = 0;
   roundTimer = B.OPENING_SECONDS;
   kills = 0;
   probes = 0;
@@ -48,11 +49,6 @@ export class Game {
   /** 필드에 살아있는 보스들의 레벨 */
   get liveBossLevels(): number[] {
     return this.enemies.filter((e) => e.kind === 'boss').map((e) => e.bossLevel ?? 1);
-  }
-
-  /** 이번 웨이브의 잡몹을 전부 정리했는가. 보스는 라운드와 무관하므로 세지 않는다. */
-  get waveCleared(): boolean {
-    return this.spawnQueue.length === 0 && !this.enemies.some((e) => e.kind !== 'boss');
   }
 
   // ── 소환 가능한 보스 레벨 ──
@@ -203,22 +199,9 @@ export class Game {
 
   // ── 라운드 ──
   private beginRound(): void {
-    const godName = B.GOD_ENEMY_ROUNDS[this.round];
+    this.round++;
     const hp = B.enemyHP(this.round);
     const armor = B.enemyArmor(this.round);
-
-    if (godName) {
-      this.spawnQueue.push({
-        kind: 'god',
-        name: godName,
-        maxHp: hp * B.GOD_ENEMY_HP_MULT,
-        armor: armor * 2,
-        speed: B.ENEMY_SPEED * 0.8,
-        radius: 14,
-      });
-      this.message = `${godName} 등장! (라운드 ${this.round})`;
-      return;
-    }
 
     for (let i = 0; i < B.enemyCount(this.round); i++) {
       this.spawnQueue.push({
@@ -307,7 +290,6 @@ export class Game {
     if (this.roundTimer <= 0) {
       this.roundTimer = B.ROUND_SECONDS;
       this.beginRound();
-      this.round++;
     }
 
     if (this.spawnQueue.length) {
@@ -335,12 +317,6 @@ export class Game {
       }
     }
     this.enemies = this.enemies.filter((e) => !e.dead);
-
-    // 웨이브를 일찍 정리했으면 남은 시간을 기다리지 않는다.
-    // 적을 걷어낸 뒤에 판정해야 마지막 한 기가 죽은 그 프레임에 바로 반영된다.
-    if (this.round > 1 && this.waveCleared && this.roundTimer > B.INTER_ROUND_GRACE) {
-      this.roundTimer = B.INTER_ROUND_GRACE;
-    }
 
     for (const shot of this.shots) shot.life -= dt;
     this.shots = this.shots.filter((s) => s.life > 0);
