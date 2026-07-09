@@ -1,6 +1,7 @@
 // ───────── 캔버스 렌더 ─────────
 import { CROSS_BARS, DOOR_IN, DOOR_OUT, NEXUS, TILE, WAYPOINTS, pathPos } from '../core/map';
 import { BOSS_COOLDOWN_SECONDS } from '../data/balance';
+import { HERO_RADIUS } from '../data/hero';
 import { GOD_TIER, RACE_COLOR } from '../data/units';
 import { range } from '../game/combat';
 import type { Game } from '../game/game';
@@ -107,6 +108,82 @@ function drawEnemy(ctx: CanvasRenderingContext2D, x: number, y: number, e: Enemy
   ctx.fillRect(x - e.radius, y - e.radius - 6, w * Math.max(0, e.hp / e.maxHp), 3);
 }
 
+function drawAltar(ctx: CanvasRenderingContext2D, game: Game): void {
+  if (!game.hero) return;
+  const { x, y } = game.altarSlot;
+  const half = TILE / 2 - 2;
+
+  ctx.fillStyle = '#2a2140';
+  ctx.strokeStyle = '#b08cff';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.roundRect(x - half, y - half, half * 2, half * 2, 5);
+  ctx.fill();
+  ctx.stroke();
+
+  ctx.fillStyle = '#b08cff';
+  ctx.font = '700 9px system-ui, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('제단', x, y);
+  ctx.textBaseline = 'alphabetic';
+}
+
+function drawHero(ctx: CanvasRenderingContext2D, game: Game): void {
+  const hero = game.hero;
+  if (!hero) return;
+
+  const { x, y } = hero;
+  if (!hero.alive) {
+    ctx.globalAlpha = 0.35;
+    ctx.beginPath();
+    ctx.arc(game.altarSlot.x, game.altarSlot.y, HERO_RADIUS, 0, Math.PI * 2);
+    ctx.strokeStyle = '#b08cff';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+    return;
+  }
+
+  const stats = hero.stats;
+
+  // 목적지 표시
+  if (Math.hypot(hero.targetX - x, hero.targetY - y) > 3) {
+    ctx.beginPath();
+    ctx.arc(hero.targetX, hero.targetY, 4, 0, Math.PI * 2);
+    ctx.strokeStyle = 'rgba(176,140,255,.5)';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+  }
+
+  ctx.beginPath();
+  ctx.arc(x, y, stats.range, 0, Math.PI * 2);
+  ctx.strokeStyle = 'rgba(176,140,255,.14)';
+  ctx.lineWidth = 1;
+  ctx.stroke();
+
+  ctx.beginPath();
+  ctx.arc(x, y, HERO_RADIUS, 0, Math.PI * 2);
+  ctx.fillStyle = '#b08cff';
+  ctx.fill();
+  ctx.strokeStyle = '#ffffff';
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+
+  const width = HERO_RADIUS * 2.4;
+  ctx.fillStyle = '#0a0e19';
+  ctx.fillRect(x - width / 2, y - HERO_RADIUS - 8, width, 3);
+  ctx.fillStyle = '#6fdc8c';
+  ctx.fillRect(x - width / 2, y - HERO_RADIUS - 8, width * Math.max(0, hero.hp / stats.maxHp), 3);
+
+  ctx.fillStyle = '#0e1220';
+  ctx.font = '700 9px system-ui, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(String(hero.level), x, y);
+  ctx.textBaseline = 'alphabetic';
+}
+
 export function render(ctx: CanvasRenderingContext2D, game: Game): void {
   const { canvas } = ctx;
   ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -117,7 +194,11 @@ export function render(ctx: CanvasRenderingContext2D, game: Game): void {
   drawDoors(ctx);
   drawNexus(ctx, game);
 
-  for (const slot of game.slots) drawSlot(ctx, slot, slot === game.selected);
+  for (const slot of game.slots) {
+    if (game.hero && slot === game.altarSlot) continue;
+    drawSlot(ctx, slot, slot === game.selected);
+  }
+  drawAltar(ctx, game);
 
   for (const shot of game.shots) {
     if (shot.splashRadius) {
@@ -138,6 +219,7 @@ export function render(ctx: CanvasRenderingContext2D, game: Game): void {
     const [x, y] = pathPos(enemy.distance);
     drawEnemy(ctx, x, y, enemy);
   }
+  drawHero(ctx, game);
 
   ctx.font = '700 11px system-ui, sans-serif';
   ctx.textAlign = 'center';

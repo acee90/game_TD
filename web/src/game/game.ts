@@ -2,10 +2,13 @@
 // 출처: docs/갓타워디펜스X_VZ056_맵파일분석_v1.0.md
 
 import * as B from '../data/balance';
+import * as H from '../data/hero';
 import { PATH_LENGTH, SLOT_POS, pathPos } from '../core/map';
 import { GOD_TIER, RACE_COLOR, tagLabel, type Race } from '../data/units';
+import type { Augment } from '../data/hero';
 import { attackInterval, damage, isSplash, range, type UpgradeLevels } from './combat';
 import { bossKillMineral, killIncome } from './economy';
+import { Hero, rollAugmentChoices } from './hero';
 import { findMerge, unitFor, type Rand } from './merge';
 import type { Enemy, EnemySpec, FloatText, Shot, Slot } from './types';
 
@@ -28,6 +31,11 @@ export class Game {
 
   upgrades: UpgradeLevels = [0, 0, 0, 0];
 
+  /** 제단을 세우면 영웅이 생긴다. 세우기 전에는 null. */
+  hero: Hero | null = null;
+  /** 증강 선택지가 떠 있으면 게임이 멈춘다 */
+  augmentChoices: Augment[] = [];
+
   slots: Slot[] = SLOT_POS.map(([x, y]) => ({ x, y, tower: null }));
   selected: Slot | null = null;
 
@@ -38,12 +46,70 @@ export class Game {
   private spawnQueue: EnemySpec[] = [];
   private spawnTimer = 0;
   private gasFraction = 0;
+  private heroHitTimer = 0;
 
   /** 유닛 추첨용 난수. 테스트에서 결정적 함수를 주입한다. */
   private readonly rand: Rand;
 
   constructor(rand: Rand = Math.random) {
     this.rand = rand;
+  }
+
+  /** 증강 선택 중에는 시간이 흐르지 않는다 */
+  get paused(): boolean {
+    return this.augmentChoices.length > 0;
+  }
+
+  // ── 제단 · 영웅 ──
+  get altarSlot(): Slot {
+    return this.slots[H.ALTAR_SLOT];
+  }
+
+  get canBuildAltar(): boolean {
+    return this.hero === null && !this.altarSlot.tower && this.mineral >= H.ALTAR_MINERAL;
+  }
+
+  /** 제단은 십자 중앙 타일을 차지한다. 그 자리에는 타워를 놓을 수 없게 된다. */
+  buildAltar(): boolean {
+    if (this.hero) {
+      this.message = '제단은 하나뿐입니다.';
+      return false;
+    }
+    if (this.altarSlot.tower) {
+      this.message = '중앙 타일을 비워야 제단을 세울 수 있습니다.';
+      return false;
+    }
+    if (this.mineral < H.ALTAR_MINERAL) {
+      this.message = `미네랄 부족 — 제단 ${H.ALTAR_MINERAL} 필요.`;
+      return false;
+    }
+    this.mineral -= H.ALTAR_MINERAL;
+    this.hero = new Hero(this.altarSlot.x, this.altarSlot.y);
+    this.message = '제단을 세웠습니다. 맵을 클릭해 영웅을 움직이세요.';
+    return true;
+  }
+
+  moveHero(x: number, y: number): void {
+    this.hero?.moveTo(x, y);
+  }
+
+  /** 증강 하나를 고른다. 남은 선택이 있으면 다음 선택지를 띄운다. */
+  chooseAugment(index: number): boolean {
+    const augment = this.augmentChoices[index];
+    if (!augment || !this.hero) return false;
+
+    this.hero.addAugment(augment);
+    this.augmentChoices = [];
+    this.message = `증강 획득 — ${augment.name}: ${augment.description}`;
+    this.offerAugmentIfPending();
+    return true;
+  }
+
+  private offerAugmentIfPending(): void {
+    const hero = this.hero;
+    if (!hero || hero.pendingAugmentPicks <= 0) return;
+    this.augmentChoices = rollAugmentChoices(hero, this.rand);
+    if (this.augmentChoices.length === 0) hero.pendingAugmentPicks = 0;
   }
 
   /** 필드에 살아있는 보스들의 레벨 */
@@ -99,6 +165,10 @@ export class Game {
 
   // ── 유닛 생성 / 조합 / 판매 ──
   spawnUnit(slot: Slot): boolean {
+    if (this.hero && slot === this.altarSlot) {
+      this.message = '제단 타일에는 유닛을 놓을 수 없습니다.';
+      return false;
+    }
     if (slot.tower) {
       this.message = '빈 타일을 선택하세요.';
       return false;
@@ -118,7 +188,7 @@ export class Game {
   }
 
   spawnUnitAnywhere(): boolean {
-    const empty = this.slots.find((s) => !s.tower);
+    const empty = this.slots.find((s) => !s.tower && !(this.hero && s === this.altarSlot));
     if (!empty) {
       this.message = '빈 타일이 없습니다 — 조합하거나 판매하세요.';
       return false;
@@ -249,6 +319,7 @@ export class Game {
       this.bossesKilled++;
       this.bossCleared = Math.max(this.bossCleared, level);
       this.float(x, y, `[ Lv${level} BOSS KILL ] +${reward}`, '#ffd23f');
+      this.grantXp(H.xpPerBoss(level));
 
       const suffix = !unlocked
         ? ''
@@ -267,6 +338,17 @@ export class Game {
       this.float(x, y, `+${income.mineral}`, '#8fd6ff');
       if (income.notes.length) this.message = income.notes.join(' · ');
     }
+    this.mineral += this.hero?.stats.mineralPerKill ?? 0;
+    this.grantXp(H.XP_PER_MOB);
+  }
+
+  /** 경험치는 타워가 잡든 영웅이 잡든 들어온다. 레벨업 시 증강 선택을 띄운다. */
+  private grantXp(amount: number): void {
+    const hero = this.hero;
+    if (!hero) return;
+    const levels = hero.gainXp(amount);
+    if (levels > 0) this.float(hero.x, hero.y, `Lv${hero.level}!`, '#ffd23f');
+    if (this.augmentChoices.length === 0) this.offerAugmentIfPending();
   }
 
   float(x: number, y: number, text: string, color: string): void {
@@ -275,7 +357,9 @@ export class Game {
 
   // ── 프레임 ──
   update(dt: number): void {
-    if (this.over) return;
+    // 밀린 증강 선택이 있으면 먼저 띄운다 — 그래야 아래에서 일시정지된다
+    if (this.augmentChoices.length === 0) this.offerAugmentIfPending();
+    if (this.over || this.paused) return;
 
     if (this.bossCooldown > 0) this.bossCooldown = Math.max(0, this.bossCooldown - dt);
 
@@ -309,6 +393,7 @@ export class Game {
     }
 
     this.fireTowers(dt);
+    this.stepHero(dt);
 
     for (const enemy of this.enemies) {
       if (enemy.hp <= 0 && !enemy.dead) {
@@ -327,6 +412,78 @@ export class Game {
     this.floats = this.floats.filter((f) => f.life > 0);
   }
 
+  /** 영웅 이동 · 공격, 그리고 적의 반격 */
+  private stepHero(dt: number): void {
+    const hero = this.hero;
+    if (!hero) return;
+
+    hero.step(dt);
+    if (!hero.alive) return;
+
+    const stats = hero.stats;
+
+    // 영웅 공격 — 사거리 안에서 가장 가까운 적
+    if (hero.attackCooldown <= 0) {
+      const target = this.nearestEnemy(hero.x, hero.y, stats.range);
+      if (target) {
+        const [tx, ty] = pathPos(target.distance);
+        if (stats.splashRadius > 0) {
+          for (const enemy of this.enemies) {
+            const [ex, ey] = pathPos(enemy.distance);
+            if (Math.hypot(ex - tx, ey - ty) <= stats.splashRadius) {
+              enemy.hp -= B.effectiveDamage(stats.damage, enemy.armor);
+            }
+          }
+          this.shots.push({
+            x: hero.x, y: hero.y, tx, ty, life: 0.1,
+            color: '#c065e0', splashRadius: stats.splashRadius,
+          });
+        } else {
+          target.hp -= B.effectiveDamage(stats.damage, target.armor);
+          this.shots.push({ x: hero.x, y: hero.y, tx, ty, life: 0.1, color: '#ffffff' });
+        }
+        hero.attackCooldown = stats.attackInterval;
+      }
+    }
+
+    // 적의 반격 — 영웅에 닿은 적이 때린다
+    this.heroHitTimer -= dt;
+    if (this.heroHitTimer <= 0) {
+      let incoming = 0;
+      for (const enemy of this.enemies) {
+        const [ex, ey] = pathPos(enemy.distance);
+        if (Math.hypot(ex - hero.x, ey - hero.y) > H.ENEMY_TOUCH_RANGE + enemy.radius) continue;
+        incoming +=
+          enemy.kind === 'boss'
+            ? H.bossDamage(enemy.bossLevel ?? 1)
+            : H.enemyDamage(this.round);
+      }
+      if (incoming > 0) {
+        hero.takeDamage(incoming);
+        this.float(hero.x, hero.y, `-${Math.round(incoming)}`, '#ff5a3c');
+        if (!hero.alive) {
+          this.message = `영웅 사망 — ${Math.ceil(hero.respawnTimer)}초 뒤 제단에서 부활합니다.`;
+        }
+      }
+      this.heroHitTimer = H.ENEMY_ATTACK_INTERVAL;
+    }
+  }
+
+  private nearestEnemy(x: number, y: number, reach: number): Enemy | null {
+    let best: Enemy | null = null;
+    let bestDistance = reach;
+    for (const enemy of this.enemies) {
+      if (enemy.dead) continue;
+      const [ex, ey] = pathPos(enemy.distance);
+      const distance = Math.hypot(ex - x, ey - y);
+      if (distance <= bestDistance) {
+        bestDistance = distance;
+        best = enemy;
+      }
+    }
+    return best;
+  }
+
   private fireTowers(dt: number): void {
     for (const slot of this.slots) {
       const tower = slot.tower;
@@ -342,7 +499,7 @@ export class Game {
       });
       if (!inReach.length) continue;
 
-      const raw = damage(tower, this.upgrades);
+      const raw = damage(tower, this.upgrades) * (this.hero?.stats.towerDamageMult ?? 1);
       const color = RACE_COLOR[tower.def.race];
 
       if (isSplash(tower)) {

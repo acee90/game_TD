@@ -3,6 +3,7 @@ import * as B from '../data/balance';
 import { RACES, RACE_COLOR, TIER_LABEL, tagLabel, type Race } from '../data/units';
 import { attackInterval, damage, range } from '../game/combat';
 import { bossKillMineral, nextMilestone, repeatKillProgress } from '../game/economy';
+import * as HD from '../data/hero';
 import type { Game } from '../game/game';
 
 const $ = <T extends HTMLElement>(id: string): T => {
@@ -25,6 +26,18 @@ export interface Elements {
   readonly milestoneBar: HTMLElement;
   readonly milestoneVal: HTMLElement;
   readonly bossReward: HTMLElement;
+  readonly altar: HTMLButtonElement;
+  readonly heroPanel: HTMLElement;
+  readonly heroLevel: HTMLElement;
+  readonly heroHpBar: HTMLElement;
+  readonly heroHp: HTMLElement;
+  readonly heroXpBar: HTMLElement;
+  readonly heroXp: HTMLElement;
+  readonly heroStats: HTMLElement;
+  readonly heroAugs: HTMLElement;
+  readonly augOverlay: HTMLElement;
+  readonly augSub: HTMLElement;
+  readonly augCards: HTMLElement;
   readonly bossState: HTMLElement;
   readonly bossLevels: readonly HTMLButtonElement[];
   readonly probe: HTMLButtonElement;
@@ -51,6 +64,18 @@ export function bindElements(): Elements {
     milestoneBar: $('milestoneBar'),
     milestoneVal: $('milestoneVal'),
     bossReward: $('bossReward'),
+    altar: $<HTMLButtonElement>('altar'),
+    heroPanel: $('heroPanel'),
+    heroLevel: $('heroLevel'),
+    heroHpBar: $('heroHpBar'),
+    heroHp: $('heroHp'),
+    heroXpBar: $('heroXpBar'),
+    heroXp: $('heroXp'),
+    heroStats: $('heroStats'),
+    heroAugs: $('heroAugs'),
+    augOverlay: $('augOverlay'),
+    augSub: $('augSub'),
+    augCards: $('augCards'),
     bossState: $('bossState'),
     bossLevels: [1, 2, 3, 4, 5, 6].map((n) => $<HTMLButtonElement>(`boss${n}`)),
     probe: $<HTMLButtonElement>('probe'),
@@ -118,6 +143,67 @@ function refreshMissions(el: Elements, game: Game): void {
     .join(' · ');
 }
 
+function refreshHero(el: Elements, game: Game): void {
+  const hero = game.hero;
+  el.altar.hidden = hero !== null;
+  el.heroPanel.hidden = hero === null;
+  if (!hero) {
+    el.altar.textContent = `제단 건설 ${HD.ALTAR_MINERAL}`;
+    el.altar.disabled = !game.canBuildAltar;
+    return;
+  }
+
+  const stats = hero.stats;
+  el.heroLevel.textContent = `Lv${hero.level}`;
+
+  const hpRatio = hero.alive ? hero.hp / stats.maxHp : 0;
+  el.heroHpBar.style.width = `${hpRatio * 100}%`;
+  el.heroHp.textContent = hero.alive
+    ? `${Math.ceil(hero.hp)}/${stats.maxHp}`
+    : `부활 ${Math.ceil(hero.respawnTimer)}s`;
+
+  el.heroXpBar.style.width = `${(hero.xp / hero.xpNeeded) * 100}%`;
+  el.heroXp.textContent = `${hero.xp}/${hero.xpNeeded}`;
+
+  const dps = (stats.damage / stats.attackInterval).toFixed(0);
+  const parts = [
+    `공격력 ${stats.damage}`,
+    `DPS ${dps}`,
+    `사거리 ${stats.range.toFixed(0)}`,
+    stats.splashRadius > 0 ? `광역 ${stats.splashRadius.toFixed(0)}` : null,
+    stats.damageReduction > 0 ? `피해감소 ${(stats.damageReduction * 100).toFixed(0)}%` : null,
+    stats.regen > 0 ? `재생 ${stats.regen}/s` : null,
+  ].filter(Boolean);
+  el.heroStats.textContent = parts.join(' · ');
+
+  el.heroAugs.innerHTML = hero.augments
+    .map((a) => {
+      const color = HD.AUGMENT_KIND_COLOR[a.kind];
+      return `<span class="aug" style="background:${color}">${a.name}</span>`;
+    })
+    .join('');
+}
+
+function refreshAugmentOverlay(el: Elements, game: Game): void {
+  if (game.augmentChoices.length === 0) {
+    el.augOverlay.style.display = 'none';
+    return;
+  }
+  el.augOverlay.style.display = 'flex';
+  el.augSub.textContent = `영웅 Lv${game.hero?.level} — 하나를 고르세요 (게임 일시정지)`;
+  el.augCards.innerHTML = game.augmentChoices
+    .map((a, i) => {
+      const color = HD.AUGMENT_KIND_COLOR[a.kind];
+      const kind = HD.AUGMENT_KIND_LABEL[a.kind];
+      return `<button class="augcard" data-index="${i}">
+        <div class="k" style="color:${color}">${kind}</div>
+        <div class="n">${a.name}</div>
+        <div class="d">${a.description}</div>
+      </button>`;
+    })
+    .join('');
+}
+
 export function refresh(el: Elements, game: Game): void {
   el.round.textContent = `R${Math.max(1, game.round)}`;
   el.timer.textContent = `${Math.ceil(game.roundTimer)}s`;
@@ -151,6 +237,8 @@ export function refresh(el: Elements, game: Game): void {
     button.disabled = game.gas < cost;
   });
 
+  refreshHero(el, game);
+  refreshAugmentOverlay(el, game);
   refreshMissions(el, game);
   el.info.innerHTML = selectionInfo(game);
   el.message.textContent = game.message;
