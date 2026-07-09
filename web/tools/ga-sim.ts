@@ -44,16 +44,12 @@ const lcg = (seed: number) => {
 
 // ── 정책 실행 ──
 const RARITY_RANK: Record<string, number> = { silver: 0, gold: 1, platinum: 2 };
-const RARITY_HP_COST: Record<string, number> = { silver: 0, gold: 0.07, platinum: 0.16 };
 
 function scoreCard(g: Genome, game: Game, card: AugmentCard): number {
   const sameKind = game.hero.augments.filter((c) => c.augment.kind === card.augment.kind).length;
-  return (
-    1 +
-    g.focus * 3 * sameKind +
-    g.rarityGreed * 2 * RARITY_RANK[card.rarity] -
-    (1 - g.rarityGreed) * 8 * RARITY_HP_COST[card.rarity]
-  );
+  // 대가 메커니즘이 삭제돼 등급은 순수 상방이다. 탐욕 유전자는
+  // "등급을 얼마나 우선하는가"로 남는다 — 계열 몰기와 충돌할 때 갈린다.
+  return 1 + g.focus * 3 * sameKind + g.rarityGreed * 2 * RARITY_RANK[card.rarity];
 }
 
 function pickAugment(g: Genome, game: Game): void {
@@ -83,8 +79,9 @@ interface RunResult {
   heroLevel: number;
   goldUpgrades: number;
   augments: number;
-  enemyHpMult: number;
   probes: number;
+  heroShare: number;
+  tankAssist: number;
 }
 
 const MAX_TICKS = 60 * 60 * 45; // 45분 상한 (≈ R122)
@@ -130,8 +127,9 @@ function runGame(g: Genome, seed: number): RunResult {
     heroLevel: game.hero.level,
     goldUpgrades: game.hero.goldUpgrades,
     augments: game.hero.augments.length,
-    enemyHpMult: game.enemyHpMultiplier,
     probes: game.probes,
+    heroShare: game.heroDamageDealt / Math.max(1, game.heroDamageDealt + game.towerDamageDealt),
+    tankAssist: game.tankAssistDamage / Math.max(1, game.towerDamageDealt),
   };
 }
 
@@ -192,25 +190,30 @@ function tournament(pop: Genome[], fits: number[], r: () => number): Genome {
 
 // ── 아키타입: 손으로 짠 비교 기준 ──
 const ARCHETYPES: Record<string, Genome> = {
-  '안정형(실버만·보스 -1단계)': {
+  // 축 하나씩만 다르게 — 프로브를 4로 고정해 가스 경제 교란을 없앤다
+  '안정형(실버만)': {
     cls: 'archer', probeTarget: 4, heroReserve: 150,
     focus: 1, rarityGreed: 0, bossBack: 1, bossSafety: 10,
   },
-  '탐욕형(플래티넘·보스 즉시)': {
-    cls: 'archer', probeTarget: 0, heroReserve: 50,
-    focus: 1, rarityGreed: 1, bossBack: 0, bossSafety: 30,
+  '탐욕형(플래티넘 우선)': {
+    cls: 'archer', probeTarget: 4, heroReserve: 150,
+    focus: 1, rarityGreed: 1, bossBack: 1, bossSafety: 10,
   },
   '타워몰빵(영웅 강화 없음)': {
-    cls: 'warrior', probeTarget: 8, heroReserve: 400,
-    focus: 1, rarityGreed: 0.3, bossBack: 0, bossSafety: 30,
+    cls: 'archer', probeTarget: 4, heroReserve: 400,
+    focus: 1, rarityGreed: 0.5, bossBack: 1, bossSafety: 10,
   },
   '영웅몰빵(예비금 0)': {
-    cls: 'archer', probeTarget: 0, heroReserve: 0,
-    focus: 1, rarityGreed: 0.5, bossBack: 0, bossSafety: 30,
+    cls: 'archer', probeTarget: 4, heroReserve: 0,
+    focus: 1, rarityGreed: 0.5, bossBack: 1, bossSafety: 10,
   },
   '분산증강(계열 안 몰기)': {
     cls: 'archer', probeTarget: 4, heroReserve: 150,
-    focus: 0, rarityGreed: 0.5, bossBack: 0, bossSafety: 30,
+    focus: 0, rarityGreed: 0.5, bossBack: 1, bossSafety: 10,
+  },
+  '마법사 균형': {
+    cls: 'mage', probeTarget: 4, heroReserve: 150,
+    focus: 1, rarityGreed: 0.5, bossBack: 1, bossSafety: 10,
   },
 };
 
@@ -243,7 +246,8 @@ function evaluate(name: string, g: Genome, seeds: number[]): void {
       `  영웅Lv ${med(rs.map((x) => x.heroLevel).sort((a, b) => a - b))}` +
       `  증강 ${med(rs.map((x) => x.augments).sort((a, b) => a - b))}` +
       `  골드강화 ${med(rs.map((x) => x.goldUpgrades).sort((a, b) => a - b))}` +
-      `  몹HP ×${med(rs.map((x) => x.enemyHpMult).sort((a, b) => a - b)).toFixed(2)}`,
+      `  영웅몫 ${(med(rs.map((x) => x.heroShare).sort((a, b) => a - b)) * 100).toFixed(0)}%` +
+      `  탱킹어시스트 ${(med(rs.map((x) => x.tankAssist).sort((a, b) => a - b)) * 100).toFixed(0)}%`,
   );
 }
 
