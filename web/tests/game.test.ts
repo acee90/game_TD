@@ -138,10 +138,53 @@ describe('라운드 진행 — 고정 간격', () => {
     expect(needAtRound35).toBeLessThan(wallDps);
   });
 
-  test('웨이브당 잡몹은 15기에서 시작한다', () => {
+  test('웨이브는 5라운드 사이클로 돈다', () => {
+    expect(B.CYCLE_ROUNDS).toBe(5);
+    expect(B.cycleOf(1)).toBe(0);
+    expect(B.cycleOf(5)).toBe(0);
+    expect(B.cycleOf(6)).toBe(1);
+    expect(B.posInCycle(1)).toBe(0);
+    expect(B.posInCycle(5)).toBe(4);
+    expect(B.posInCycle(6)).toBe(0);
+  });
+
+  test('사이클 안에서는 같은 몹이 수만 늘어난다', () => {
+    for (let r = 1; r <= 4; r++) {
+      expect(B.enemyHP(r)).toBe(B.enemyHP(r + 1)); // 같은 몹
+      expect(B.enemyCount(r + 1) - B.enemyCount(r)).toBe(B.ENEMY_COUNT_STEP);
+    }
     expect(B.enemyCount(1)).toBe(B.ENEMY_BASE_COUNT);
-    expect(B.ENEMY_BASE_COUNT).toBe(15);
-    expect(B.enemyCount(8)).toBeGreaterThan(B.enemyCount(1));
+    expect(B.enemyCount(5)).toBe(B.ENEMY_BASE_COUNT + 4 * B.ENEMY_COUNT_STEP);
+  });
+
+  test('사이클이 넘어가면 새 몹이 나오고 수는 처음으로 돌아간다', () => {
+    expect(B.enemyHP(6)).toBeGreaterThan(B.enemyHP(5));
+    expect(B.enemyCount(6)).toBe(B.ENEMY_BASE_COUNT);
+  });
+
+  test('웨이브 총 체력은 사이클 안에서 선형이고, 사이클마다 기울기가 꺾인다', () => {
+    const waveHp = (r: number) => B.enemyHP(r) * B.enemyCount(r);
+    const slopeOf = (cycle: number) => {
+      const first = cycle * B.CYCLE_ROUNDS + 1;
+      return (waveHp(first + 1) - waveHp(first)) / 1;
+    };
+
+    // 사이클 안: 증가분이 일정하다 (선형)
+    for (let r = 1; r <= 3; r++) {
+      expect(waveHp(r + 1) - waveHp(r)).toBeCloseTo(waveHp(r + 2) - waveHp(r + 1), 5);
+    }
+
+    // 사이클 간: 기울기가 커진다 (각도가 선다)
+    for (let c = 0; c < 4; c++) {
+      expect(slopeOf(c + 1)).toBeGreaterThan(slopeOf(c));
+    }
+  });
+
+  test('웨이브 총 체력은 라운드가 지나며 줄지 않는다 — 사이클 경계에서도', () => {
+    const waveHp = (r: number) => B.enemyHP(r) * B.enemyCount(r);
+    for (let r = 1; r <= 40; r++) {
+      expect(waveHp(r + 1)).toBeGreaterThanOrEqual(waveHp(r));
+    }
   });
 
   test('모든 라운드가 잡몹만 낸다 — 특별 웨이브는 없다', () => {

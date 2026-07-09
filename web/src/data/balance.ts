@@ -99,14 +99,27 @@ export const bossLeakLives = (level: number): number => 2 + level;
 // 몹 구성·수·HP 곡선이 전부 EUD라 웨이브를 재현할 근거가 없다. 이 프로토는 모든 웨이브를
 // 같은 잡몹으로 두고, 특별한 적은 플레이어가 부르는 보스로만 등장시킨다.
 /**
- * 몹 체력. 지수가 전부다.
+ * 웨이브는 5라운드 사이클로 돈다.
  *
- * 1.28이었을 때 R30에 필요한 총 DPS가 49,365였는데, 타일 17개를 전부 GOD 타워로
- * 채워도 약 20,000이라 수학적으로 불가능했다(40판 전부 R23 이전 사망).
- * 1.18이면 사망 라운드 중앙값이 R33, R35 생존율이 45%로 영웅 30레벨 창(R30~35)과 맞물린다.
- * [프로토]
+ * 사이클 안에서는 같은 몹이 나오고 수만 늘어난다(12→15→18→21→24). 사이클이 넘어가면
+ * 새 몹이 나오면서 체력이 CYCLE_HP_JUMP배로 뛴다.
+ *
+ * 그래서 "웨이브 총 체력"은 사이클 안에서 **선형**이고, 5라운드마다 **기울기가 J배로 꺾인다**.
+ * 지수 곡선을 구분선형으로 근사한 셈이라 장기 성장률은 J^(1/5) = 라운드당 1.149와 같지만,
+ * 플레이어는 "이번 사이클은 예측 가능하게 조금씩 어려워지고, 새 몹이 나오면 각도가 선다"로 읽는다.
+ *
+ * J를 낮추면 꺾임이 부드러워지는 대신 게임이 길어진다. 2.0에서 사망 라운드 중앙값 R40,
+ * 게임 길이 15분, 영웅 레벨 중앙값 36이라 30레벨 각성 창(R30~35)을 확실히 지난다. [프로토]
  */
-export const enemyHP = (round: number): number => 30 * Math.pow(1.18, round);
+export const CYCLE_ROUNDS = 5;
+export const cycleOf = (round: number): number => Math.floor((round - 1) / CYCLE_ROUNDS);
+export const posInCycle = (round: number): number => (round - 1) % CYCLE_ROUNDS;
+
+const CYCLE_HP_JUMP = 2.0;
+const CYCLE_BASE_HP = 44;
+
+export const enemyHP = (round: number): number =>
+  CYCLE_BASE_HP * Math.pow(CYCLE_HP_JUMP, cycleOf(round));
 /**
  * 적 장갑은 계단식이다. 선형으로 매 라운드 오르면 저티어 유닛이 매 라운드 조금씩
  * 무력해져서 언제 갈아엎어야 하는지 감이 안 온다. 5라운드마다 한 칸씩 오르면
@@ -118,12 +131,13 @@ export const enemyArmor = (round: number): number =>
   Math.floor(round / ENEMY_ARMOR_STEP_ROUNDS) * ENEMY_ARMOR_PER_STEP;
 
 /**
- * 웨이브당 잡몹 수. 원본은 스폰 로직이 EUD라 몹 수를 읽을 수 없다(§9.2, §11.1).
- * 라인이 계속 차 있어야 타워디펜스의 속도감이 나오므로 15기에서 시작한다. [프로토]
+ * 웨이브당 잡몹 수. 사이클 안에서 라운드마다 COUNT_STEP만큼 늘어난다.
+ * 원본은 스폰 로직이 EUD라 몹 수를 읽을 수 없다(§9.2, §11.1). [프로토]
  */
-export const ENEMY_BASE_COUNT = 15;
+export const ENEMY_BASE_COUNT = 12;
+export const ENEMY_COUNT_STEP = 3;
 export const enemyCount = (round: number): number =>
-  ENEMY_BASE_COUNT + Math.floor(round / 4); // [프로토]
+  ENEMY_BASE_COUNT + ENEMY_COUNT_STEP * posInCycle(round);
 
 /** 웨이브 내 스폰 간격(초) [프로토] */
 export const SPAWN_INTERVAL = 0.3;
