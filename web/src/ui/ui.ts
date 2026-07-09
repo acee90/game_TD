@@ -196,7 +196,8 @@ function refreshAugmentOverlay(el: Elements, game: Game): void {
     return;
   }
   el.augOverlay.style.display = 'flex';
-  el.augSub.textContent = `영웅 Lv${game.hero?.level} — 하나를 고르세요 (게임 일시정지)`;
+  el.augSub.textContent =
+    `영웅 Lv${game.hero.level} — 하나를 고르세요 · 지금 몹 체력 ×${game.enemyHpMultiplier.toFixed(2)}`;
   el.augCards.innerHTML = game.augmentChoices
     .map((card, i) => {
       const kindColor = HD.AUGMENT_KIND_COLOR[card.augment.kind];
