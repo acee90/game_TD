@@ -20,18 +20,6 @@ export const CENTER: Pt = [210, 250];
 /** 가지 하나의 타일 수 */
 export const ARM_TILES = 4;
 
-/**
- * 타워 타일 17개 — 중앙 1 + 가지별 4.
- * 인덱스 0 = 중앙, 이후 상·하·좌·우 순서.
- */
-export const SLOT_POS: readonly Pt[] = [
-  CENTER,
-  ...Array.from({ length: ARM_TILES }, (_, i) => [CENTER[0], CENTER[1] - TILE * (i + 1)] as const),
-  ...Array.from({ length: ARM_TILES }, (_, i) => [CENTER[0], CENTER[1] + TILE * (i + 1)] as const),
-  ...Array.from({ length: ARM_TILES }, (_, i) => [CENTER[0] - TILE * (i + 1), CENTER[1]] as const),
-  ...Array.from({ length: ARM_TILES }, (_, i) => [CENTER[0] + TILE * (i + 1), CENTER[1]] as const),
-];
-
 const HALF = TILE / 2;
 const REACH = TILE * ARM_TILES + HALF; // 중심에서 가지 끝 바깥면까지
 
@@ -52,6 +40,52 @@ const armT = CENTER[1] - HALF - OFFSET; // 212
 const armB = CENTER[1] + HALF + OFFSET; // 288
 const armL = CENTER[0] - REACH - OFFSET; // 28
 const armR = CENTER[0] + REACH + OFFSET; // 392
+
+/**
+ * 십자 타일 17개 — 중앙 1 + 가지별 4.
+ * 인덱스 0 = 중앙(제단 자리), 이후 상·하·좌·우 순서.
+ */
+const CROSS_SLOTS: readonly Pt[] = [
+  CENTER,
+  ...Array.from({ length: ARM_TILES }, (_, i) => [CENTER[0], CENTER[1] - TILE * (i + 1)] as const),
+  ...Array.from({ length: ARM_TILES }, (_, i) => [CENTER[0], CENTER[1] + TILE * (i + 1)] as const),
+  ...Array.from({ length: ARM_TILES }, (_, i) => [CENTER[0] - TILE * (i + 1), CENTER[1]] as const),
+  ...Array.from({ length: ARM_TILES }, (_, i) => [CENTER[0] + TILE * (i + 1), CENTER[1]] as const),
+];
+
+/**
+ * 모서리 타일 — 경로 바깥의 네 모서리에 3×2 블록씩, 모두 24칸.
+ * 십자 타일과 달리 경로의 한쪽 변만 커버하므로 사거리가 짧은 유닛에게는 자리가 아깝다.
+ * 대신 십자가 꽉 차도 계속 유닛을 놓을 수 있어 후반의 골드 소비처가 된다.
+ */
+export const CORNER_COLS = 3;
+export const CORNER_ROWS = 2;
+
+/** 경로 선의 절반 두께 + 타일 절반 — 이만큼은 경로 중심선에서 떨어져야 겹치지 않는다 */
+const CLEARANCE = 12 + TILE / 2;
+
+const cornerBlock = (originX: number, originY: number, dx: number, dy: number): Pt[] =>
+  Array.from({ length: CORNER_COLS * CORNER_ROWS }, (_, i) => {
+    const col = i % CORNER_COLS;
+    const row = Math.floor(i / CORNER_COLS);
+    return [originX + dx * TILE * col, originY + dy * TILE * row] as const;
+  });
+
+// 네 모서리의 안쪽 한계 — 십자 세로바/가로바를 감싸는 경로선에서 CLEARANCE만큼 물러난 지점
+const innerLeft = CENTER[0] - HALF - OFFSET - CLEARANCE;
+const innerRight = CENTER[0] + HALF + OFFSET + CLEARANCE;
+const innerTop = CENTER[1] - HALF - OFFSET - CLEARANCE;
+const innerBottom = CENTER[1] + HALF + OFFSET + CLEARANCE;
+
+const CORNER_SLOTS: readonly Pt[] = [
+  ...cornerBlock(innerLeft, innerTop, -1, -1),
+  ...cornerBlock(innerRight, innerTop, 1, -1),
+  ...cornerBlock(innerLeft, innerBottom, -1, 1),
+  ...cornerBlock(innerRight, innerBottom, 1, 1),
+];
+
+/** 유닛을 놓을 수 있는 모든 타일 */
+export const SLOT_POS: readonly Pt[] = [...CROSS_SLOTS, ...CORNER_SLOTS];
 
 /** 북측 왼쪽 입구 → 반시계 일주 → 북측 오른쪽 출구 */
 export const WAYPOINTS: readonly Pt[] = [
@@ -106,3 +140,26 @@ export function pathPos(d: number): [number, number] {
 
 /** 넥서스 — 보스 소환 지점. 십자 중앙. */
 export const NEXUS: Pt = CENTER;
+
+/**
+ * 임의의 점에서 가장 가까운 경로 위 지점의 거리.
+ * 영웅은 경로를 벗어날 수 없으므로 클릭 좌표를 여기에 투영해서 목적지로 삼는다.
+ */
+export function nearestPathDistance(x: number, y: number): number {
+  const STEPS = 600;
+  let best = 0;
+  let bestGap = Infinity;
+  for (let i = 0; i <= STEPS; i++) {
+    const d = (i / STEPS) * PATH_LENGTH;
+    const [px, py] = pathPos(d);
+    const gap = Math.hypot(px - x, py - y);
+    if (gap < bestGap) {
+      bestGap = gap;
+      best = d;
+    }
+  }
+  return best;
+}
+
+/** 제단(십자 중앙)에서 가장 가까운 경로 지점 — 영웅이 부활하는 자리 */
+export const ALTAR_PATH_DISTANCE = nearestPathDistance(CENTER[0], CENTER[1]);

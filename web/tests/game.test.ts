@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import * as B from '../src/data/balance';
-import { ARM_TILES, PATH_LENGTH, SLOT_POS, pathPos } from '../src/core/map';
+import { ARM_TILES, CORNER_COLS, CORNER_ROWS, PATH_LENGTH, SLOT_POS, TILE, pathPos } from '../src/core/map';
 import { GOD_POOL_EARLY, GOD_POOL_LATE, GOD_TIER, godPool } from '../src/data/units';
 import { Game } from '../src/game/game';
 import { bossKillMineral, killIncome } from '../src/game/economy';
@@ -433,9 +433,50 @@ describe('소득 — 차감 없는 누적형', () => {
 });
 
 describe('맵 — 십자 일주', () => {
-  test('타워 타일은 17개 (중앙 1 + 가지별 4)', () => {
-    expect(SLOT_POS).toHaveLength(1 + ARM_TILES * 4);
-    expect(SLOT_POS).toHaveLength(17);
+  const CROSS_COUNT = 1 + ARM_TILES * 4;
+  const CORNER_COUNT = 4 * CORNER_COLS * CORNER_ROWS;
+
+  test('타워 타일은 십자 17 + 모서리 24 = 41개', () => {
+    expect(CROSS_COUNT).toBe(17);
+    expect(CORNER_COUNT).toBe(24);
+    expect(SLOT_POS).toHaveLength(41);
+  });
+
+  test('모서리 타일은 경로와 겹치지 않는다', () => {
+    const PATH_HALF_WIDTH = 12;
+    const TILE_HALF = TILE / 2;
+    const STEPS = 4000;
+
+    for (let i = CROSS_COUNT; i < SLOT_POS.length; i++) {
+      const [sx, sy] = SLOT_POS[i];
+      for (let step = 0; step < STEPS; step++) {
+        const [px, py] = pathPos((step / STEPS) * PATH_LENGTH);
+        // 타일은 정사각형이므로 체비셰프 거리로 겹침을 본다
+        const gap = Math.max(Math.abs(px - sx), Math.abs(py - sy));
+        expect(gap).toBeGreaterThan(PATH_HALF_WIDTH + TILE_HALF - 1);
+      }
+    }
+  });
+
+  test('모서리 타일은 캔버스(420×470) 안에 있다', () => {
+    const TILE_HALF = TILE / 2;
+    for (const [x, y] of SLOT_POS) {
+      expect(x - TILE_HALF).toBeGreaterThanOrEqual(0);
+      expect(x + TILE_HALF).toBeLessThanOrEqual(420);
+      expect(y - TILE_HALF).toBeGreaterThanOrEqual(0);
+      expect(y + TILE_HALF).toBeLessThanOrEqual(470);
+    }
+  });
+
+  test('네 모서리 블록은 중심 (210, 250)에 대해 대칭이다', () => {
+    const corners = SLOT_POS.slice(CROSS_COUNT);
+    const key = (x: number, y: number) => `${x},${y}`;
+    const set = new Set(corners.map(([x, y]) => key(x, y)));
+
+    for (const [x, y] of corners) {
+      expect(set.has(key(420 - x, y))).toBe(true); // 좌우 대칭
+      expect(set.has(key(x, 500 - y))).toBe(true); // 상하 대칭 (중심 y=250)
+    }
   });
 
   test('타일 좌표가 겹치지 않는다', () => {

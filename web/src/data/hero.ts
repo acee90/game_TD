@@ -1,5 +1,9 @@
 // ───────── 영웅 · 제단 · 증강 ─────────
 // 원본 갓타디에는 없는 신규 설계다. 근거 표기 대상이 아니다.
+//
+// 영웅은 몹과 같은 경로 위에서만 움직인다. 타워 타일을 넘어다닐 수 없다.
+// 대신 몹은 영웅을 보면 진행을 멈추고 영웅부터 처치한 뒤 지나간다.
+// 그래서 영웅은 딜러이자 **어그로 블로커**다 — 몹을 한곳에 모으고 시간을 번다.
 
 export const ALTAR_MINERAL = 40;
 /** 제단이 놓이는 타일 인덱스 — 십자 중앙 (core/map.ts SLOT_POS[0]) */
@@ -15,7 +19,7 @@ export const HERO_BASE_DAMAGE = 9;
 export const HERO_BASE_RANGE = 95;
 export const HERO_ATTACK_INTERVAL = 0.8;
 export const HERO_SPEED = 88;
-/** 이 거리 안이면 도착으로 본다 */
+/** 이 거리 안이면 도착으로 본다 (경로 위 거리 기준) */
 export const HERO_ARRIVE_EPSILON = 2;
 export const HERO_RADIUS = 11;
 
@@ -42,8 +46,10 @@ export const xpPerBoss = (level: number): number => 8 * level;
 /** 부활 대기시간. 죽으면 그동안 영웅 딜이 빠지는 것 자체가 패널티다. */
 export const HERO_RESPAWN_SECONDS = 12;
 
-/** 적이 영웅을 때린다 */
-export const ENEMY_TOUCH_RANGE = 20;
+/** 이 거리 안에 영웅이 보이면 몹이 멈춰서 영웅부터 친다 */
+export const HERO_AGGRO_RANGE = 62;
+/** 이만큼 붙으면 실제로 때린다 */
+export const ENEMY_TOUCH_RANGE = 22;
 export const ENEMY_ATTACK_INTERVAL = 1;
 export const enemyDamage = (round: number): number => 4 + round * 1.6;
 export const bossDamage = (level: number): number => 18 * level;

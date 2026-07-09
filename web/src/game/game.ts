@@ -84,7 +84,7 @@ export class Game {
       return false;
     }
     this.mineral -= H.ALTAR_MINERAL;
-    this.hero = new Hero(this.altarSlot.x, this.altarSlot.y);
+    this.hero = new Hero();
     this.message = '제단을 세웠습니다. 맵을 클릭해 영웅을 움직이세요.';
     return true;
   }
@@ -391,13 +391,7 @@ export class Game {
       }
     }
 
-    for (const enemy of this.enemies) {
-      enemy.distance += enemy.speed * dt;
-      if (enemy.distance >= PATH_LENGTH) {
-        enemy.dead = true;
-        this.breakthrough(enemy);
-      }
-    }
+    this.advanceEnemies(dt);
 
     this.fireTowers(dt);
     this.stepHero(dt);
@@ -417,6 +411,38 @@ export class Game {
       f.y -= 18 * dt;
     }
     this.floats = this.floats.filter((f) => f.life > 0);
+  }
+
+  /**
+   * 몹 전진. 영웅이 앞쪽 시야 안에 있으면 멈춰서 영웅부터 친다.
+   * 이미 영웅을 지나쳐버린 몹은 되돌아오지 않는다 — 그래야 교착이 안 생긴다.
+   */
+  private advanceEnemies(dt: number): void {
+    const hero = this.hero;
+    const heroBlocks = hero !== null && hero.alive;
+
+    for (const enemy of this.enemies) {
+      if (heroBlocks && this.isAggroed(enemy, hero!)) {
+        const gap = hero!.distance - enemy.distance;
+        // 영웅에게 다가가되 지나치지 않는다
+        if (gap > H.ENEMY_TOUCH_RANGE) {
+          enemy.distance += Math.min(enemy.speed * dt, gap - H.ENEMY_TOUCH_RANGE);
+        }
+        continue;
+      }
+      enemy.distance += enemy.speed * dt;
+      if (enemy.distance >= PATH_LENGTH) {
+        enemy.dead = true;
+        this.breakthrough(enemy);
+      }
+    }
+  }
+
+  /** 몹 앞쪽 시야 안에 살아있는 영웅이 있는가 */
+  private isAggroed(enemy: Enemy, hero: Hero): boolean {
+    const gap = hero.distance - enemy.distance;
+    if (gap < -H.ENEMY_TOUCH_RANGE) return false; // 이미 지나쳤다
+    return gap <= H.HERO_AGGRO_RANGE;
   }
 
   /** 영웅 이동 · 공격, 그리고 적의 반격 */
@@ -458,8 +484,8 @@ export class Game {
     if (this.heroHitTimer <= 0) {
       let incoming = 0;
       for (const enemy of this.enemies) {
-        const [ex, ey] = pathPos(enemy.distance);
-        if (Math.hypot(ex - hero.x, ey - hero.y) > H.ENEMY_TOUCH_RANGE + enemy.radius) continue;
+        const gap = Math.abs(enemy.distance - hero.distance);
+        if (gap > H.ENEMY_TOUCH_RANGE + enemy.radius) continue;
         incoming +=
           enemy.kind === 'boss'
             ? H.bossDamage(enemy.bossLevel ?? 1)

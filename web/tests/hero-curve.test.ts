@@ -32,7 +32,7 @@ const ATTACK_THREE = ['might', 'might', 'might'];
  * 영웅이 목표 레벨에 도달하는 라운드를 구한다.
  */
 function roundAtLevel(targetLevel: number, bossEveryRounds: number): number {
-  const hero = new Hero(0, 0);
+  const hero = new Hero();
   for (let round = 1; round <= 200; round++) {
     hero.gainXp(B.enemyCount(round) * H.XP_PER_MOB);
     if (bossEveryRounds > 0 && round % bossEveryRounds === 0) {
@@ -70,7 +70,7 @@ describe('레벨 30에 증강 3개', () => {
   });
 
   test('30레벨까지 정확히 3번 고른다', () => {
-    const hero = new Hero(0, 0);
+    const hero = new Hero();
     let picks = 0;
     while (hero.level < 30) {
       hero.gainXp(hero.xpNeeded);

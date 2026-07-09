@@ -2,7 +2,7 @@ import { describe, expect, test } from 'vitest';
 import * as B from '../src/data/balance';
 import * as H from '../src/data/hero';
 import { AUGMENTS } from '../src/data/hero';
-import { PATH_LENGTH } from '../src/core/map';
+import { PATH_LENGTH, nearestPathDistance, pathPos } from '../src/core/map';
 import { Game } from '../src/game/game';
 import { Hero, computeStats, rollAugmentChoices } from '../src/game/hero';
 
@@ -61,26 +61,28 @@ describe('제단 — 영웅의 출발점', () => {
   });
 });
 
-describe('영웅 이동 — 경로에 매이지 않는다', () => {
-  test('클릭한 지점으로 걸어간다', () => {
-    const hero = new Hero(100, 100);
-    hero.moveTo(200, 100);
-    hero.step(0.5);
+describe('영웅 이동 — 경로 위에서만', () => {
+  test('클릭 지점을 경로에 투영해 그리로 걸어간다', () => {
+    const hero = new Hero(0);
+    const [tx, ty] = pathPos(300);
+    hero.moveTo(tx, ty);
 
-    expect(hero.x).toBeGreaterThan(100);
-    expect(hero.x).toBeLessThan(200);
-    expect(hero.y).toBeCloseTo(100, 5);
+    expect(hero.targetDistance).toBeCloseTo(300, -1);
+    hero.step(1);
+    expect(hero.distance).toBeGreaterThan(0);
+    expect(hero.distance).toBeLessThanOrEqual(300);
   });
 
-  test('목적지에 도착하면 멈춘다', () => {
-    const hero = new Hero(100, 100);
-    hero.moveTo(110, 100);
-    for (let i = 0; i < 20; i++) hero.step(0.1);
+  test('경로에서 멀리 떨어진 곳을 찍어도 경로 위 최근접점으로 간다', () => {
+    const hero = new Hero(0);
+    hero.moveTo(210, 250); // 십자 중앙 — 경로가 아니다
+    const [hx, hy] = pathPos(hero.targetDistance);
 
-    expect(Math.abs(hero.x - 110)).toBeLessThanOrEqual(H.HERO_ARRIVE_EPSILON);
+    // 목적지는 반드시 경로 위다
+    expect(nearestPathDistance(hx, hy)).toBeCloseTo(hero.targetDistance, 0);
   });
 
-  test('타워 타일 위를 그대로 지나간다 — 충돌 판정이 없다', () => {
+  test('영웅은 언제나 경로 위에 있다 — 타워 타일 위로 못 올라간다', () => {
     const game = new Game();
     game.mineral = 999;
     game.buildAltar();
@@ -89,10 +91,114 @@ describe('영웅 이동 — 경로에 매이지 않는다', () => {
     const hero = game.hero!;
     const occupied = game.slots.find((s) => s.tower)!;
     hero.moveTo(occupied.x, occupied.y);
-    for (let i = 0; i < 60; i++) hero.step(0.1);
+    for (let i = 0; i < 200; i++) hero.step(0.1);
 
+    // 타일 중심에 도달하지 못한다 (경로 밖이므로)
     const away = Math.hypot(hero.x - occupied.x, hero.y - occupied.y);
-    expect(away).toBeLessThanOrEqual(H.HERO_ARRIVE_EPSILON);
+    expect(away).toBeGreaterThan(1);
+
+    // 그리고 여전히 경로 위에 있다
+    const [px, py] = pathPos(hero.distance);
+    expect(Math.hypot(hero.x - px, hero.y - py)).toBeLessThan(0.001);
+  });
+
+  test('목적지에 도착하면 멈춘다', () => {
+    const hero = new Hero(0);
+    hero.moveToDistance(40);
+    for (let i = 0; i < 40; i++) hero.step(0.1);
+
+    expect(Math.abs(hero.distance - 40)).toBeLessThanOrEqual(H.HERO_ARRIVE_EPSILON);
+  });
+
+  test('뒤로도 갈 수 있다', () => {
+    const hero = new Hero(300);
+    hero.moveToDistance(100);
+    hero.step(1);
+    expect(hero.distance).toBeLessThan(300);
+  });
+
+  test('경로 밖으로는 목적지를 잡을 수 없다', () => {
+    const hero = new Hero(0);
+    hero.moveToDistance(-500);
+    expect(hero.targetDistance).toBe(0);
+    hero.moveToDistance(PATH_LENGTH + 500);
+    expect(hero.targetDistance).toBe(PATH_LENGTH);
+  });
+});
+
+describe('어그로 — 몹이 영웅을 보면 멈춘다', () => {
+  const mob = (distance: number) => ({
+    kind: 'mob' as const, name: 'x', maxHp: 1e9, hp: 1e9, armor: 1e9,
+    speed: 50, radius: 9, distance,
+  });
+
+  test('시야 안에 영웅이 있으면 전진하지 않는다', () => {
+    const game = new Game();
+    game.buildAltar();
+    const hero = game.hero!;
+
+    // 영웅 바로 앞(뒤쪽)에 몹을 둔다
+    game.enemies.push(mob(hero.distance - 30));
+    const before = game.enemies[0].distance;
+    game.update(0.2);
+
+    // 접촉 거리까지만 다가오고 그 이상 나아가지 않는다
+    const after = game.enemies[0].distance;
+    expect(after).toBeGreaterThanOrEqual(before);
+    expect(hero.distance - after).toBeGreaterThanOrEqual(H.ENEMY_TOUCH_RANGE - 1);
+  });
+
+  test('시야 밖이면 그냥 지나간다', () => {
+    const game = new Game();
+    game.buildAltar();
+    const hero = game.hero!;
+
+    game.enemies.push(mob(hero.distance - H.HERO_AGGRO_RANGE - 50));
+    const before = game.enemies[0].distance;
+    game.update(0.2);
+
+    expect(game.enemies[0].distance).toBeGreaterThan(before + 5);
+  });
+
+  test('영웅을 지나친 몹은 되돌아오지 않는다', () => {
+    const game = new Game();
+    game.buildAltar();
+    const hero = game.hero!;
+
+    game.enemies.push(mob(hero.distance + 40));
+    const before = game.enemies[0].distance;
+    game.update(0.2);
+
+    expect(game.enemies[0].distance).toBeGreaterThan(before);
+  });
+
+  test('영웅이 죽으면 몹이 다시 흐른다', () => {
+    const game = new Game();
+    game.buildAltar();
+    const hero = game.hero!;
+
+    game.enemies.push(mob(hero.distance - 30));
+    game.update(0.2);
+    const blocked = game.enemies[0].distance;
+
+    hero.takeDamage(1e9);
+    expect(hero.alive).toBe(false);
+    game.update(0.2);
+
+    expect(game.enemies[0].distance).toBeGreaterThan(blocked);
+  });
+
+  test('어그로는 몹을 한곳에 모은다', () => {
+    const game = new Game();
+    game.buildAltar();
+    const hero = game.hero!;
+
+    for (let i = 0; i < 5; i++) game.enemies.push(mob(hero.distance - 60 + i * 8));
+    for (let i = 0; i < 30; i++) game.update(0.05);
+
+    const spread = Math.max(...game.enemies.map((e) => e.distance)) -
+      Math.min(...game.enemies.map((e) => e.distance));
+    expect(spread).toBeLessThan(20); // 접촉 지점에 뭉친다
   });
 });
 
@@ -118,7 +224,7 @@ describe('레벨 — 모든 처치에서 경험치를 얻는다', () => {
   });
 
   test('경험치가 차면 레벨이 오르고 체력이 회복된다', () => {
-    const hero = new Hero(0, 0);
+    const hero = new Hero();
     hero.hp = 1;
     const gained = hero.gainXp(hero.xpNeeded);
 
@@ -128,7 +234,7 @@ describe('레벨 — 모든 처치에서 경험치를 얻는다', () => {
   });
 
   test('죽어 있으면 경험치를 못 받는다', () => {
-    const hero = new Hero(0, 0);
+    const hero = new Hero();
     hero.takeDamage(99999);
     expect(hero.alive).toBe(false);
 
@@ -139,8 +245,8 @@ describe('레벨 — 모든 처치에서 경험치를 얻는다', () => {
 
 describe('사망과 부활 — 패널티는 대기시간뿐', () => {
   test('죽으면 부활 타이머가 걸린다', () => {
-    const hero = new Hero(50, 50);
-    hero.moveTo(300, 300);
+    const hero = new Hero(200);
+    hero.moveToDistance(400);
     for (let i = 0; i < 10; i++) hero.step(0.1);
     hero.takeDamage(99999);
 
@@ -148,22 +254,22 @@ describe('사망과 부활 — 패널티는 대기시간뿐', () => {
     expect(hero.respawnTimer).toBeCloseTo(H.HERO_RESPAWN_SECONDS, 5);
   });
 
-  test('대기시간이 끝나면 제단에서 만피로 부활한다', () => {
-    const hero = new Hero(50, 50);
-    hero.moveTo(300, 300);
+  test('대기시간이 끝나면 제단 자리에서 만피로 부활한다', () => {
+    const hero = new Hero(200);
+    hero.moveToDistance(400);
     for (let i = 0; i < 10; i++) hero.step(0.1);
-    hero.takeDamage(99999);
+    expect(hero.distance).toBeGreaterThan(200);
 
+    hero.takeDamage(99999);
     hero.step(H.HERO_RESPAWN_SECONDS + 0.1);
 
     expect(hero.alive).toBe(true);
-    expect(hero.x).toBe(50);
-    expect(hero.y).toBe(50);
+    expect(hero.distance).toBe(hero.altarDistance);
     expect(hero.hp).toBe(hero.stats.maxHp);
   });
 
   test('경험치는 잃지 않는다', () => {
-    const hero = new Hero(0, 0);
+    const hero = new Hero();
     hero.gainXp(3);
     hero.takeDamage(99999);
     hero.step(H.HERO_RESPAWN_SECONDS + 0.1);
@@ -181,7 +287,7 @@ describe('사망과 부활 — 패널티는 대기시간뿐', () => {
 
 describe('증강 — 선택 동안 게임이 멈춘다', () => {
   test('AUGMENT_EVERY 레벨마다 선택이 뜬다', () => {
-    const hero = new Hero(0, 0);
+    const hero = new Hero();
     while (hero.level < H.AUGMENT_EVERY) hero.gainXp(hero.xpNeeded);
 
     expect(hero.level).toBe(H.AUGMENT_EVERY);
@@ -226,7 +332,7 @@ describe('증강 — 선택 동안 게임이 멈춘다', () => {
   });
 
   test('최대 스택에 도달한 증강은 다시 나오지 않는다', () => {
-    const hero = new Hero(0, 0);
+    const hero = new Hero();
     const swift = augment('swift');
     for (let i = 0; i < swift.maxStacks; i++) hero.addAugment(swift);
 
@@ -235,7 +341,7 @@ describe('증강 — 선택 동안 게임이 멈춘다', () => {
   });
 
   test('대폭발은 충격파를 먼저 잡아야 나온다', () => {
-    const hero = new Hero(0, 0);
+    const hero = new Hero();
     expect(rollAugmentChoices(hero, () => 0).every((a) => a.id !== 'novabig')).toBe(true);
 
     hero.addAugment(augment('novasmall'));
@@ -246,7 +352,7 @@ describe('증강 — 선택 동안 게임이 멈춘다', () => {
   });
 
   test('선택지는 서로 겹치지 않는다', () => {
-    const hero = new Hero(0, 0);
+    const hero = new Hero();
     let call = 0;
     const choices = rollAugmentChoices(hero, () => (call++ % 7) / 7);
     const ids = new Set(choices.map((a) => a.id));
@@ -284,7 +390,7 @@ describe('증강 효과 — 곱연산으로 쌓여 먼치킨이 된다', () => {
 });
 
 describe('적이 영웅을 때린다', () => {
-  test('닿은 적이 영웅 체력을 깎는다', () => {
+  test('붙은 적이 영웅 체력을 깎는다', () => {
     const game = new Game();
     game.buildAltar();
     const hero = game.hero!;
@@ -292,18 +398,8 @@ describe('적이 영웅을 때린다', () => {
 
     game.enemies.push({
       kind: 'mob', name: 'x', maxHp: 1e9, hp: 1e9, armor: 1e9,
-      speed: 0, radius: 8, distance: 0,
+      speed: 0, radius: 8, distance: hero.distance,
     });
-    // 영웅을 적 위로 옮긴다
-    const [ex, ey] = [0, 0];
-    void ex;
-    void ey;
-    hero.x = 0;
-    hero.y = 0;
-    const enemy = game.enemies[0];
-    enemy.distance = 0;
-    hero.x = 172;
-    hero.y = 28;
     game.update(0.016);
 
     expect(hero.hp).toBeLessThan(full);
@@ -311,6 +407,21 @@ describe('적이 영웅을 때린다', () => {
 
   test('보스는 잡몹보다 훨씬 아프다', () => {
     expect(H.bossDamage(1)).toBeGreaterThan(H.enemyDamage(1));
+  });
+
+  test('멀리 있는 적은 못 때린다', () => {
+    const game = new Game();
+    game.buildAltar();
+    const hero = game.hero!;
+    const full = hero.hp;
+
+    game.enemies.push({
+      kind: 'mob', name: 'x', maxHp: 1e9, hp: 1e9, armor: 1e9,
+      speed: 0, radius: 8, distance: hero.distance + 300,
+    });
+    game.update(0.016);
+
+    expect(hero.hp).toBe(full);
   });
 
   test('돌파한 적은 영웅을 때리지 못한다 — 이미 사라졌다', () => {

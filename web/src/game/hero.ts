@@ -2,6 +2,7 @@
 // 제단에서 부활하고, 경로에 매이지 않고 자유롭게 움직이며(타워 사이도 통과),
 // 처치 경험치로 레벨을 올리고, 일정 레벨마다 증강을 고른다.
 
+import { ALTAR_PATH_DISTANCE, PATH_LENGTH, nearestPathDistance, pathPos } from '../core/map';
 import * as H from '../data/hero';
 import type { Augment, AugmentEffect } from '../data/hero';
 
@@ -66,11 +67,15 @@ export function computeStats(level: number, augments: readonly Augment[]): HeroS
   };
 }
 
+/**
+ * 영웅은 몹과 같은 경로 위에서만 움직인다. 타워 타일을 넘어 날아다닐 수 없다.
+ * 그래서 위치는 좌표가 아니라 경로 위 거리 하나로 표현된다.
+ */
 export class Hero {
-  x: number;
-  y: number;
-  targetX: number;
-  targetY: number;
+  /** 경로 위 현재 거리 */
+  distance: number;
+  /** 경로 위 목적지 */
+  targetDistance: number;
 
   hp: number;
   level = 1;
@@ -83,15 +88,18 @@ export class Hero {
   /** 아직 고르지 않은 증강 선택 횟수 */
   pendingAugmentPicks = 0;
 
-  constructor(
-    readonly altarX: number,
-    readonly altarY: number,
-  ) {
-    this.x = altarX;
-    this.y = altarY;
-    this.targetX = altarX;
-    this.targetY = altarY;
+  constructor(readonly altarDistance: number = ALTAR_PATH_DISTANCE) {
+    this.distance = altarDistance;
+    this.targetDistance = altarDistance;
     this.hp = this.stats.maxHp;
+  }
+
+  get x(): number {
+    return pathPos(this.distance)[0];
+  }
+
+  get y(): number {
+    return pathPos(this.distance)[1];
   }
 
   get stats(): HeroStats {
@@ -111,9 +119,14 @@ export class Hero {
     return this.stats.splashRadius > 0;
   }
 
+  /** 클릭 좌표를 경로에 투영해서 목적지로 삼는다 */
   moveTo(x: number, y: number): void {
-    this.targetX = x;
-    this.targetY = y;
+    this.targetDistance = nearestPathDistance(x, y);
+  }
+
+  /** 경로 위 거리를 직접 지정 (테스트·내부용) */
+  moveToDistance(distance: number): void {
+    this.targetDistance = Math.min(PATH_LENGTH, Math.max(0, distance));
   }
 
   /** 경험치를 넣고, 레벨이 오르면 오른 레벨 수를 돌려준다 */
@@ -160,23 +173,18 @@ export class Hero {
     const { moveSpeed, regen, maxHp } = this.stats;
     if (regen > 0) this.hp = Math.min(maxHp, this.hp + regen * dt);
 
-    const dx = this.targetX - this.x;
-    const dy = this.targetY - this.y;
-    const distance = Math.hypot(dx, dy);
-    if (distance <= H.HERO_ARRIVE_EPSILON) return;
+    const gap = this.targetDistance - this.distance;
+    if (Math.abs(gap) <= H.HERO_ARRIVE_EPSILON) return;
 
-    const step = Math.min(distance, moveSpeed * dt);
-    this.x += (dx / distance) * step;
-    this.y += (dy / distance) * step;
+    const step = Math.min(Math.abs(gap), moveSpeed * dt);
+    this.distance += Math.sign(gap) * step;
   }
 
   private respawn(): void {
     this.alive = true;
     this.hp = this.stats.maxHp;
-    this.x = this.altarX;
-    this.y = this.altarY;
-    this.targetX = this.altarX;
-    this.targetY = this.altarY;
+    this.distance = this.altarDistance;
+    this.targetDistance = this.altarDistance;
     this.respawnTimer = 0;
   }
 }

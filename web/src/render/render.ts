@@ -133,11 +133,11 @@ function drawHero(ctx: CanvasRenderingContext2D, game: Game): void {
   const hero = game.hero;
   if (!hero) return;
 
-  const { x, y } = hero;
   if (!hero.alive) {
+    const [ax, ay] = pathPos(hero.altarDistance);
     ctx.globalAlpha = 0.35;
     ctx.beginPath();
-    ctx.arc(game.altarSlot.x, game.altarSlot.y, HERO_RADIUS, 0, Math.PI * 2);
+    ctx.arc(ax, ay, HERO_RADIUS, 0, Math.PI * 2);
     ctx.strokeStyle = '#b08cff';
     ctx.lineWidth = 2;
     ctx.stroke();
@@ -145,12 +145,16 @@ function drawHero(ctx: CanvasRenderingContext2D, game: Game): void {
     return;
   }
 
+  const x = hero.x;
+  const y = hero.y;
+
   const stats = hero.stats;
 
-  // 목적지 표시
-  if (Math.hypot(hero.targetX - x, hero.targetY - y) > 3) {
+  // 목적지 표시 (경로 위)
+  if (Math.abs(hero.targetDistance - hero.distance) > 3) {
+    const [tx, ty] = pathPos(hero.targetDistance);
     ctx.beginPath();
-    ctx.arc(hero.targetX, hero.targetY, 4, 0, Math.PI * 2);
+    ctx.arc(tx, ty, 4, 0, Math.PI * 2);
     ctx.strokeStyle = 'rgba(176,140,255,.5)';
     ctx.lineWidth = 1;
     ctx.stroke();
