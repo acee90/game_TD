@@ -11,13 +11,11 @@ const canvas = document.getElementById('canvas') as HTMLCanvasElement;
 const ctx = canvas.getContext('2d');
 if (!ctx) throw new Error('2d context unavailable');
 
-let game: Game | undefined;
+const game = new Game();
 const el = bindElements();
 
-// ── 시작: 영웅 타입을 골라야 게임이 만들어진다 ──
-const classOverlay = document.getElementById('classOverlay') as HTMLElement;
-const classCards = document.getElementById('classCards') as HTMLElement;
-classCards.innerHTML = HERO_CLASS_IDS.map((id) => {
+// ── 전직 카드 (Lv5에 오버레이로 뜬다 — 표시는 refresh가 게임 상태로 토글) ──
+el.classCards.innerHTML = HERO_CLASS_IDS.map((id) => {
   const k = HERO_CLASSES[id];
   const skills = k.skills.map((sid) => SKILLS[sid].name).join(' · ');
   const hint = [
@@ -33,12 +31,10 @@ classCards.innerHTML = HERO_CLASS_IDS.map((id) => {
     <div class="d" style="margin-top:2px">배울 수 있는 스킬 — ${skills}</div>
   </button>`;
 }).join('');
-classCards.addEventListener('click', (event) => {
+el.classCards.addEventListener('click', (event) => {
   const card = (event.target as HTMLElement).closest<HTMLElement>('.augcard');
   const id = card?.dataset.class as (typeof HERO_CLASS_IDS)[number] | undefined;
-  if (!id || game) return;
-  game = new Game(Math.random, id);
-  classOverlay.style.display = 'none';
+  if (id) game.chooseClass(id);
 });
 
 // ── 캔버스 클릭 → 슬롯 선택 / 유닛 생성 ──
@@ -48,7 +44,6 @@ canvas.addEventListener('pointerdown', (event) => {
   const x = (event.clientX - rect.left) * scale;
   const y = (event.clientY - rect.top) * scale;
 
-  if (!game) return;
   const hit = game.slots.find(
     (slot) => Math.abs(slot.x - x) <= TILE / 2 && Math.abs(slot.y - y) <= TILE / 2,
   );
@@ -66,27 +61,27 @@ canvas.addEventListener('pointerdown', (event) => {
   else game.spawnUnit(hit);
 });
 
-el.spawn.addEventListener('click', () => game?.spawnUnitAnywhere());
-el.probe.addEventListener('click', () => game?.buyProbe());
-el.sell.addEventListener('click', () => game?.sellSelected());
-el.heroUp.addEventListener('click', () => game?.upgradeHero());
-el.bossLevels.forEach((button, i) => button.addEventListener('click', () => game?.summonBoss(i + 1)));
-el.upgrades.forEach((button, i) => button.addEventListener('click', () => game?.upgrade(i as Race)));
+el.spawn.addEventListener('click', () => game.spawnUnitAnywhere());
+el.probe.addEventListener('click', () => game.buyProbe());
+el.sell.addEventListener('click', () => game.sellSelected());
+el.heroUp.addEventListener('click', () => game.upgradeHero());
+el.bossLevels.forEach((button, i) => button.addEventListener('click', () => game.summonBoss(i + 1)));
+el.upgrades.forEach((button, i) => button.addEventListener('click', () => game.upgrade(i as Race)));
 el.augCards.addEventListener('click', (event) => {
   const card = (event.target as HTMLElement).closest<HTMLElement>('.augcard');
-  if (card?.dataset.index) game?.chooseAugment(Number(card.dataset.index));
+  if (card?.dataset.index) game.chooseAugment(Number(card.dataset.index));
 });
 
 const KEYS: Record<string, () => void> = {
-  p: () => game?.spawnUnitAnywhere(),
-  b: () => game?.summonBoss(),
-  r: () => game?.buyProbe(),
-  x: () => game?.sellSelected(),
-  u: () => game?.upgradeHero(),
-  '1': () => game?.upgrade(0),
-  '2': () => game?.upgrade(1),
-  '3': () => game?.upgrade(2),
-  '4': () => game?.upgrade(3),
+  p: () => game.spawnUnitAnywhere(),
+  b: () => game.summonBoss(),
+  r: () => game.buyProbe(),
+  x: () => game.sellSelected(),
+  u: () => game.upgradeHero(),
+  '1': () => game.upgrade(0),
+  '2': () => game.upgrade(1),
+  '3': () => game.upgrade(2),
+  '4': () => game.upgrade(3),
 };
 window.addEventListener('keydown', (event) => KEYS[event.key.toLowerCase()]?.());
 
@@ -94,11 +89,9 @@ let last = performance.now();
 function frame(now: number): void {
   const dt = Math.min((now - last) / 1000, 0.05);
   last = now;
-  if (game) {
-    game.update(dt);
-    render(ctx!, game);
-    refresh(el, game);
-  }
+  game.update(dt);
+  render(ctx!, game);
+  refresh(el, game);
   requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);

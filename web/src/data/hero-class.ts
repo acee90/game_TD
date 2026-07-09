@@ -69,4 +69,22 @@ export const HERO_CLASSES: Record<HeroClassId, HeroClassDef> = {
 
 export const HERO_CLASS_IDS: readonly HeroClassId[] = ['warrior', 'archer', 'mage'];
 
-export const DEFAULT_HERO_CLASS: HeroClassId = 'warrior';
+/** 전직 선택이 뜨는 영웅 레벨. 첫 증강(Lv9)보다 앞이다 — 이후 증강이 타입을 따른다. */
+export const CLASS_PICK_LEVEL = 5;
+
+/**
+ * 전직 전의 중립 영웅. 배수는 전부 1이고 스킬을 못 배운다.
+ * 게임은 타입 없이 바로 시작한다 — 정보가 0인 시작 선택 대신,
+ * 몹과 보스를 본 뒤(Lv5, ~R4)에 맥락 있는 선택을 하게 한다.
+ */
+export const NOVICE: HeroClassDef = {
+  id: 'warrior', // 자리만 채운다 — NOVICE는 id로 조회되지 않는다
+  name: '견습',
+  blurb: '아직 길을 정하지 않았다.',
+  hpMult: 1,
+  damageMult: 1,
+  rangeMult: 1,
+  attackSpeedMult: 1,
+  kindWeights: { tank: 1, ranged: 1, mage: 1, stat: 1, utility: 1 },
+  skills: [],
+};

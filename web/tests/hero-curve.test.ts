@@ -14,8 +14,9 @@ const augment = (id: string) => AUGMENTS.find((a) => a.id === id)!;
 /** 실버 등급 카드 — 등급 배수 1이라 원래 효과 그대로 */
 const card = (id: string) => H.makeCard(augment(id), 'silver');
 
+// 전직(Lv5) 이후를 다루는 기준선이므로 전사를 명시한다 — 기본값은 전직 전 '견습'이다
 const heroDps = (level: number, ids: string[] = []): number => {
-  const stats = computeStats(level, ids.map(card));
+  const stats = computeStats(level, ids.map(card), 0, 'warrior');
   return stats.damage / stats.attackInterval;
 };
 

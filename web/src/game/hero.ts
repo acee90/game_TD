@@ -5,7 +5,7 @@
 import { ALTAR_PATH_DISTANCE, PATH_LENGTH, nearestPathDistance, pathPos } from '../core/map';
 import * as H from '../data/hero';
 import type { AugmentCard, AugmentEffect } from '../data/hero';
-import { DEFAULT_HERO_CLASS, HERO_CLASSES, type HeroClassId } from '../data/hero-class';
+import { CLASS_PICK_LEVEL, HERO_CLASSES, NOVICE, type HeroClassId } from '../data/hero-class';
 import { foldMods, resolveSkill, type ResolvedSkill, type SkillId } from '../data/skills';
 
 export interface HeroStats {
@@ -28,9 +28,9 @@ export function computeStats(
   level: number,
   cards: readonly AugmentCard[],
   goldUpgrades = 0,
-  classId: HeroClassId = DEFAULT_HERO_CLASS,
+  classId: HeroClassId | null = null,
 ): HeroStats {
-  const klass = HERO_CLASSES[classId];
+  const klass = classId ? HERO_CLASSES[classId] : NOVICE;
 
   // 골드 강화는 퍼센트다 — 레벨이 쌓은 기본값에 곱해진다
   let maxHp =
@@ -112,17 +112,36 @@ export class Hero {
   /** 아직 고르지 않은 증강 선택 횟수 */
   pendingAugmentPicks = 0;
 
+  /** 전직 전에는 null — Lv5에 고른다 */
+  classId: HeroClassId | null;
+
   constructor(
-    readonly classId: HeroClassId = DEFAULT_HERO_CLASS,
+    classId: HeroClassId | null = null,
     readonly altarDistance: number = ALTAR_PATH_DISTANCE,
   ) {
+    this.classId = classId;
     this.distance = altarDistance;
     this.targetDistance = altarDistance;
     this.hp = this.stats.maxHp;
   }
 
   get klass() {
-    return HERO_CLASSES[this.classId];
+    return this.classId ? HERO_CLASSES[this.classId] : NOVICE;
+  }
+
+  /** 전직 선택이 떠 있는가 — Lv5에 도달했는데 아직 타입이 없다 */
+  get pendingClassPick(): boolean {
+    return this.classId === null && this.level >= CLASS_PICK_LEVEL;
+  }
+
+  /** 전직한다. 체력은 최대치 증가분만큼 채워준다. */
+  promote(id: HeroClassId): void {
+    if (this.classId !== null) return;
+    const before = this.stats.maxHp;
+    this.classId = id;
+    const after = this.stats.maxHp;
+    if (after > before) this.hp += after - before;
+    else this.hp = Math.min(this.hp, after);
   }
 
   get x(): number {

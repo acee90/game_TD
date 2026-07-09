@@ -423,7 +423,8 @@ describe('적이 영웅을 때린다', () => {
 
 describe('빌드 정체성 — 탱커는 버티고 원거리는 때린다', () => {
   const aug = (id: string) => AUGMENTS.find((a) => a.id === id)!;
-  const build = (ids: string[]) => computeStats(30, ids.map((id) => H.makeCard(aug(id), 'silver')));
+  const build = (ids: string[]) =>
+    computeStats(30, ids.map((id) => H.makeCard(aug(id), 'silver')), 0, 'warrior');
 
   const TANK = ['bulwark', 'bulwark', 'plating'];
   const RANGED = ['might', 'might', 'might'];
@@ -463,9 +464,9 @@ describe('빌드 정체성 — 탱커는 버티고 원거리는 때린다', () =
   });
 
   test('탱커 증강이 막는 시간을 압도적으로 늘린다', () => {
-    // 원거리(완력×3)도 스탯 특화로 체력이 조금 붙지만 탱커에 비하면 미미하다
+    // 원거리(완력×3)도 스탯 특화(체력 +30%)로 체력이 붙지만 탱커에 비하면 미미하다
     expect(blockSeconds(TANK, 30)).toBeGreaterThan(blockSeconds([], 30) * 2);
-    expect(blockSeconds(RANGED, 30)).toBeLessThan(blockSeconds([], 30) * 1.3);
+    expect(blockSeconds(RANGED, 30)).toBeLessThanOrEqual(blockSeconds([], 30) * 1.35);
     expect(blockSeconds(TANK, 30)).toBeGreaterThan(blockSeconds(RANGED, 30) * 2);
   });
 });
