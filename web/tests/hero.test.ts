@@ -405,8 +405,15 @@ describe('적이 영웅을 때린다', () => {
     expect(hero.hp).toBeLessThan(full);
   });
 
-  test('보스는 잡몹보다 훨씬 아프다', () => {
-    expect(H.bossDamage(1)).toBeGreaterThan(H.enemyDamage(1));
+  test('보스는 잡몹보다 훨씬 아프고, 레벨이 높을수록 더 아프다', () => {
+    expect(H.bossDamage(1, 10)).toBeGreaterThan(H.enemyDamage(10));
+    expect(H.bossDamage(6, 10)).toBeGreaterThan(H.bossDamage(1, 10));
+  });
+
+  test('몹 공격력은 지수로 자란다 — 영웅이 무적 블로커가 되지 않게', () => {
+    expect(H.enemyDamage(20) / H.enemyDamage(10)).toBeCloseTo(
+      Math.pow(H.ENEMY_DAMAGE_GROWTH, 10), 5);
+    expect(H.enemyDamage(40)).toBeGreaterThan(H.enemyDamage(20) * 5);
   });
 
   test('멀리 있는 적은 못 때린다', () => {
@@ -433,6 +440,58 @@ describe('적이 영웅을 때린다', () => {
     });
     game.update(0.016);
     expect(game.enemies).toHaveLength(0);
+  });
+});
+
+describe('빌드 정체성 — 탱커는 버티고 원거리는 때린다', () => {
+  const aug = (id: string) => AUGMENTS.find((a) => a.id === id)!;
+  const build = (ids: string[]) => computeStats(30, ids.map(aug));
+
+  const TANK = ['bulwark', 'bulwark', 'plating'];
+  const RANGED = ['might', 'might', 'might'];
+
+  /** 시뮬레이션에서 관측된 라운드별 전형적 영웅 레벨 */
+  const typicalLevel = (round: number) => Math.min(60, Math.round(1 + round * 0.95));
+
+  /** 몹 10기가 붙었을 때 버티는 시간 (그 라운드의 전형적 레벨 기준) */
+  const blockSeconds = (ids: string[], round: number): number => {
+    const s = computeStats(typicalLevel(round), ids.map(aug));
+    const effectiveHp = s.maxHp / (1 - s.damageReduction);
+    return effectiveHp / (10 * H.enemyDamage(round));
+  };
+
+  const dps = (ids: string[]): number => {
+    const s = build(ids);
+    return s.damage / s.attackInterval;
+  };
+
+  test('탱커가 원거리보다 두 배 넘게 오래 막는다', () => {
+    const ratio = blockSeconds(TANK, 30) / blockSeconds(RANGED, 30);
+    expect(ratio).toBeGreaterThan(2);
+  });
+
+  test('원거리가 탱커보다 두 배 넘게 세게 때린다', () => {
+    expect(dps(RANGED) / dps(TANK)).toBeGreaterThan(2);
+  });
+
+  test('막을 수 있는 시간이 라운드가 지나도 무너지지 않는다', () => {
+    // 몹 공격력이 지수라 영웅 성장과 나란히 달린다
+    for (const ids of [TANK, RANGED]) {
+      const early = blockSeconds(ids, 10);
+      const late = blockSeconds(ids, 40);
+      expect(late).toBeGreaterThan(early * 0.5);
+      expect(late).toBeLessThan(early * 2);
+    }
+  });
+
+  test('선형 공격력이었다면 후반 영웅이 무적이 됐을 것이다', () => {
+    const linear = (round: number) => 4 + 1.6 * round;
+    const s = computeStats(typicalLevel(50), []);
+    const effectiveHp = s.maxHp / (1 - s.damageReduction);
+
+    const linearBlock = effectiveHp / (10 * linear(50));
+    const actualBlock = effectiveHp / (10 * H.enemyDamage(50));
+    expect(linearBlock).toBeGreaterThan(actualBlock * 5);
   });
 });
 

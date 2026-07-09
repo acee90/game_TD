@@ -51,8 +51,26 @@ export const HERO_AGGRO_RANGE = 62;
 /** 이만큼 붙으면 실제로 때린다 */
 export const ENEMY_TOUCH_RANGE = 22;
 export const ENEMY_ATTACK_INTERVAL = 1;
-export const enemyDamage = (round: number): number => 4 + round * 1.6;
-export const bossDamage = (level: number): number => 18 * level;
+
+/**
+ * 몹 공격력. 선형이 아니라 지수다.
+ *
+ * 영웅 유효 체력은 레벨당 ×1.13으로 지수 성장하는데 몹 공격력이 선형이면, 후반의 영웅은
+ * 사실상 무적 블로커가 된다(선형 4+1.6r 기준 R50에 84초를 버틴다).
+ * 1.12로 잡으면 영웅 성장과 거의 나란히 달려서 "몹 10기를 막을 수 있는 시간"이
+ * 라운드 내내 일정하게 유지된다 — 무증강 약 5.6초, 탱커 약 13.7초.
+ *
+ * 이 균형이 빌드 선택을 만든다. 탱커는 2.4배 오래 버티고, 원거리는 그만큼 빨리 죽는 대신
+ * 죽기 전까지 3배의 피해를 넣는다. 1.14까지 올리면 후반에 어떤 빌드로도 못 막는다.
+ */
+export const ENEMY_DAMAGE_BASE = 4;
+export const ENEMY_DAMAGE_GROWTH = 1.12;
+export const enemyDamage = (round: number): number =>
+  ENEMY_DAMAGE_BASE * Math.pow(ENEMY_DAMAGE_GROWTH, round);
+
+/** 보스는 같은 라운드 잡몹 여러 기 몫으로 때린다 */
+export const bossDamage = (level: number, round: number): number =>
+  enemyDamage(round) * (1.5 + 0.5 * level);
 
 /**
  * 이 레벨마다 증강을 고른다. 10레벨 간격이면 30레벨에 정확히 3개를 쥔다.

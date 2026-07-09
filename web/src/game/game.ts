@@ -488,7 +488,7 @@ export class Game {
         if (gap > H.ENEMY_TOUCH_RANGE + enemy.radius) continue;
         incoming +=
           enemy.kind === 'boss'
-            ? H.bossDamage(enemy.bossLevel ?? 1)
+            ? H.bossDamage(enemy.bossLevel ?? 1, this.round)
             : H.enemyDamage(this.round);
       }
       if (incoming > 0) {
