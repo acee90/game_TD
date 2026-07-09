@@ -10,8 +10,11 @@ export const ALTAR_SLOT = 0;
 
 // ── 파워 커브 ──
 // 초반에는 타워가 주력이고 영웅은 거들 뿐이다. 영웅 1레벨 DPS는 Lv1 타워 한 기 수준이다.
-// 타워는 티어 상한(GOD)이 있어 후반에 평평해지지만, 영웅은 레벨이 계속 오르고 증강이
-// 곱연산으로 쌓이므로 후반에 역전한다. 증강을 한 계열로 몰면 배수가 폭발한다 — 그게 먼치킨이다.
+//
+// **레벨 성장은 선형이다.** 후반 역전은 레벨이 아니라 **증강 시너지**가 만든다.
+// 레벨을 지수로 두면 아무 증강이나 골라도 저절로 세져서, 증강 선택이 결과를 못 바꾼다.
+// 선형으로 두면 증강 없는 영웅은 끝까지 GOD 타워 아래에 머물고, 계열을 몰아 특화·대특화를
+// 터뜨린 영웅만 넘어선다. 그 격차가 곧 빌드의 값어치다.
 
 export const HERO_BASE_HP = 200;
 export const HERO_BASE_DAMAGE = 9;
@@ -23,23 +26,28 @@ export const HERO_ARRIVE_EPSILON = 2;
 export const HERO_RADIUS = 11;
 
 /**
- * 레벨당 성장 — 덧셈이 아니라 곱셈이다. 이게 후반 역전의 근거다.
+ * 레벨당 성장 — 곱셈이 아니라 덧셈이다.
  *
- * 기준: 30레벨 영웅은 증강이 없으면 GOD 타워 한 기에 못 미치지만,
- * 공격 계열 증강 3개를 몰면 GOD 타워의 2배를 넘는다.
- * tests/hero.test.ts가 이 두 관계를 동시에 지킨다.
+ * 기준: 30레벨 영웅은 증강이 없으면 GOD 타워 한 기의 절반쯤이고, 공격 계열 3개를 몰아
+ * 특화를 터뜨리면 GOD 타워의 2배를 넘는다. tests/hero-curve.test.ts가 이 관계를 지킨다.
  */
-export const HERO_DAMAGE_GROWTH = 1.16;
-export const HERO_HP_GROWTH = 1.13;
+export const HERO_DAMAGE_PER_LEVEL = 18;
+export const HERO_HP_PER_LEVEL = 90;
 
 /**
- * 다음 레벨까지 필요한 경험치.
+ * 다음 레벨까지 필요한 경험치. **지수**다.
  *
- * 30레벨이 R30~35에 오도록 맞췄다(막타 30%, 보스 2라운드마다 기준). 초반이 너무 빠르지
- * 않게 기본값을 크게 잡았다 — R2에 Lv3, R5에 Lv7, R10에 Lv12쯤 된다.
- * tests/hero-curve.test.ts가 이 창을 지킨다.
+ * 선형(14 + 1.5×레벨)일 때는 영웅이 64레벨까지 올라갔다. 영웅 공격력이 레벨당 ×1.16이라
+ * 레벨이 두 배면 파워가 수십 배가 되는데, 레벨 자체에 제동이 없으니 후반이 무의미하게
+ * 부풀었다. 지수 비용은 고레벨을 실질적으로 봉인한다 — 50레벨 비용이 선형의 세 배다.
+ *
+ * 1.06이면 30레벨이 R30~35에 오는 창을 지키면서(막타 30%, 보스 2라운드마다) 최고 레벨이
+ * R86에 47쯤에서 멎는다. tests/hero-curve.test.ts가 이 창을 지킨다.
  */
-export const xpToNext = (level: number): number => Math.round(14 + 1.5 * level);
+export const XP_BASE_COST = 14;
+export const XP_COST_GROWTH = 1.06;
+export const xpToNext = (level: number): number =>
+  Math.round(XP_BASE_COST * Math.pow(XP_COST_GROWTH, level));
 
 /**
  * 경험치. 타워가 잡아도 들어오지만, 영웅이 막타를 치면 더 많이 들어온다.
@@ -60,20 +68,16 @@ export const ENEMY_TOUCH_RANGE = 22;
 export const ENEMY_ATTACK_INTERVAL = 1;
 
 /**
- * 몹 공격력. 선형이 아니라 지수다.
+ * 몹 공격력. 영웅 체력이 선형이므로 이쪽도 선형이다.
  *
- * 영웅 유효 체력은 레벨당 ×1.13으로 지수 성장하는데 몹 공격력이 선형이면, 후반의 영웅은
- * 사실상 무적 블로커가 된다(선형 4+1.6r 기준 R50에 84초를 버틴다).
- * 1.12로 잡으면 영웅 성장과 거의 나란히 달려서 "몹 10기를 막을 수 있는 시간"이
- * 라운드 내내 일정하게 유지된다 — 무증강 약 5.6초, 탱커 약 13.7초.
- *
- * 이 균형이 빌드 선택을 만든다. 탱커는 2.4배 오래 버티고, 원거리는 그만큼 빨리 죽는 대신
- * 죽기 전까지 3배의 피해를 넣는다. 1.14까지 올리면 후반에 어떤 빌드로도 못 막는다.
+ * 지수로 두면(4 × 1.12^r) 선형 체력의 영웅이 후반에 즉사한다. 둘을 나란히 선형으로 두면
+ * "몹 10기를 막을 수 있는 시간"이 라운드 내내 완만하게만 줄어들고, 그 시간을 늘리는 건
+ * 오직 탱커 증강이다 — 그래서 탱킹이 빌드 선택이 된다.
  */
 export const ENEMY_DAMAGE_BASE = 4;
-export const ENEMY_DAMAGE_GROWTH = 1.12;
+export const ENEMY_DAMAGE_PER_ROUND = 1.6;
 export const enemyDamage = (round: number): number =>
-  ENEMY_DAMAGE_BASE * Math.pow(ENEMY_DAMAGE_GROWTH, round);
+  ENEMY_DAMAGE_BASE + ENEMY_DAMAGE_PER_ROUND * round;
 
 /** 보스는 같은 라운드 잡몹 여러 기 몫으로 때린다 */
 export const bossDamage = (level: number, round: number): number =>

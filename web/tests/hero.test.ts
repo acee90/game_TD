@@ -391,10 +391,9 @@ describe('적이 영웅을 때린다', () => {
     expect(H.bossDamage(6, 10)).toBeGreaterThan(H.bossDamage(1, 10));
   });
 
-  test('몹 공격력은 지수로 자란다 — 영웅이 무적 블로커가 되지 않게', () => {
-    expect(H.enemyDamage(20) / H.enemyDamage(10)).toBeCloseTo(
-      Math.pow(H.ENEMY_DAMAGE_GROWTH, 10), 5);
-    expect(H.enemyDamage(40)).toBeGreaterThan(H.enemyDamage(20) * 5);
+  test('몹 공격력은 선형이다 — 영웅 체력도 선형이라 나란히 간다', () => {
+    const step = H.enemyDamage(20) - H.enemyDamage(10);
+    expect(H.enemyDamage(40) - H.enemyDamage(30)).toBeCloseTo(step, 5);
   });
 
   test('멀리 있는 적은 못 때린다', () => {
@@ -453,24 +452,21 @@ describe('빌드 정체성 — 탱커는 버티고 원거리는 때린다', () =
     expect(dps(RANGED) / dps(TANK)).toBeGreaterThan(2);
   });
 
-  test('막을 수 있는 시간이 라운드가 지나도 무너지지 않는다', () => {
-    // 몹 공격력이 지수라 영웅 성장과 나란히 달린다
+  test('막을 수 있는 시간이 라운드가 지나도 크게 무너지지 않는다', () => {
+    // 영웅 체력도 몹 공격력도 선형이라 비율이 완만하게만 변한다
     for (const ids of [TANK, RANGED]) {
       const early = blockSeconds(ids, 10);
       const late = blockSeconds(ids, 40);
-      expect(late).toBeGreaterThan(early * 0.5);
+      expect(late).toBeGreaterThan(early * 0.4);
       expect(late).toBeLessThan(early * 2);
     }
   });
 
-  test('선형 공격력이었다면 후반 영웅이 무적이 됐을 것이다', () => {
-    const linear = (round: number) => 4 + 1.6 * round;
-    const s = computeStats(typicalLevel(50), []);
-    const effectiveHp = s.maxHp / (1 - s.damageReduction);
-
-    const linearBlock = effectiveHp / (10 * linear(50));
-    const actualBlock = effectiveHp / (10 * H.enemyDamage(50));
-    expect(linearBlock).toBeGreaterThan(actualBlock * 5);
+  test('탱커 증강이 막는 시간을 압도적으로 늘린다', () => {
+    // 원거리(완력×3)도 스탯 특화로 체력이 조금 붙지만 탱커에 비하면 미미하다
+    expect(blockSeconds(TANK, 30)).toBeGreaterThan(blockSeconds([], 30) * 2);
+    expect(blockSeconds(RANGED, 30)).toBeLessThan(blockSeconds([], 30) * 1.3);
+    expect(blockSeconds(TANK, 30)).toBeGreaterThan(blockSeconds(RANGED, 30) * 2);
   });
 });
 

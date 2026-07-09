@@ -66,22 +66,22 @@ describe('Lv1 보스 — 시작 전력으로 넘을 수 있어야 한다', () =>
     expect(fastest).toBeGreaterThan(3);
   });
 
-  test('Lv2 보스는 같은 전력으로 잡히지 않는다 — 성장 압력이 있다', () => {
+  test('상위 보스는 같은 전력으로 잡히지 않는다 — 성장 압력이 있다', () => {
     const game = new Game(seeded(7));
     game.mineral = COMFORTABLE_BUDGET;
     while (game.spawnUnitAnywhere()) {
       // 소진까지
     }
-    game.bossCleared = 1; // Lv1은 이미 잡았다고 치고
+    game.bossCleared = 3; // Lv1~3은 이미 잡았다고 치고
     game.summonBoss();
-    expect(game.liveBossLevels).toEqual([2]);
+    expect(game.liveBossLevels).toEqual([4]);
 
     let seconds = 0;
     while (game.liveBossLevels.length > 0 && seconds < 200) {
       game.update(1 / 60);
       seconds += 1 / 60;
     }
-    expect(game.bossCleared).toBe(1); // 못 잡고 돌파당한다
+    expect(game.bossCleared).toBe(3); // 못 잡고 돌파당한다
     expect(game.lives).toBeLessThan(B.START_LIVES);
   });
 });

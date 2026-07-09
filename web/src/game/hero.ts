@@ -23,8 +23,8 @@ export interface HeroStats {
 
 /** 증강 카드를 접어서 최종 스탯을 만든다. 순수 함수 — 테스트하기 쉽다. */
 export function computeStats(level: number, cards: readonly AugmentCard[]): HeroStats {
-  let maxHp = H.HERO_BASE_HP * Math.pow(H.HERO_HP_GROWTH, level - 1);
-  let damage = H.HERO_BASE_DAMAGE * Math.pow(H.HERO_DAMAGE_GROWTH, level - 1);
+  let maxHp = H.HERO_BASE_HP + H.HERO_HP_PER_LEVEL * (level - 1);
+  let damage = H.HERO_BASE_DAMAGE + H.HERO_DAMAGE_PER_LEVEL * (level - 1);
   let range = H.HERO_BASE_RANGE;
   let attackSpeed = 1;
   let moveSpeed = H.HERO_SPEED;

@@ -69,6 +69,25 @@ function levelAtRound(round: number, lastHitRate = TYPICAL_LASTHIT_RATE): number
   return hero.level;
 }
 
+describe('경험치 비용 — 지수', () => {
+  test('레벨이 오를수록 비용이 배수로 커진다', () => {
+    expect(H.xpToNext(20) / H.xpToNext(10)).toBeCloseTo(Math.pow(H.XP_COST_GROWTH, 10), 1);
+    expect(H.xpToNext(40) / H.xpToNext(20)).toBeCloseTo(Math.pow(H.XP_COST_GROWTH, 20), 1);
+  });
+
+  test('선형이었다면 고레벨이 너무 쌌을 것이다', () => {
+    const linear = (level: number) => 14 + 1.5 * level;
+    expect(H.xpToNext(50)).toBeGreaterThan(linear(50) * 2);
+    // 초반은 비슷해야 한다 — 지수의 대가는 후반에만 치른다
+    expect(H.xpToNext(1)).toBeCloseTo(linear(1), -1);
+  });
+
+  test('레벨이 무한정 오르지 않는다', () => {
+    // 라운드 100까지 전부 잡아도 도달 레벨이 60을 넘지 않는다
+    expect(levelAtRound(100)).toBeLessThan(60);
+  });
+});
+
 describe('초반 레벨업 속도 — 라운드당 한 레벨 남짓', () => {
   test('첫 두 라운드에 폭발적으로 오르지 않는다', () => {
     expect(levelAtRound(1)).toBeLessThanOrEqual(2);
@@ -136,26 +155,31 @@ describe('증강 스케줄 — 80/20', () => {
   });
 });
 
-describe('레벨 30 파워 — 증강이 갈림길이다', () => {
-  test('증강 없는 30레벨은 GOD 타워 한 기에 못 미친다', () => {
-    expect(heroDps(30)).toBeLessThan(GOD_TOWER_DPS);
+describe('레벨은 선형, 역전은 시너지가 만든다', () => {
+  test('레벨 성장은 선형이다 — 레벨만으로는 폭발하지 않는다', () => {
+    const step = heroDps(20) - heroDps(10);
+    expect(heroDps(40) - heroDps(30)).toBeCloseTo(step, 5);
   });
 
-  test('공격 계열 3개를 몰면 GOD 타워의 2배를 넘는다', () => {
+  test('증강이 없으면 50레벨이 되어도 GOD 타워를 못 넘는다', () => {
+    expect(heroDps(50)).toBeLessThan(GOD_TOWER_DPS);
+  });
+
+  test('공격 계열 3개를 몰면 30레벨에 GOD 타워의 2배를 넘는다', () => {
     expect(heroDps(30, ATTACK_THREE)).toBeGreaterThan(GOD_TOWER_DPS * 2);
   });
 
-  test('아무거나 3개 고르면 2배에 못 미친다 — 시너지가 선택을 보상한다', () => {
+  test('계열을 흩으면 시너지가 없어 무증강과 같다', () => {
     const scattered = heroDps(30, ['bulwark', 'swift', 'greed']);
-    expect(scattered).toBeLessThan(GOD_TOWER_DPS * 2);
-    expect(scattered).toBeLessThan(heroDps(30, ATTACK_THREE));
+    expect(scattered).toBeCloseTo(heroDps(30), 5); // 셋 다 공격력을 안 올린다
+    expect(scattered).toBeLessThan(GOD_TOWER_DPS);
   });
 
-  test('30레벨 이후로는 가파르다', () => {
-    const at30 = heroDps(30, ATTACK_THREE);
-    const at40 = heroDps(40, ATTACK_THREE);
-    expect(at40 / at30).toBeCloseTo(Math.pow(H.HERO_DAMAGE_GROWTH, 10), 1);
-    expect(at40).toBeGreaterThan(at30 * 4);
+  test('역전의 크기는 레벨이 아니라 증강 배수가 정한다', () => {
+    const levelGain = heroDps(42) / heroDps(30); // 선형이라 완만
+    const augmentGain = heroDps(30, ATTACK_THREE) / heroDps(30);
+    expect(levelGain).toBeLessThan(2);
+    expect(augmentGain).toBeGreaterThan(3);
   });
 });
 
@@ -164,7 +188,7 @@ describe('초반은 타워의 시간', () => {
     expect(heroDps(1)).toBeLessThan(GOD_TOWER_DPS * 0.02);
   });
 
-  test('첫 증강 전(1~9레벨)에는 GOD 타워 근처도 못 간다', () => {
-    expect(heroDps(9)).toBeLessThan(GOD_TOWER_DPS * 0.1);
+  test('첫 증강 전(1~9레벨)에는 GOD 타워의 5분의 1도 안 된다', () => {
+    expect(heroDps(9)).toBeLessThan(GOD_TOWER_DPS * 0.2);
   });
 });
