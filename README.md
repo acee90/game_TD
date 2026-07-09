@@ -10,6 +10,7 @@ tools/chk/   갓타디 원본 .scx 맵 추출·파싱 도구 (StormLib + CHK 파
 docs/        게임 디자인 문서
   갓타워디펜스X_VZ056_맵파일분석_v1.0.md ← 원본 맵파일 기반 레퍼런스 분석 (1차 출처)
   도파민_설계_리뷰_v0.1.md              ← 보상 이벤트 측정과 증강 스케줄 80/20
+  balance/*.csv                       ← 증강·시너지·등급·파워커브 (코드에서 생성, 직접 수정 금지)
   랜덤합성TD_게임디자인초안_v0.3.md   ← 시스템 설계 (마스터 문서)
   타워스킬시트_v0.1.md                ← 8아키타입 × 6티어 + 상인 트랙, 전역 규칙
   시퀀스표_v0.1.md                    ← 40라운드 레벨 디자인 (수치는 상수에서 자동 산출)
@@ -20,6 +21,8 @@ prototype/   코어 루프 웹 프로토타입 (단일 html, 레거시)
   gattadi.html                        ← 갓타디 시스템 이식 1차 스케치
 web/         갓타디 프로토 (Vite + TypeScript, 현행)
   src/data/units.ts                   ← 유닛 로스터 39종 + 고정 태그
+  src/data/hero.ts                    ← 영웅·증강 15종·시너지·등급
+  tools/gen-balance-csv.ts            ← docs/balance/*.csv 생성 (npm run gen:balance)
   src/data/balance.ts                 ← 밸런스 테이블 ([원본확정] / [프로토] 구분)
   src/core/map.ts                     ← 십자 일주 경로 + 타워 타일 17개
   src/game/game.ts                    ← DOM 없는 게임 로직 (vitest 커버)
