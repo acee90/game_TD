@@ -1,4 +1,0 @@
-[      77ms] [ERROR] Failed to load resource: the server responded with a status of 404 (Not Found) @ http://localhost:5184/favicon.ico:0
-[ 2077517ms] TypeError: this.stepDecoy is not a function
-    at Game.update (http://localhost:5184/src/game/game.ts?t=1783582102603:457:10)
-    at frame (http://localhost:5184/src/main.ts?t=1783582102603:54:8)
