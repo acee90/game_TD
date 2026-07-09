@@ -1,99 +1,60 @@
 // ───────── 부트스트랩: 입력 + 루프 ─────────
 import { TILE } from './core/map';
+import type { Race } from './data/units';
 import { Game } from './game/game';
 import { render } from './render/render';
-import { clearInfo, showGameOver, showInfo, sync } from './ui/ui';
+import { bindElements, refresh } from './ui/ui';
 
-const $ = (id: string) => document.getElementById(id)!;
-const cv = $('cv') as HTMLCanvasElement;
-const cx = cv.getContext('2d')!;
+const canvas = document.getElementById('canvas') as HTMLCanvasElement;
+const ctx = canvas.getContext('2d');
+if (!ctx) throw new Error('2d context unavailable');
 
 const game = new Game();
-let speed = 1;
-let overShown = false;
+const el = bindElements();
 
-// 디버그/검증용 노출
-(window as unknown as { game: Game }).game = game;
+// ── 캔버스 클릭 → 슬롯 선택 / 유닛 생성 ──
+canvas.addEventListener('pointerdown', (event) => {
+  const rect = canvas.getBoundingClientRect();
+  const scale = canvas.width / rect.width;
+  const x = (event.clientX - rect.left) * scale;
+  const y = (event.clientY - rect.top) * scale;
 
-// ── 캔버스 탭: 배치 or 선택 ──
-cv.addEventListener('click', ev => {
-  const r = cv.getBoundingClientRect();
-  const px = (ev.clientX - r.left) * cv.width / r.width;
-  const py = (ev.clientY - r.top) * cv.height / r.height;
-  for (const s of game.slots) {
-    if (Math.abs(px - s.x) <= TILE / 2 && Math.abs(py - s.y) <= TILE / 2) {
-      if (s.tower) {
-        // 타워 탭 = 선택/해제
-        game.sel = game.sel === s ? null : s;
-      } else {
-        // 빈 타일 탭 = 즉시 생산 (갓타디식: 자리 먼저, 유닛은 배치 후 공개)
-        game.produceAt(s);
-      }
-      if (game.sel?.tower) showInfo(game, game.sel.tower);
-      else clearInfo();
-      sync(game);
-      return;
-    }
+  const hit = game.slots.find(
+    (slot) => Math.abs(slot.x - x) <= TILE / 2 && Math.abs(slot.y - y) <= TILE / 2,
+  );
+  if (!hit) {
+    game.selected = null;
+    return;
   }
-  game.sel = null;
-  clearInfo();
-  sync(game);
+  if (hit.tower) game.selected = hit;
+  else game.spawnUnit(hit);
 });
 
-// ── 버튼 ──
-$('produce').onclick = () => { game.produce(); if (game.sel?.tower) showInfo(game, game.sel.tower); sync(game); };
-$('hire').onclick = () => { game.hire(); sync(game); };
-$('start').onclick = () => { game.startWave(); sync(game); };
-$('mSplash').onclick = () => { game.setGodsMode('splash'); if (game.sel?.tower) showInfo(game, game.sel.tower); sync(game); };
-$('mPower').onclick = () => { game.setGodsMode('power'); if (game.sel?.tower) showInfo(game, game.sel.tower); sync(game); };
-for (let i = 0; i < 3; i++) {
-  $('bt' + i).onclick = () => { game.chooseBoss(i); sync(game); };
-  $('up' + i).onclick = () => { game.upgrade(i); if (game.sel?.tower) showInfo(game, game.sel.tower); sync(game); };
-}
-$('speed').onclick = () => {
-  speed = speed === 1 ? 2 : speed === 2 ? 3 : 1;
-  $('speed').textContent = '×' + speed;
+el.spawn.addEventListener('click', () => game.spawnUnitAnywhere());
+el.probe.addEventListener('click', () => game.buyProbe());
+el.sell.addEventListener('click', () => game.sellSelected());
+el.boss.addEventListener('click', () => game.summonBoss());
+el.upgrades.forEach((button, i) => button.addEventListener('click', () => game.upgrade(i as Race)));
+
+const KEYS: Record<string, () => void> = {
+  p: () => game.spawnUnitAnywhere(),
+  b: () => game.summonBoss(),
+  r: () => game.buyProbe(),
+  x: () => game.sellSelected(),
+  '1': () => game.upgrade(0),
+  '2': () => game.upgrade(1),
+  '3': () => game.upgrade(2),
+  '4': () => game.upgrade(3),
 };
+window.addEventListener('keydown', (event) => KEYS[event.key.toLowerCase()]?.());
 
-// ── 단축키 ──
-addEventListener('keydown', e => {
-  const k = e.key.toLowerCase();
-  if (k === 'p') { game.produce(); if (game.sel?.tower) showInfo(game, game.sel.tower); }
-  else if (k === 'h') game.hire();
-  else if (k === ' ') { e.preventDefault(); game.startWave(); }
-  else if (k === 'q') game.setGodsMode('splash');
-  else if (k === 'e') game.setGodsMode('power');
-  else if (k === '1') game.chooseBoss(0);
-  else if (k === '2') game.chooseBoss(1);
-  else if (k === '3') game.chooseBoss(2);
-  else return;
-  sync(game);
-});
-
-// ── 메인 루프 ──
-let last = 0;
-let prevPhase = game.phase;
-function frame(ts: number) {
-  const dt = Math.min(0.05, (ts - last) / 1000 || 0) * speed;
-  last = ts;
-  if (!game.over) {
-    game.update(dt);
-    if (game.phase !== prevPhase) { // 웨이브 종료/시작 시 패널 동기화
-      prevPhase = game.phase;
-      clearInfo();
-      sync(game);
-    }
-    render(cx, game);
-    // 가벼운 상시 동기화(골드/오염)
-    $('gold').textContent = String(Math.floor(game.gold));
-    ($('pollbar') as HTMLElement).style.width = game.poll + '%';
-  } else if (!overShown) {
-    overShown = true;
-    showGameOver(game);
-  }
+let last = performance.now();
+function frame(now: number): void {
+  const dt = Math.min((now - last) / 1000, 0.05);
+  last = now;
+  game.update(dt);
+  render(ctx!, game);
+  refresh(el, game);
   requestAnimationFrame(frame);
 }
-
-sync(game);
-clearInfo();
 requestAnimationFrame(frame);

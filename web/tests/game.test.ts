@@ -1,273 +1,251 @@
-import { describe, expect, it } from 'vitest';
-import { Game, buildWave, effDmg, pickType } from '../src/game/game';
-import { LOOP, SLOT_POS } from '../src/core/map';
+import { describe, expect, test } from 'vitest';
 import * as B from '../src/data/balance';
+import { ARM_TILES, PATH_LENGTH, SLOT_POS, pathPos } from '../src/core/map';
+import { GOD_POOL_EARLY, GOD_POOL_LATE, GOD_TIER, godPool } from '../src/data/units';
+import { Game } from '../src/game/game';
+import { bossKillMineral, killIncome } from '../src/game/economy';
+import { unitFor } from '../src/game/merge';
+import type { Slot } from '../src/game/types';
 
-function place(g: Game, race: number, tier: number, mode: 'splash' | 'power' = 'splash') {
-  const s = g.slots.find(s => !s.tower)!;
-  s.tower = { race, tier, mode, cd: 0 };
-  return s;
+const emptySlot = (game: Game): Slot => game.slots.find((s) => !s.tower)!;
+
+/** pick 인덱스를 고정한 채 유닛 하나를 생성한다 */
+function spawnWithPick(game: Game, pick: number): void {
+  Object.defineProperty(game.pick, 'value', { get: () => pick, configurable: true });
+  game.mineral += B.SPAWN_UNIT_MINERAL;
+  game.spawnUnit(emptySlot(game));
 }
 
-describe('맵 (십자 둘레 일주 + 입/출구 분리)', () => {
-  it('타일은 십자 9 + 외곽 11 = 20칸', () => {
-    expect(SLOT_POS.length).toBe(20);
+describe('시작 상태 — 원본 trigger #349', () => {
+  test('미네랄 55, 가스 6으로 시작한다', () => {
+    const game = new Game();
+    expect(game.mineral).toBe(55);
+    expect(game.gas).toBe(6);
   });
-  it('경로는 입구→십자 일주→출구, 총 길이 > 0', () => {
-    expect(LOOP).toBeGreaterThan(0);
+
+  test('오프닝 카운트다운은 20초, 이후 라운드는 57초', () => {
+    expect(B.OPENING_SECONDS).toBe(20);
+    expect(B.ROUND_SECONDS).toBe(57);
   });
 });
 
-describe('웨이브 구성 · 예보', () => {
-  it('라운드 성격이 일반/쇄도/중갑으로 순환한다', () => {
-    expect(pickType(1)).toBe('normal');
-    expect(pickType(4)).toBe('swarm');
-    expect(pickType(6)).toBe('heavy');
+describe('조합 — 같은 유닛 2기가 상위 티어 1기가 된다', () => {
+  test('같은 Lv1 2기를 놓으면 Lv2 1기로 합쳐진다', () => {
+    const game = new Game();
+    spawnWithPick(game, 1);
+    spawnWithPick(game, 1);
+
+    const towers = game.slots.filter((s) => s.tower).map((s) => s.tower!);
+    expect(towers).toHaveLength(1);
+    expect(towers[0].tier).toBe(1);
   });
-  it('쇄도는 다수 저체력, 중갑은 소수 고장갑', () => {
-    const sw = buildWave(4), hv = buildWave(6);
-    expect(sw.q.length).toBeGreaterThan(hv.q.length * 2);
-    expect(hv.q[0].armor).toBeGreaterThan(sw.q[0].armor * 3);
+
+  test('다른 Lv1 2기는 합쳐지지 않는다', () => {
+    const game = new Game();
+    spawnWithPick(game, 1);
+    spawnWithPick(game, 2);
+
+    const towers = game.slots.filter((s) => s.tower).map((s) => s.tower!);
+    expect(towers).toHaveLength(2);
+    expect(towers.every((t) => t.tier === 0)).toBe(true);
   });
-  it('예보 3개가 결정적으로 나온다 (빌드 커밋 근거)', () => {
-    const g = new Game(() => 0);
-    expect(g.forecast(3)).toEqual([pickType(2), pickType(3), pickType(4)]);
+
+  test('연쇄 조합 — Lv1 4기가 Lv3 1기가 된다', () => {
+    const game = new Game();
+    for (let i = 0; i < 4; i++) spawnWithPick(game, 3);
+
+    const towers = game.slots.filter((s) => s.tower).map((s) => s.tower!);
+    expect(towers).toHaveLength(1);
+    expect(towers[0].tier).toBe(2);
+  });
+
+  test('조합 요구 수량은 2 (원본 AtLeast 2)', () => {
+    expect(B.MERGE_REQUIRED).toBe(2);
   });
 });
 
-describe('종족 정체성', () => {
-  it('테란은 장사거리·고타격, 저그는 초공속·단사거리', () => {
-    const g = new Game(() => 0);
-    const terran = { race: 0, tier: 1, mode: 'splash' as const, cd: 0 };
-    const zerg = { race: 1, tier: 1, mode: 'splash' as const, cd: 0 };
-    expect(g.trng(terran)).toBeGreaterThan(g.trng(zerg) * 1.5);
-    expect(g.tdmg(terran)).toBeGreaterThan(g.tdmg(zerg) * 2);
-    expect(g.atkInt(zerg)).toBeLessThan(g.atkInt(terran) / 2);
+describe('선택자 — 결과는 랜덤이 아니라 공유 인덱스로 결정된다', () => {
+  test('같은 인덱스는 같은 유닛을 준다', () => {
+    expect(unitFor(1, 3, 0)).toBe(unitFor(1, 3, 0));
   });
-  it('토스만 광역, 갓은 모드를 따른다', () => {
-    const g = new Game(() => 0);
-    expect(g.isSplash({ race: 2, tier: 1, mode: 'power', cd: 0 })).toBe(true);
-    expect(g.isSplash({ race: 0, tier: 1, mode: 'splash', cd: 0 })).toBe(false);
-    expect(g.isSplash({ race: 0, tier: B.GOD_TIER, mode: 'splash', cd: 0 })).toBe(true);
-    expect(g.isSplash({ race: 2, tier: B.GOD_TIER, mode: 'power', cd: 0 })).toBe(false);
+
+  test('인덱스가 다르면 다른 유닛을 준다', () => {
+    expect(unitFor(1, 1, 0).name).not.toBe(unitFor(1, 2, 0).name);
   });
-  it('종족 강화는 +10% 복리, 비용 누진', () => {
-    const g = new Game(() => 0);
-    g.gold = 100000;
-    const t = { race: 0, tier: 1, mode: 'splash' as const, cd: 0 };
-    const d0 = g.tdmg(t);
-    g.upgrade(0);
-    expect(g.tdmg(t)).toBeCloseTo(d0 * B.UP_MULT);
-    expect(B.upCost(1)).toBeGreaterThan(B.upCost(0));
-    expect(B.upCost(10)).toBeGreaterThan(B.upCost(0) * 5); // 누진
+
+  test('인덱스는 풀 크기로 순환한다', () => {
+    expect(unitFor(1, 8, 0).name).toBe(unitFor(1, 1, 0).name);
+  });
+
+  test('보스를 잡으면 선택자가 한 칸 밀린다', () => {
+    const game = new Game();
+    const before = game.pick.value;
+    game.pick.bump();
+    expect(game.pick.value).toBe((before % B.PICK_INDEX_MAX) + 1);
   });
 });
 
-describe('유닛 로스터 (4종족 × 4티어 × 2변형 = 32 + 갓 4 = 36종)', () => {
-  it('이름표는 32종 전부 고유, 갓 4종 — 티어당 8유닛 (갓타디 구조)', () => {
-    const flat = B.UNIT_NAMES.flat(2);
-    expect(flat.length).toBe(32);
-    expect(new Set(flat).size).toBe(32);
-    expect(B.GOD_NAMES.length).toBe(4);
+describe('GOD 풀 — 처치 보스 수로 분기 (trigger #523 / #534)', () => {
+  test('보스 5기 이하면 초기 풀', () => {
+    expect(godPool(5)).toBe(GOD_POOL_EARLY);
   });
-  it('변형이 사거리/화력을 가른다 (돌격 근접 고화력 vs 저격 장거리 저화력)', () => {
-    const g = new Game(() => 0);
-    const rush = { race: 0, tier: 0, mode: 'splash' as const, cd: 0, variant: 0 };
-    const snipe = { race: 0, tier: 0, mode: 'splash' as const, cd: 0, variant: 1 };
-    expect(g.trng(snipe)).toBeGreaterThan(g.trng(rush) * 1.5);
-    expect(g.tdmg(rush)).toBeGreaterThan(g.tdmg(snipe) * 1.5);
-    expect(g.unitName(rush)).toBe('화염방사병');
-    expect(g.unitName(snipe)).toBe('저격병');
+
+  test('보스 6기 이상이면 확장 풀', () => {
+    expect(godPool(6)).toBe(GOD_POOL_LATE);
+    expect(GOD_POOL_LATE.length).toBeGreaterThan(GOD_POOL_EARLY.length);
   });
-  it('생산·합성 결과에 종족(4)·변형(2)이 배정된다', () => {
-    const g = new Game(() => 0.9);
-    g.produce();
-    const made = g.slots.find(s => s.tower)!.tower!;
-    expect(made.race).toBe(3);    // 크리쳐
-    expect(made.variant).toBe(1); // 정령
-    const g2 = new Game(() => 0);
-    g2.slots[0].tower = { race: 0, tier: 0, mode: 'splash', cd: 0, variant: 0 };
-    g2.slots[1].tower = { race: 0, tier: 0, mode: 'splash', cd: 0, variant: 1 }; // 변형 달라도 종족+티어면 합성
-    g2.tryMerge();
-    const merged = g2.slots.filter(s => s.tower);
-    expect(merged.length).toBe(1);
-    expect(merged[0].tower!.tier).toBe(1);
-    expect(merged[0].tower!.variant).toBe(0);
-  });
-  it('갓은 변형 무시, 갓 이름을 쓴다', () => {
-    const g = new Game(() => 0);
-    const god = { race: 2, tier: B.GOD_TIER, mode: 'power' as const, cd: 0, variant: 0 };
-    expect(g.unitName(god)).toBe('갓 제라툴');
-    expect(g.trng(god)).toBeCloseTo(B.TRNG[B.GOD_TIER] * B.POWER_RNG); // 변형 배수 미적용
-    expect(g.unitName({ race: 3, tier: B.GOD_TIER, mode: 'splash', cd: 0 })).toBe('갓 스칸티드');
+
+  test('GOD 티어는 4', () => {
+    expect(GOD_TIER).toBe(4);
   });
 });
 
-describe('크리쳐 — 야수(무강화 브릿지) / 정령(감속 오라)', () => {
-  it('크리쳐는 종족 강화가 불가하고, 강화가 피해에 안 먹힌다', () => {
-    const g = new Game(() => 0);
-    g.gold = 100000;
-    expect(g.upgrade(B.CREATURE)).toBe(false);
-    const beast = { race: 3, tier: 1, mode: 'splash' as const, cd: 0, variant: 0 };
-    const d0 = g.tdmg(beast);
-    g.upgrade(0); g.upgrade(1); g.upgrade(2);
-    expect(g.tdmg(beast)).toBe(d0); // 무강화
+describe('보스 소환 — 상시 액션, 쿨타임만, 순차 해금', () => {
+  test('시작하자마자 Lv1을 소환할 수 있고 비용이 들지 않는다', () => {
+    const game = new Game();
+    const mineral = game.mineral;
+
+    expect(game.canSummonBoss).toBe(true);
+    expect(game.summonBoss()).toBe(true);
+    expect(game.mineral).toBe(mineral);
+    expect(game.enemies.some((e) => e.kind === 'boss')).toBe(true);
   });
-  it('야수는 같은 티어 표준 화력보다 기본기가 세다 (노업 밥값)', () => {
-    const g = new Game(() => 0);
-    const beast = { race: 3, tier: 1, mode: 'splash' as const, cd: 0, variant: 0 };
-    const toss = { race: 2, tier: 1, mode: 'splash' as const, cd: 0, variant: 0 };
-    expect(g.tdmg(beast) / g.atkInt(beast)).toBeGreaterThan(g.tdmg(toss) / g.atkInt(toss));
+
+  test('필드에 보스가 있으면 다시 소환할 수 없다', () => {
+    const game = new Game();
+    game.summonBoss();
+    expect(game.canSummonBoss).toBe(false);
+    expect(game.summonBoss()).toBe(false);
   });
-  it('정령은 공격하지 않고, 범위 내 적을 늦춘다', () => {
-    const g = new Game(() => 0);
-    // 좌 팔 타일(126,270) — 입구 쪽 경로변에 정령 배치
-    g.slots[4].tower = { race: 3, tier: 0, mode: 'splash', cd: 0, variant: 1 };
-    g.startWave();
-    g.update(0.05); // 첫 적 스폰
-    const e = g.enemies[0];
-    e.d = 150;      // 좌상 변 위 (120,231) — 정령 사거리 안
-    const d0 = e.d;
-    g.update(1.0);
-    const moved = e.d - d0;
-    expect(moved).toBeLessThan(e.spd * 1.0 * 0.85);   // 감속 적용
-    expect(moved).toBeGreaterThan(0);
-    expect(e.hp).toBe(e.maxhp);                        // 정령은 딜 없음
-    expect(g.shots.length).toBe(0);
+
+  test('보스를 잡기 전에는 다음 레벨이 열리지 않는다', () => {
+    const game = new Game();
+    game.summonBoss();
+    expect(game.nextBossLevel).toBe(1);
+  });
+
+  test('Lv1을 잡아야 Lv2가 열린다', () => {
+    const game = new Game();
+    game.summonBoss();
+    const boss = game.enemies.find((e) => e.kind === 'boss')!;
+    boss.hp = 0;
+    game.update(0.016);
+    game.bossCooldown = 0;
+
+    expect(game.bossCleared).toBe(1);
+    expect(game.nextBossLevel).toBe(2);
+    expect(game.canSummonBoss).toBe(true);
+  });
+
+  test('보스 처치 보상은 원본 표를 따른다', () => {
+    expect(B.BOSS_KILL_MINERAL).toEqual([5, 8, 13, 20, 29, 39]);
+    expect(bossKillMineral(1)).toBe(5);
+    expect(bossKillMineral(6)).toBe(39);
+  });
+
+  test('보스가 돌파하면 다음 레벨이 열리지 않는다', () => {
+    const game = new Game();
+    game.summonBoss();
+    const boss = game.enemies.find((e) => e.kind === 'boss')!;
+    boss.distance = PATH_LENGTH;
+    game.update(0.016);
+
+    expect(game.bossCleared).toBe(0);
+    expect(game.activeBossLevel).toBeNull();
+  });
+
+  test('쿨타임 중에는 소환할 수 없다', () => {
+    const game = new Game();
+    game.summonBoss();
+    const boss = game.enemies.find((e) => e.kind === 'boss')!;
+    boss.hp = 0;
+    game.update(0.016);
+
+    expect(game.bossCooldown).toBeGreaterThan(0);
+    expect(game.canSummonBoss).toBe(false);
   });
 });
 
-describe('유효 피해(장갑)', () => {
-  it('큰 타격은 장갑 관통, 소타격은 최소 10%로 바닥', () => {
-    expect(effDmg(100, 30)).toBe(70);
-    expect(effDmg(10, 30)).toBe(1);
+describe('소득 — 차감 없는 누적형 (원본 §8)', () => {
+  test('200킬 마일스톤에서 보상이 나온다', () => {
+    expect(killIncome(199, 200).mineral).toBeGreaterThanOrEqual(5);
+  });
+
+  test('반복 20킬 보상은 1000킬을 넘으면 커진다', () => {
+    expect(killIncome(0, 20).mineral).toBe(10);
+    expect(killIncome(1000, 1020).mineral).toBe(12);
+  });
+
+  test('킬이 늘지 않으면 소득도 없다', () => {
+    expect(killIncome(50, 50)).toEqual({ mineral: 0, notes: [] });
+  });
+
+  test('누출은 라이프를 깎지만 미네랄을 준다 (strings:358)', () => {
+    const game = new Game();
+    const mineral = game.mineral;
+    const lives = game.lives;
+    game.enemies.push({
+      kind: 'mob', name: 'x', maxHp: 10, hp: 10, armor: 0,
+      speed: 0, radius: 8, distance: PATH_LENGTH,
+    });
+    game.update(0.016);
+
+    expect(game.lives).toBe(lives - 1);
+    expect(game.mineral).toBe(mineral + B.LEAK_MINERAL);
   });
 });
 
-describe('생산·배치·합성 (갓타디식: 자리 먼저, 유닛은 배치 후 공개)', () => {
-  it('빈 타일 생산 → 같은 종족+티어 2기 자동 합성(상위 티어)', () => {
-    const g = new Game(() => 0);
-    place(g, 0, 0);
-    expect(g.produceAt(g.slots.find(s => !s.tower)!)).toBe(true);
-    const towers = g.slots.filter(s => s.tower);
-    expect(towers.length).toBe(1);
-    expect(towers[0].tower!.tier).toBe(1);
+describe('맵 — 십자 일주', () => {
+  test('타워 타일은 17개 (중앙 1 + 가지별 4)', () => {
+    expect(SLOT_POS).toHaveLength(1 + ARM_TILES * 4);
+    expect(SLOT_POS).toHaveLength(17);
   });
-  it('점유 타일에는 생산 불가, 골드는 생산 즉시 차감', () => {
-    const g = new Game(() => 0);
-    const s = place(g, 0, 0);
-    expect(g.produceAt(s)).toBe(false);
-    const g0 = g.gold;
-    g.produceAt(g.slots.find(x => !x.tower)!);
-    expect(g.gold).toBe(g0 - B.PRODUCE_COST);
+
+  test('타일 좌표가 겹치지 않는다', () => {
+    const keys = new Set(SLOT_POS.map(([x, y]) => `${x},${y}`));
+    expect(keys.size).toBe(SLOT_POS.length);
   });
-  it('합성 연쇄로 갓까지 도달 가능', () => {
-    const g = new Game(() => 0);
-    place(g, 0, 3);
-    place(g, 0, 3);
-    g.tryMerge();
-    expect(g.slots.find(s => s.tower)!.tower!.tier).toBe(B.GOD_TIER);
+
+  test('경로 길이는 양수다', () => {
+    expect(PATH_LENGTH).toBeGreaterThan(0);
   });
-  it('골드 부족이면 생산 실패', () => {
-    const g = new Game();
-    g.gold = 10;
-    expect(g.produce()).toBe(false);
+
+  test('입구는 북측 왼쪽, 출구는 북측 오른쪽 — 둘 다 위쪽이고 출구가 더 오른쪽', () => {
+    const [inX, inY] = pathPos(0);
+    const [outX, outY] = pathPos(PATH_LENGTH);
+    expect(outX).toBeGreaterThan(inX);
+    expect(inY).toBeLessThan(120);
+    expect(outY).toBeLessThan(120);
+  });
+
+  test('반시계방향 — 경로 초반에는 왼쪽으로 돈다', () => {
+    // 입구에서 내려온 뒤 첫 방향 전환은 왼쪽(-x)이어야 한다
+    const early = pathPos(PATH_LENGTH * 0.18);
+    const later = pathPos(PATH_LENGTH * 0.28);
+    expect(later[0]).toBeLessThan(early[0]);
+  });
+
+  test('모든 적은 같은 지점에서 출발한다', () => {
+    const game = new Game();
+    game.summonBoss();
+    expect(game.enemies[0].distance).toBe(0);
   });
 });
 
-describe('스플/파워 전환 — 갓 전용', () => {
-  it('setGodsMode는 갓만 바꾸고 하위 티어는 손대지 않는다', () => {
-    const g = new Game(() => 0);
-    const lv2 = place(g, 0, 1, 'splash');
-    const god = place(g, 1, B.GOD_TIER, 'splash');
-    const n = g.setGodsMode('power');
-    expect(n).toBe(1);
-    expect(god.tower!.mode).toBe('power');
-    expect(lv2.tower!.mode).toBe('splash'); // 무시됨 (하위 티어는 종족 고정)
+describe('업그레이드 — 가스 소비', () => {
+  test('가스가 모자라면 실패한다', () => {
+    const game = new Game();
+    game.gas = 0;
+    expect(game.upgrade(0)).toBe(false);
+    expect(game.upgrades[0]).toBe(0);
   });
-  it('갓이 없으면 0을 반환하고 안내 메시지', () => {
-    const g = new Game(() => 0);
-    place(g, 0, 1);
-    expect(g.setGodsMode('power')).toBe(0);
-    expect(g.msg).toContain('갓이 없습니다');
-  });
-  it('갓 파워 모드는 사거리 배수가 붙는다', () => {
-    const g = new Game(() => 0);
-    const god = place(g, 0, B.GOD_TIER, 'splash');
-    const before = g.trng(god.tower!);
-    g.setGodsMode('power');
-    expect(g.trng(god.tower!)).toBeCloseTo(before * B.POWER_RNG);
-  });
-});
 
-describe('일꾼 경제', () => {
-  it('고용 비용이 누진하고 웨이브 보상에 일꾼 소득이 붙는다', () => {
-    const g = new Game(() => 0);
-    g.gold = 100000;
-    g.hire(); g.hire();
-    expect(g.workers).toBe(2);
-    place(g, 0, B.GOD_TIER, 'splash');
-    g.up = [50, 50, 50];
-    g.startWave();
-    let guard = 0;
-    while (g.phase === 'wave' && guard++ < 10000) g.update(0.05);
-    expect(g.round).toBe(2);
-    expect(g.lastReward).toBe(B.waveReward(1) + 2 * B.WORKER_INCOME);
-  });
-});
-
-describe('보스 소환 (소득 vs 안전)', () => {
-  it('보스를 선택하면 웨이브에 합류하고, 잡으면 보상 골드', () => {
-    const g = new Game(() => 0);
-    place(g, 0, B.GOD_TIER, 'power');
-    g.up = [80, 80, 80];
-    g.chooseBoss(1);
-    g.startWave();
-    expect(g.spawnQ.some(e => e.type === 'boss')).toBe(true);
-    const before = g.gold;
-    let guard = 0;
-    while (g.phase === 'wave' && guard++ < 20000) g.update(0.05);
-    expect(g.round).toBe(2);
-    expect(g.gold - before).toBeGreaterThan(B.BOSS_TIERS[1]!.reward(1));
-  });
-  it('화력이 없으면 보스 누출로 오염 폭증', () => {
-    const g = new Game(() => 0);
-    g.chooseBoss(2);
-    g.startWave();
-    let guard = 0;
-    while (g.phase === 'wave' && !g.over && guard++ < 30000) g.update(0.05);
-    expect(g.poll).toBeGreaterThanOrEqual(B.BOSS_TIERS[2]!.leakPenalty);
-  });
-});
-
-describe('누출 → 오염 → 게임오버', () => {
-  it('오염 100이면 over', () => {
-    const g = new Game(() => 0);
-    g.poll = 99;
-    g.startWave();
-    g.update(0.05);
-    for (const e of g.enemies) e.d = LOOP + 1;
-    g.update(0.05);
-    expect(g.over).toBe(true);
-  });
-});
-
-describe('3라운드 통합 스모크', () => {
-  it('생산·배치·웨이브를 반복해도 크래시 없이 진행된다', () => {
-    const g = new Game();
-    g.gold = 3000;
-    for (let i = 0; i < 6; i++) {
-      g.produce();
-    }
-    let guard = 0;
-    while (g.round < 4 && !g.over && guard++ < 60000) {
-      if (g.phase === 'prep') {
-        g.setGodsMode(g.next.type === 'heavy' ? 'power' : 'splash');
-        g.startWave();
-      }
-      g.update(0.05);
-    }
-    expect(guard).toBeLessThan(60000);
-    expect(g.round >= 4 || g.over).toBe(true);
+  test('성공하면 가스를 쓰고 레벨이 오른다', () => {
+    const game = new Game();
+    game.gas = 100;
+    expect(game.upgrade(1)).toBe(true);
+    expect(game.upgrades[1]).toBe(1);
+    expect(game.upgrades[0]).toBe(0);
+    expect(game.gas).toBe(100 - B.upgradeGasCost(0));
   });
 });

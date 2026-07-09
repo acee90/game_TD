@@ -1,124 +1,149 @@
 // ───────── 캔버스 렌더 ─────────
-import * as B from '../data/balance';
-import { DOOR_IN, DOOR_OUT, SLOT_POS, TILE, WAYPOINTS, pathPos } from '../core/map';
+import { CROSS_BARS, DOOR_IN, DOOR_OUT, NEXUS, TILE, WAYPOINTS, pathPos } from '../core/map';
+import { BOSS_COOLDOWN_SECONDS } from '../data/balance';
+import { GOD_TIER, RACE_COLOR } from '../data/units';
+import { range } from '../game/combat';
 import type { Game } from '../game/game';
+import type { Enemy, Slot } from '../game/types';
 
-void SLOT_POS; // (slots는 game.slots 사용)
+const PATH_WIDTH = 24;
 
-function rr(cx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
-  cx.beginPath();
-  cx.moveTo(x + r, y);
-  cx.arcTo(x + w, y, x + w, y + h, r);
-  cx.arcTo(x + w, y + h, x, y + h, r);
-  cx.arcTo(x, y + h, x, y, r);
-  cx.arcTo(x, y, x + w, y, r);
-  cx.closePath();
+function strokePath(ctx: CanvasRenderingContext2D, width: number, color: string): void {
+  ctx.beginPath();
+  ctx.moveTo(WAYPOINTS[0][0], WAYPOINTS[0][1]);
+  for (let i = 1; i < WAYPOINTS.length; i++) ctx.lineTo(WAYPOINTS[i][0], WAYPOINTS[i][1]);
+  ctx.lineWidth = width;
+  ctx.lineJoin = 'round';
+  ctx.lineCap = 'butt';
+  ctx.strokeStyle = color;
+  ctx.stroke();
 }
 
-export function render(cx: CanvasRenderingContext2D, g: Game): void {
-  const cv = cx.canvas;
-  cx.clearRect(0, 0, cv.width, cv.height);
+function drawCross(ctx: CanvasRenderingContext2D): void {
+  ctx.fillStyle = '#1a2036';
+  ctx.strokeStyle = '#39406a';
+  ctx.lineWidth = 1.5;
+  for (const bar of CROSS_BARS) {
+    ctx.fillRect(bar.x, bar.y, bar.w, bar.h);
+    ctx.strokeRect(bar.x, bar.y, bar.w, bar.h);
+  }
+}
 
-  // 루프 경로
-  cx.strokeStyle = '#232a44'; cx.lineWidth = 26; cx.lineJoin = 'round';
-  cx.beginPath();
-  cx.moveTo(WAYPOINTS[0][0], WAYPOINTS[0][1]);
-  for (let i = 1; i < WAYPOINTS.length; i++) cx.lineTo(WAYPOINTS[i][0], WAYPOINTS[i][1]);
-  cx.stroke();
-  cx.strokeStyle = '#3a4468'; cx.lineWidth = 2; cx.setLineDash([6, 8]);
-  cx.beginPath();
-  cx.moveTo(WAYPOINTS[0][0], WAYPOINTS[0][1]);
-  for (let i = 1; i < WAYPOINTS.length; i++) cx.lineTo(WAYPOINTS[i][0], WAYPOINTS[i][1]);
-  cx.stroke();
-  cx.setLineDash([]);
+function drawDoors(ctx: CanvasRenderingContext2D): void {
+  ctx.font = '600 10px system-ui, sans-serif';
+  ctx.textAlign = 'center';
 
-  // 입/출구 문 (분리)
-  cx.fillStyle = '#3a4468';
-  cx.beginPath(); cx.arc(DOOR_IN[0], DOOR_IN[1], 8, 0, 7); cx.fill();
-  cx.fillStyle = g.poll > 60 ? '#ff5a3c' : '#5a4a8a';
-  cx.beginPath(); cx.arc(DOOR_OUT[0], DOOR_OUT[1], 8, 0, 7); cx.fill();
-  cx.fillStyle = '#8a8fa8'; cx.font = '9px sans-serif'; cx.textAlign = 'center';
-  cx.fillText('입구', DOOR_IN[0], DOOR_IN[1] - 12);
-  cx.fillStyle = g.poll > 60 ? '#ff5a3c' : '#8a8fa8';
-  cx.fillText('출구(누출)', DOOR_OUT[0] + 6, DOOR_OUT[1] + 20);
+  ctx.fillStyle = '#8a6fd0';
+  ctx.fillRect(DOOR_IN[0] - PATH_WIDTH / 2, DOOR_IN[1] + 6, PATH_WIDTH, 5);
+  ctx.fillText('입구', DOOR_IN[0], DOOR_IN[1] + 2);
 
-  // 타일 + 타워
-  for (const s of g.slots) {
-    const seld = g.sel === s;
-    cx.fillStyle = '#141a2c';
-    cx.strokeStyle = seld ? '#ffd23f' : '#2a3150';
-    cx.lineWidth = seld ? 2.5 : 1.2;
-    rr(cx, s.x - TILE / 2, s.y - TILE / 2, TILE, TILE, 7);
-    cx.fill(); cx.stroke();
-    const t = s.tower;
-    if (!t) {
-      // 빈 타일 = 탭하면 생산 (골드 충분 시 금색 + 표시)
-      cx.fillStyle = g.gold >= B.PRODUCE_COST ? 'rgba(255,210,63,.55)' : 'rgba(138,143,168,.25)';
-      cx.font = '16px sans-serif'; cx.textAlign = 'center';
-      cx.fillText('+', s.x, s.y + 5);
-      continue;
-    }
-    if (seld) {
-      cx.strokeStyle = 'rgba(255,210,63,.28)'; cx.lineWidth = 1;
-      cx.beginPath(); cx.arc(s.x, s.y, g.trng(t), 0, 7); cx.stroke();
-    }
-    // 정령 감속 오라 (상시 표시)
-    if (g.isSpirit(t)) {
-      cx.fillStyle = 'rgba(111,220,140,.07)';
-      cx.beginPath(); cx.arc(s.x, s.y, g.trng(t), 0, 7); cx.fill();
-      cx.strokeStyle = 'rgba(111,220,140,.35)'; cx.lineWidth = 1;
-      cx.beginPath(); cx.arc(s.x, s.y, g.trng(t), 0, 7); cx.stroke();
-    }
-    cx.fillStyle = B.RCOL[t.race];
-    rr(cx, s.x - 15, s.y - 15, 30, 30, 6); cx.fill();
-    // 모드 링은 갓 전용 (광역=청/단일=주황) — 하위 티어는 종족 정체성 고정
-    if (t.tier === B.GOD_TIER) {
-      cx.strokeStyle = t.mode === 'splash' ? '#55c8ff' : '#ff8a3c'; cx.lineWidth = 3;
-      cx.beginPath(); cx.arc(s.x, s.y, 17, 0, 7); cx.stroke();
-    }
-    cx.fillStyle = '#0e1220'; cx.font = 'bold 11px sans-serif'; cx.textAlign = 'center';
-    cx.fillText(t.tier === B.GOD_TIER ? '갓' : 'L' + (t.tier + 1), s.x, s.y + 4);
+  ctx.fillStyle = '#ff5a3c';
+  ctx.fillRect(DOOR_OUT[0] - PATH_WIDTH / 2, DOOR_OUT[1] + 6, PATH_WIDTH, 5);
+  ctx.fillText('출구', DOOR_OUT[0], DOOR_OUT[1] + 2);
+}
+
+function drawNexus(ctx: CanvasRenderingContext2D, game: Game): void {
+  const [x, y] = NEXUS;
+  if (game.bossCooldown <= 0) return;
+  ctx.beginPath();
+  const progress = 1 - game.bossCooldown / BOSS_COOLDOWN_SECONDS;
+  ctx.arc(x, y, TILE / 2 + 5, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * progress);
+  ctx.strokeStyle = '#ff8a3c';
+  ctx.lineWidth = 3;
+  ctx.stroke();
+}
+
+function drawSlot(ctx: CanvasRenderingContext2D, slot: Slot, selected: boolean): void {
+  const half = TILE / 2 - 2;
+  ctx.lineWidth = 1;
+  ctx.strokeStyle = selected ? '#ffd23f' : '#39406a';
+  ctx.fillStyle = slot.tower ? '#232a44' : 'rgba(20,26,44,.7)';
+  ctx.beginPath();
+  ctx.roundRect(slot.x - half, slot.y - half, half * 2, half * 2, 5);
+  ctx.fill();
+  ctx.stroke();
+
+  const tower = slot.tower;
+  if (!tower) return;
+
+  if (selected) {
+    ctx.beginPath();
+    ctx.arc(slot.x, slot.y, range(tower), 0, Math.PI * 2);
+    ctx.strokeStyle = 'rgba(255,210,63,.28)';
+    ctx.stroke();
   }
 
-  // 샷
-  for (const sh of g.shots) {
-    cx.globalAlpha = Math.max(0, sh.life / 0.08);
-    if (sh.splash) {
-      cx.strokeStyle = sh.c; cx.lineWidth = 2;
-      cx.beginPath(); cx.arc(sh.tx, sh.ty, sh.splash * 0.5, 0, 7); cx.stroke();
+  const isGod = tower.tier === GOD_TIER;
+  ctx.beginPath();
+  ctx.arc(slot.x, slot.y, isGod ? 12 : 7 + tower.tier, 0, Math.PI * 2);
+  ctx.fillStyle = RACE_COLOR[tower.def.race];
+  ctx.fill();
+  if (isGod) {
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = '#ffd23f';
+    ctx.stroke();
+  }
+
+  ctx.fillStyle = '#0e1220';
+  ctx.font = '700 9px system-ui, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(isGod ? 'G' : String(tower.tier + 1), slot.x, slot.y);
+  ctx.textBaseline = 'alphabetic';
+}
+
+function drawEnemy(ctx: CanvasRenderingContext2D, x: number, y: number, e: Enemy): void {
+  const color = e.kind === 'boss' ? '#ff5a3c' : e.kind === 'god' ? '#ff8a3c' : '#9aa2c0';
+  ctx.beginPath();
+  ctx.arc(x, y, e.radius, 0, Math.PI * 2);
+  ctx.fillStyle = color;
+  ctx.fill();
+
+  const w = e.radius * 2;
+  ctx.fillStyle = '#0a0e19';
+  ctx.fillRect(x - e.radius, y - e.radius - 6, w, 3);
+  ctx.fillStyle = '#6fdc8c';
+  ctx.fillRect(x - e.radius, y - e.radius - 6, w * Math.max(0, e.hp / e.maxHp), 3);
+}
+
+export function render(ctx: CanvasRenderingContext2D, game: Game): void {
+  const { canvas } = ctx;
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  strokePath(ctx, PATH_WIDTH + 4, '#333c66');
+  strokePath(ctx, PATH_WIDTH, '#171d33');
+  drawCross(ctx);
+  drawDoors(ctx);
+  drawNexus(ctx, game);
+
+  for (const slot of game.slots) drawSlot(ctx, slot, slot === game.selected);
+
+  for (const shot of game.shots) {
+    if (shot.splashRadius) {
+      ctx.beginPath();
+      ctx.arc(shot.tx, shot.ty, shot.splashRadius * 0.28, 0, Math.PI * 2);
+      ctx.fillStyle = shot.color + '33';
+      ctx.fill();
     }
-    cx.strokeStyle = sh.c; cx.lineWidth = 2;
-    cx.beginPath(); cx.moveTo(sh.x, sh.y); cx.lineTo(sh.tx, sh.ty); cx.stroke();
-  }
-  cx.globalAlpha = 1;
-
-  // 적
-  for (const e of g.enemies) {
-    const p = pathPos(e.d);
-    cx.fillStyle = e.type === 'boss' ? '#ff5a3c'
-      : e.type === 'swarm' ? '#7fd8ff'
-      : e.type === 'heavy' ? '#ffb07a' : '#d0d4e4';
-    cx.beginPath(); cx.arc(p[0], p[1], e.r, 0, 7); cx.fill();
-    const w = e.r * 2, h = e.hp / e.maxhp;
-    cx.fillStyle = '#000'; cx.fillRect(p[0] - w / 2, p[1] - e.r - 6, w, 3);
-    cx.fillStyle = e.type === 'boss' ? '#ffd23f' : '#7CFC8A';
-    cx.fillRect(p[0] - w / 2, p[1] - e.r - 6, w * h, 3);
-    if (e.type === 'boss') {
-      cx.fillStyle = '#fff'; cx.font = 'bold 10px sans-serif';
-      cx.fillText(e.boss === 2 ? '★★' : '★', p[0], p[1] + 3);
-    }
+    ctx.beginPath();
+    ctx.moveTo(shot.x, shot.y);
+    ctx.lineTo(shot.tx, shot.ty);
+    ctx.strokeStyle = shot.color;
+    ctx.lineWidth = 2;
+    ctx.stroke();
   }
 
-  // 플로팅 텍스트
-  for (const f of g.floats) {
-    cx.globalAlpha = Math.max(0, f.life / 0.9);
-    cx.fillStyle = f.c; cx.font = 'bold 13px sans-serif'; cx.textAlign = 'center';
-    cx.fillText(f.txt, f.x, f.y);
+  for (const enemy of game.enemies) {
+    const [x, y] = pathPos(enemy.distance);
+    drawEnemy(ctx, x, y, enemy);
   }
-  cx.globalAlpha = 1;
 
-  if (g.phase === 'wave') {
-    cx.fillStyle = '#8a8fa8'; cx.font = '11px sans-serif'; cx.textAlign = 'left';
-    cx.fillText(`남은 적 ${g.alive}`, 12, 16);
+  ctx.font = '700 11px system-ui, sans-serif';
+  ctx.textAlign = 'center';
+  for (const f of game.floats) {
+    ctx.globalAlpha = Math.min(1, f.life / 0.5);
+    ctx.fillStyle = f.color;
+    ctx.fillText(f.text, f.x, f.y);
+    ctx.globalAlpha = 1;
   }
 }

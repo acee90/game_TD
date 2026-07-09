@@ -18,9 +18,11 @@ prototype/   코어 루프 웹 프로토타입 (단일 html, 레거시)
   index.html                          ← 브라우저로 열면 바로 플레이
   gattadi.html                        ← 갓타디 시스템 이식 1차 스케치
 web/         갓타디 프로토 (Vite + TypeScript, 현행)
-  src/data/balance.ts                 ← 밸런스 외부 테이블 (§11 정합)
+  src/data/units.ts                   ← 유닛 로스터 39종 + 고정 태그
+  src/data/balance.ts                 ← 밸런스 테이블 ([원본확정] / [프로토] 구분)
+  src/core/map.ts                     ← 십자 일주 경로 + 타워 타일 17개
   src/game/game.ts                    ← DOM 없는 게임 로직 (vitest 커버)
-  tests/game.test.ts                  ← 로직 스모크 테스트 12종
+  tests/game.test.ts                  ← 로직 테스트 32종
 ```
 
 ## 핵심 설계 요약

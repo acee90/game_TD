@@ -3,89 +3,93 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-<title>갓타디 프로토 — 스플/파워 변환 · 보스 소환 · 십자가</title>
+<title>갓타디 프로토 — 원본 맵파일 기반</title>
 <style>
   :root{
     --bg:#0e1220; --panel:#171c2e; --panel2:#1e2438; --line:#2a3150;
     --text:#e8e6df; --dim:#8a8fa8;
-    --terran:#4ea3ff; --zerg:#c065e0; --toss:#ffd23f;
-    --gold:#ffd23f; --danger:#ff5a3c; --splash:#55c8ff; --power:#ff8a3c;
+    --terran:#4ea3ff; --zerg:#c065e0; --toss:#ffd23f; --creature:#6fdc8c;
+    --gold:#ffd23f; --danger:#ff5a3c; --gas:#6fdc8c;
   }
   *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
   body{background:var(--bg);color:var(--text);font-family:-apple-system,'Noto Sans KR',sans-serif;
        display:flex;flex-direction:column;align-items:center;min-height:100vh;padding:8px}
-  #wrap{width:100%;max-width:440px}
-  #hud{display:flex;justify-content:space-between;align-items:center;padding:6px 4px;
-       font-variant-numeric:tabular-nums;font-size:14px}
-  #hud b{font-size:16px}
-  .res span::before{content:'◆';font-size:10px;margin-right:3px;vertical-align:1px;color:var(--gold)}
-  #pollwrap{height:6px;background:var(--panel);border-radius:3px;overflow:hidden;margin:2px 0 6px}
-  #pollbar{height:100%;width:0%;background:linear-gradient(90deg,#5a4a8a,var(--danger));transition:width .2s}
-  canvas{width:100%;display:block;background:#0a0e19;border:1px solid var(--line);border-radius:8px;touch-action:manipulation}
+  #wrap{width:100%;max-width:460px}
+  #hud{display:grid;grid-template-columns:repeat(6,1fr);gap:4px;padding:6px 2px;
+       font-variant-numeric:tabular-nums;font-size:11px;text-align:center;color:var(--dim)}
+  #hud b{display:block;font-size:15px;color:var(--text);font-weight:700}
+  #hud .m b{color:var(--gold)} #hud .g b{color:var(--gas)} #hud .l b{color:var(--danger)}
+  canvas{width:100%;display:block;background:#0a0e19;border:1px solid var(--line);
+         border-radius:8px;touch-action:manipulation;margin-top:4px}
   #info{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:8px 10px;
-        margin-top:6px;min-height:60px;font-size:12.5px;line-height:1.5}
+        margin-top:6px;min-height:56px;font-size:12.5px;line-height:1.6}
   #info .name{font-weight:700;font-size:14px}
-  .chip{display:inline-block;padding:1px 7px;border-radius:9px;font-size:10.5px;
-        margin-left:6px;vertical-align:1px;color:#0e1220;font-weight:700}
-  #msg{min-height:18px;font-size:12px;color:var(--dim);padding:4px;text-align:center}
+  .chip{display:inline-block;padding:1px 7px;border-radius:9px;font-size:10.5px;margin-left:5px;
+        vertical-align:1px;background:var(--panel2);color:var(--text);font-weight:600}
+  .dim{color:var(--dim)}
+  #message{min-height:18px;font-size:12px;color:var(--dim);padding:5px;text-align:center}
   .row{display:grid;gap:6px;margin-top:6px}
-  .c2{grid-template-columns:1fr 1fr}.c3{grid-template-columns:1fr 1fr 1fr}
+  .c2{grid-template-columns:1fr 1fr} .c4{grid-template-columns:repeat(4,1fr)}
   button{background:var(--panel2);color:var(--text);border:1px solid var(--line);border-radius:8px;
          padding:10px 4px;font-size:12.5px;font-family:inherit;cursor:pointer;line-height:1.4}
-  button:active{transform:translateY(1px)} button:disabled{opacity:.35}
-  button.gold{border-color:var(--gold)} button.splash{border-color:var(--splash)} button.power{border-color:var(--power)}
-  button.hot{background:#33324a;border-color:var(--gold)}
-  #prep{background:var(--panel);border:1px solid var(--gold);border-radius:8px;padding:8px 10px;margin-top:6px;font-size:12.5px}
-  #prep .wt{font-weight:700;font-size:14px}
-  .tag{font-size:11px;color:var(--dim)}
-  #bt0{border-color:var(--line)} #bt1{border-color:var(--power)} #bt2{border-color:var(--danger)}
-  #up0{border-color:var(--terran)} #up1{border-color:var(--zerg)} #up2{border-color:var(--toss)}
-  #overlay{position:fixed;inset:0;background:rgba(10,14,25,.93);display:none;
-           flex-direction:column;align-items:center;justify-content:center;gap:14px;text-align:center;padding:24px}
-  #overlay h1{font-size:26px} #overlay p{color:var(--dim);line-height:1.8}
+  button:active{transform:translateY(1px)} button:disabled{opacity:.35;cursor:default}
+  #boss{border-color:var(--line)} #boss.ready{border-color:var(--gold);background:#33324a}
+  #spawn{border-color:var(--gold)}
+  #up0{border-color:var(--terran)} #up1{border-color:var(--zerg)}
+  #up2{border-color:var(--toss)} #up3{border-color:var(--creature)}
+  .note{font-size:11px;color:var(--dim);text-align:center;margin-top:8px;line-height:1.7}
+  #overlay{position:fixed;inset:0;background:rgba(10,14,25,.94);display:none;
+           flex-direction:column;align-items:center;justify-content:center;gap:14px;
+           text-align:center;padding:24px}
+  #overlay h1{font-size:26px}
   #overlay button{padding:12px 28px;font-size:15px}
 </style>
 </head>
 <body>
-<div id="wrap">
-  <div id="hud">
-    <div><b id="round">R1</b> <span id="phase" class="tag">준비</span></div>
-    <div class="res"><span id="gold">240</span> · <span class="tag" id="wk">일꾼 0</span></div>
-    <div><button id="speed" style="padding:4px 10px;font-size:12px">×1</button></div>
-  </div>
-  <div id="pollwrap"><div id="pollbar"></div></div>
-  <canvas id="cv" width="420" height="520"></canvas>
-  <div id="info"><span class="tag">빈 타일 탭 = 생산 40 (유닛은 배치 후 공개) · 타워 탭 = 정보/변환</span></div>
-  <div id="msg">갓타디식 — 자리 먼저, 유닛은 랜덤. 요지부터 채우세요.</div>
+<main id="wrap">
+  <section id="hud" aria-label="상태">
+    <div>라운드<b id="round">R1</b></div>
+    <div>다음<b id="timer">20s</b></div>
+    <div class="m">미네랄<b id="mineral">55</b></div>
+    <div class="g">가스<b id="gas">6</b></div>
+    <div class="l">라이프<b id="lives">20</b></div>
+    <div>킬 / 선택자<b><span id="kills">0</span> / <span id="pick">1</span></b></div>
+  </section>
 
-  <!-- 준비 단계 패널: 웨이브 예고 + 보스 소환 선택 -->
-  <div id="prep">
-    <div><span class="wt" id="wtName">—</span> <span id="wtTip" class="tag"></span></div>
-    <div class="tag" id="wtNext" style="margin-top:2px"></div>
-    <div class="row c3" style="margin-top:8px">
-      <button id="bt0" class="hot">보스 없음</button>
-      <button id="bt1">★ 하급보스</button>
-      <button id="bt2">★★ 상급보스</button>
-    </div>
-    <div class="tag" id="bossTip" style="margin-top:6px;text-align:center">보스를 소환하면 골드가 크게 늘지만, 못 잡으면 오염이 폭증합니다.</div>
-    <button id="start" class="gold" style="width:100%;margin-top:8px">웨이브 시작 ▶</button>
-  </div>
+  <canvas id="canvas" width="420" height="470" aria-label="십자 일주 맵"></canvas>
+
+  <div id="info"></div>
+  <p id="message"></p>
 
   <div class="row c2">
-    <button id="produce" class="gold">생산 40 · 무작위 타일</button>
-    <button id="hire">일꾼 고용 90</button>
+    <button id="spawn">유닛 생성</button>
+    <button id="boss">Lv1 BOSS 소환</button>
   </div>
   <div class="row c2">
-    <button id="mSplash" class="splash">갓 → 광역</button>
-    <button id="mPower" class="power">갓 → 단일</button>
+    <button id="probe">프로브</button>
+    <button id="sell">유닛 처분</button>
   </div>
-  <div class="tag" style="text-align:center;margin-top:8px">종족 강화(골드) — 공격력 +10%/Lv 복리 · 비용 누진 (몰빵 vs 분산이 베팅)<br>테란=단일·장사거리 / 저그=초공속·물량 / 토스=광역 / <span style="color:#6fdc8c">크리쳐=강화불가 (야수=노업 밥값 · 정령=감속 오라)</span></div>
-  <div class="row c3">
-    <button id="up0">테란 +0</button><button id="up1">저그 +0</button><button id="up2">토스 +0</button>
+
+  <p class="note">파일런 업그레이드 (가스) — 종족별 공격력 +10% 복리</p>
+  <div class="row c4">
+    <button id="up0">테란</button><button id="up1">저그</button>
+    <button id="up2">플토</button><button id="up3">크리쳐</button>
   </div>
-  <div class="tag" style="text-align:center;margin-top:8px">단축키 — P 생산(무작위 타일) · H 일꾼 · Space 웨이브시작 · Q 갓광역 · E 갓단일 · 123 보스선택</div>
+
+  <p class="note">
+    몹은 북측 왼쪽 입구에서 나와 십자 외곽선을 반시계로 한 바퀴 돌고 북측 오른쪽 출구로 나간다.<br>
+    보스는 라운드와 무관하게 언제든 소환 — 쿨타임만 있고 비용은 없다.<br>
+    Lv N 보스를 처치해야 Lv N+1이 열리고, 처치할 때마다 <b>조합 선택자</b>가 한 칸 밀린다.<br>
+    단축키 — P 생성 · B 보스 · R 프로브 · X 처분 · 1234 업그레이드
+  </p>
+</main>
+
+<div id="overlay">
+  <h1 id="overlayTitle"></h1>
+  <p id="overlayBody" class="dim"></p>
+  <button onclick="location.reload()">다시 도전</button>
 </div>
-<div id="overlay"><h1 id="ovT"></h1><p id="ovB"></p><button onclick="location.reload()">다시 도전</button></div>
+
 <script type="module" src="/src/main.ts"></script>
 </body>
 </html>
