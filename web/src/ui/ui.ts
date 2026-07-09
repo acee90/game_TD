@@ -1,77 +1,302 @@
 // ───────── HUD / 패널 바인딩 ─────────
 import * as B from '../data/balance';
+import { RACES, RACE_COLOR, TIER_LABEL, tagLabel, type Race } from '../data/units';
+import { attackInterval, damage, range } from '../game/combat';
+import { bossKillMineral, nextMilestone } from '../game/economy';
+import * as HD from '../data/hero';
+import * as S from '../data/score';
+import * as hallOfFame from './hall-of-fame';
 import type { Game } from '../game/game';
-import type { Tower } from '../game/types';
 
-const $ = (id: string) => document.getElementById(id)!;
+const $ = <T extends HTMLElement>(id: string): T => {
+  const el = document.getElementById(id);
+  if (!el) throw new Error(`missing element #${id}`);
+  return el as T;
+};
 
-export function showInfo(g: Game, t: Tower, pending = false): void {
-  const col = B.RCOL[t.race];
-  const god = g.isGod(t), spirit = g.isSpirit(t), beast = g.isBeast(t);
-  const modeChip = god
-    ? `<span class="chip" style="background:${t.mode === 'splash' ? '#55c8ff' : '#ff8a3c'}">${t.mode === 'splash' ? '광역' : '단일'}</span>`
-    : spirit
-    ? `<span class="chip" style="background:#6fdc8c">감속</span>`
-    : `<span class="chip" style="background:${B.RSTAT[t.race].splash ? '#55c8ff' : '#8a8fa8'}">${B.RSTAT[t.race].splash ? '광역' : '단일'}</span>`;
-  const stats = spirit
-    ? `사거리 ${g.trng(t).toFixed(0)} · 범위 내 적 이속 ×${B.SPIRIT_SLOW[t.tier].toFixed(2)}`
-    : `공격력 ${g.tdmg(t).toFixed(0)} · 공속 ${(1 / g.atkInt(t)).toFixed(1)}/s · 사거리 ${g.trng(t).toFixed(0)} · DPS ${(g.tdmg(t) / g.atkInt(t)).toFixed(0)}`;
-  const blurb = god ? '갓 — 광역↔단일 변환 가능. 웨이브 성격에 맞춰 바꾸세요.'
-    : spirit ? '정령 — 공격하지 않음. 감속 오라 전담, 궤도 요지에 두면 전 타워의 실효 DPS가 오름.'
-    : beast ? '야수 — 강화 불가·높은 기본기. 업 커밋 없이 즉시 밥값, 후반 자연 감쇠 → 갓 각이 보이면 매각 판단.'
-    : `${B.RSTAT[t.race].blurb} · ${g.variant(t).name}형(${(t.variant ?? 0) === 0 ? '근접 고화력 — 궤도 밀착 배치' : '장거리 저화력 — 허브/외곽 요지'})`;
-  $('info').innerHTML =
-    `<span class="name">${g.unitName(t)} <span class="tag">${B.TNAME[t.tier]}</span></span>` +
-    `<span class="chip" style="background:${col}">${B.RACE[t.race]}</span>` +
-    (god ? '' : `<span class="chip" style="background:#5a6288;color:#e8e6df">${g.variant(t).name}</span>`) +
-    modeChip +
-    (pending ? `<span class="chip" style="background:#8a8fa8">배치 대기</span>` : '') +
-    `<br><span class="tag">${stats}</span>` +
-    `<br><span class="tag">${blurb}</span>` +
-    (pending ? '' :
-      `<div class="row c2" style="margin-top:6px">` +
-      (god ? `<button id="ibToggle">${t.mode === 'splash' ? '→ 단일 전환' : '→ 광역 전환'}</button>` : '<span></span>') +
-      `<button id="ibSell">판매 +${B.sellPrice(t.tier)}</button></div>`);
-  const tg = document.getElementById('ibToggle');
-  const sl = document.getElementById('ibSell');
-  if (tg) tg.onclick = () => { g.toggleSel(); if (g.sel?.tower) showInfo(g, g.sel.tower); };
-  if (sl) sl.onclick = () => { g.sellSel(); clearInfo(); sync(g); };
+export interface Elements {
+  readonly round: HTMLElement;
+  readonly timer: HTMLElement;
+  readonly mineral: HTMLElement;
+  readonly gas: HTMLElement;
+  readonly lives: HTMLElement;
+  readonly kills: HTMLElement;
+  readonly info: HTMLElement;
+  readonly message: HTMLElement;
+  readonly repeatBar: HTMLElement;
+  readonly repeatVal: HTMLElement;
+  readonly milestoneBar: HTMLElement;
+  readonly milestoneVal: HTMLElement;
+  readonly bossReward: HTMLElement;
+  readonly heroPanel: HTMLElement;
+  readonly heroLevel: HTMLElement;
+  readonly heroHpBar: HTMLElement;
+  readonly heroHp: HTMLElement;
+  readonly heroXpBar: HTMLElement;
+  readonly heroXp: HTMLElement;
+  readonly heroStats: HTMLElement;
+  readonly heroAugs: HTMLElement;
+  readonly augOverlay: HTMLElement;
+  readonly augSub: HTMLElement;
+  readonly augCards: HTMLElement;
+  readonly bossState: HTMLElement;
+  readonly bossLevels: readonly HTMLButtonElement[];
+  readonly probe: HTMLButtonElement;
+  readonly spawn: HTMLButtonElement;
+  readonly sell: HTMLButtonElement;
+  readonly upgrades: readonly HTMLButtonElement[];
+  readonly overlay: HTMLElement;
+  readonly overlayTitle: HTMLElement;
+  readonly overlayBody: HTMLElement;
+  readonly score: HTMLElement;
+  readonly scoreNext: HTMLElement;
+  readonly hallOfFame: HTMLElement;
 }
 
-export function clearInfo(): void {
-  $('info').innerHTML =
-    '<span class="tag">빈 타일 탭 = 생산 40 (유닛은 배치 후 공개) · 타워 탭 = 정보/변환</span>';
+export function bindElements(): Elements {
+  return {
+    round: $('round'),
+    timer: $('timer'),
+    mineral: $('mineral'),
+    gas: $('gas'),
+    lives: $('lives'),
+    kills: $('kills'),
+    info: $('info'),
+    message: $('message'),
+    repeatBar: $('repeatBar'),
+    repeatVal: $('repeatVal'),
+    milestoneBar: $('milestoneBar'),
+    milestoneVal: $('milestoneVal'),
+    bossReward: $('bossReward'),
+    heroPanel: $('heroPanel'),
+    heroLevel: $('heroLevel'),
+    heroHpBar: $('heroHpBar'),
+    heroHp: $('heroHp'),
+    heroXpBar: $('heroXpBar'),
+    heroXp: $('heroXp'),
+    heroStats: $('heroStats'),
+    heroAugs: $('heroAugs'),
+    augOverlay: $('augOverlay'),
+    augSub: $('augSub'),
+    augCards: $('augCards'),
+    bossState: $('bossState'),
+    bossLevels: [1, 2, 3, 4, 5, 6].map((n) => $<HTMLButtonElement>(`boss${n}`)),
+    probe: $<HTMLButtonElement>('probe'),
+    spawn: $<HTMLButtonElement>('spawn'),
+    sell: $<HTMLButtonElement>('sell'),
+    upgrades: [0, 1, 2, 3].map((i) => $<HTMLButtonElement>(`up${i}`)),
+    overlay: $('overlay'),
+    overlayTitle: $('overlayTitle'),
+    overlayBody: $('overlayBody'),
+    score: $('score'),
+    scoreNext: $('scoreNext'),
+    hallOfFame: $('hallOfFame'),
+  };
 }
 
-export function sync(g: Game): void {
-  $('round').textContent = 'R' + g.round;
-  $('phase').textContent = g.phase === 'prep' ? '준비' : '전투';
-  $('gold').textContent = String(Math.floor(g.gold));
-  $('wk').textContent = '일꾼 ' + g.workers;
-  ($('pollbar') as HTMLElement).style.width = g.poll + '%';
-  $('produce').textContent = `생산 ${B.PRODUCE_COST} · 무작위 타일`;
-  $('hire').textContent = '일꾼 고용 ' + B.hireCost(g.workers);
-  for (let i = 0; i < 3; i++) $('up' + i).textContent = B.RACE[i] + ' +' + g.up[i];
-  ($('prep') as HTMLElement).style.display = g.phase === 'prep' ? '' : 'none';
-  const wt = B.WTYPES[g.next.type];
-  const wn = $('wtName');
-  wn.textContent = '다음: ' + wt.name + ' ×' + g.next.q.length;
-  (wn as HTMLElement).style.color = wt.color;
-  $('wtTip').textContent = wt.tip;
-  $('wtNext').textContent =
-    '이후 ' + g.forecast(3).map(t => B.WTYPES[t].name).join(' → ');
-  for (let i = 0; i < 3; i++) $('bt' + i).classList.toggle('hot', g.boss === i);
-  $('bossTip').textContent =
-    g.boss === 0 ? '보스 없음 — 안전하게 소득만 챙깁니다.'
-    : g.boss === 1 ? '하급보스: 중간 보상 · 중간 위험. 단일 형태 화력이 필요.'
-    : '상급보스: 큰 보상 · 큰 위험. 못 잡으면 오염 +45. 도박입니다.';
-  $('msg').textContent = g.msg;
+function bossStateLabel(game: Game): string {
+  const live = game.liveBossLevels;
+  const fighting = live.length ? `교전 중 ${live.map((l) => `Lv${l}`).join(' ')} · ` : '';
+  const gate =
+    game.bossCooldown > 0
+      ? `쿨타임 ${Math.ceil(game.bossCooldown)}s`
+      : `소환 가능 Lv1~Lv${game.maxBossLevel}`;
+  return fighting + gate;
 }
 
-export function showGameOver(g: Game): void {
-  $('ovT').textContent = '라인이 뚫렸다';
-  $('ovB').innerHTML =
-    `도달 <b>R${g.round}</b> · 일꾼 ${g.workers}기<br>` +
-    `오염 100% — 다음 판엔 웨이브 성격에 맞춰 스플/파워를 더 빨리 전환해보세요.`;
-  ($('overlay') as HTMLElement).style.display = 'flex';
+function selectionInfo(game: Game): string {
+  const tower = game.selected?.tower;
+  if (!tower) {
+    return '<span class="dim">빈 타일 = 유닛 생성 · 유닛 타일 = 정보. 같은 유닛 2기가 모이면 자동 조합됩니다.</span>';
+  }
+  const dmg = damage(tower, game.upgrades).toFixed(0);
+  const dps = (damage(tower, game.upgrades) / attackInterval(tower)).toFixed(0);
+  return `
+    <div class="name" style="color:${RACE_COLOR[tower.def.race]}">
+      ${tower.def.name}
+      <span class="chip">${TIER_LABEL[tower.tier]}</span>
+      <span class="chip">【 ${tagLabel(tower.def)} 】</span>
+    </div>
+    <div class="dim">${RACES[tower.def.race]} · 공격력 ${dmg} · 간격 ${attackInterval(tower).toFixed(2)}s
+      · DPS ${dps} · 사거리 ${range(tower).toFixed(0)}</div>`;
+}
+
+/** 항상 보이는 보상 현황 — 원본 §8.2의 세 소득 계열 */
+function refreshMissions(el: Elements, game: Game): void {
+  const remaining = Math.max(0, game.roundTimer);
+  el.repeatBar.style.width = `${(1 - remaining / B.ROUND_SECONDS) * 100}%`;
+  el.repeatVal.textContent = `R${Math.max(1, game.round)} 클리어 → +${B.waveReward(Math.max(1, game.round))}`;
+
+  const milestone = nextMilestone(game.kills);
+  if (milestone) {
+    const previous = milestone.kills - 200;
+    const span = milestone.kills - Math.max(0, previous);
+    const done = game.kills - Math.max(0, previous);
+    el.milestoneBar.style.width = `${Math.min(100, (done / span) * 100)}%`;
+    el.milestoneVal.textContent = `${game.kills}/${milestone.kills} → +${milestone.reward}`;
+  } else {
+    el.milestoneBar.style.width = '100%';
+    el.milestoneVal.textContent = '전부 달성';
+  }
+
+  const levels = Array.from({ length: B.BOSS_MAX_LEVEL }, (_, i) => i + 1);
+  el.bossReward.innerHTML = levels
+    .map((level) => {
+      const open = level <= game.maxBossLevel;
+      const text = `Lv${level} +${bossKillMineral(level)}`;
+      return open ? `<b style="color:var(--gold)">${text}</b>` : `<span class="dim">${text}</span>`;
+    })
+    .join(' · ');
+}
+
+function refreshHero(el: Elements, game: Game): void {
+  const hero = game.hero;
+  const stats = hero.stats;
+  el.heroLevel.textContent = `Lv${hero.level}`;
+
+  const hpRatio = hero.alive ? hero.hp / stats.maxHp : 0;
+  el.heroHpBar.style.width = `${hpRatio * 100}%`;
+  el.heroHp.textContent = hero.alive
+    ? `${Math.ceil(hero.hp)}/${stats.maxHp}`
+    : `부활 ${Math.ceil(hero.respawnTimer)}s`;
+
+  el.heroXpBar.style.width = `${(hero.xp / hero.xpNeeded) * 100}%`;
+  el.heroXp.textContent = `${hero.xp}/${hero.xpNeeded}`;
+
+  const dps = (stats.damage / stats.attackInterval).toFixed(0);
+  const parts = [
+    `공격력 ${stats.damage}`,
+    `DPS ${dps}`,
+    `사거리 ${stats.range.toFixed(0)}`,
+    stats.splashRadius > 0 ? `광역 ${stats.splashRadius.toFixed(0)}` : null,
+    stats.damageReduction > 0 ? `피해감소 ${(stats.damageReduction * 100).toFixed(0)}%` : null,
+    stats.regen > 0 ? `재생 ${stats.regen}/s` : null,
+  ].filter(Boolean);
+  el.heroStats.textContent = parts.join(' · ');
+
+  el.heroAugs.innerHTML = hero.augments
+    .map((card) => {
+      const color = HD.AUGMENT_KIND_COLOR[card.augment.kind];
+      const border = HD.RARITIES[card.rarity].color;
+      return `<span class="aug" style="background:${color};box-shadow:0 0 0 1.5px ${border}">${card.augment.name}</span>`;
+    })
+    .join('');
+
+  const synergies = HD.activeSynergies(hero.augments);
+  if (synergies.length) {
+    el.heroAugs.innerHTML += synergies
+      .map((s) => `<span class="syn">★ ${s.name}</span>`)
+      .join('');
+  }
+}
+
+function refreshAugmentOverlay(el: Elements, game: Game): void {
+  if (game.augmentChoices.length === 0) {
+    el.augOverlay.style.display = 'none';
+    return;
+  }
+  el.augOverlay.style.display = 'flex';
+  el.augSub.textContent =
+    `영웅 Lv${game.hero.level} — 하나를 고르세요 · 지금 몹 체력 ×${game.enemyHpMultiplier.toFixed(2)}`;
+  el.augCards.innerHTML = game.augmentChoices
+    .map((card, i) => {
+      const kindColor = HD.AUGMENT_KIND_COLOR[card.augment.kind];
+      const kindLabel = HD.AUGMENT_KIND_LABEL[card.augment.kind];
+      const rarity = HD.RARITIES[card.rarity];
+      const cost =
+        rarity.enemyHpMult > 1
+          ? `<div class="cost">몹 체력 +${Math.round((rarity.enemyHpMult - 1) * 100)}%</div>`
+          : '<div class="cost safe">대가 없음</div>';
+      return `<button class="augcard" data-index="${i}" style="border-color:${rarity.color}">
+        <div class="k">
+          <span style="color:${kindColor}">${kindLabel}</span>
+          <span class="rar" style="color:${rarity.color}">${rarity.label}</span>
+        </div>
+        <div class="n">${card.augment.name}</div>
+        <div class="d">${card.augment.description}</div>
+        ${cost}
+      </button>`;
+    })
+    .join('');
+}
+
+export function refresh(el: Elements, game: Game): void {
+  el.round.textContent = `R${Math.max(1, game.round)}`;
+  el.timer.textContent = `${Math.ceil(game.roundTimer)}s`;
+  el.mineral.textContent = String(Math.floor(game.mineral));
+  el.gas.textContent = String(Math.floor(game.gas));
+  el.lives.textContent = String(game.lives);
+  el.kills.textContent = String(game.kills);
+
+  el.bossState.textContent = bossStateLabel(game);
+  el.bossLevels.forEach((button, i) => {
+    const level = i + 1;
+    const open = level <= game.maxBossLevel;
+    button.disabled = !game.canSummonBossLevel(level);
+    button.textContent = open ? `Lv${level}\n+${B.BOSS_KILL_MINERAL[i]}` : `Lv${level} 🔒`;
+    button.classList.toggle('ready', open);
+    button.classList.toggle('top', open && level === game.maxBossLevel);
+  });
+
+  el.probe.textContent = `프로브 ${B.PROBE_MINERAL} (${game.probes}/${B.PROBE_MAX})`;
+  el.probe.disabled = game.probes >= B.PROBE_MAX || game.mineral < B.PROBE_MINERAL;
+
+  el.spawn.textContent = `유닛 생성 ${B.SPAWN_UNIT_MINERAL}`;
+  el.spawn.disabled = game.mineral < B.SPAWN_UNIT_MINERAL;
+
+  el.sell.disabled = !game.selected?.tower;
+
+  el.upgrades.forEach((button, i) => {
+    const race = i as Race;
+    const cost = game.upgradeCost(race);
+    button.textContent = `${RACES[race]} +${game.upgrades[race]} · ${cost}가스`;
+    button.disabled = game.gas < cost;
+  });
+
+  refreshHero(el, game);
+  refreshAugmentOverlay(el, game);
+  refreshMissions(el, game);
+  el.info.innerHTML = selectionInfo(game);
+  el.message.textContent = game.message;
+
+  el.score.textContent = game.score.toLocaleString('ko-KR');
+  const nextRound = Math.max(1, game.round);
+  el.scoreNext.textContent = `R${nextRound} 클리어 +${S.roundScore(nextRound).toLocaleString('ko-KR')}`;
+
+  if (game.over && !submitted) {
+    submitted = true;
+    showHallOfFame(el, game);
+  }
+}
+
+let submitted = false;
+
+function showHallOfFame(el: Elements, game: Game): void {
+  el.overlay.style.display = 'flex';
+  el.overlayTitle.textContent = `${game.score.toLocaleString('ko-KR')}점`;
+  el.overlayBody.textContent =
+    `${game.round}라운드 · ${game.kills}킬 · 보스 Lv${game.bossCleared} · 영웅 Lv${game.hero.level}`;
+
+  const mine: hallOfFame.Record = {
+    score: game.score,
+    round: game.round,
+    kills: game.kills,
+    heroLevel: game.hero.level,
+    at: Date.now(),
+  };
+  const records = hallOfFame.submit(mine);
+  const myRank = hallOfFame.rankOf(records, mine);
+
+  const rows = records
+    .map((r, i) => {
+      const me = i + 1 === myRank ? ' class="me"' : '';
+      return `<li${me}>
+        <span class="rank">${i + 1}</span>
+        <span>R${r.round} · ${r.kills}킬 · 영웅 Lv${r.heroLevel}</span>
+        <span class="pts">${r.score.toLocaleString('ko-KR')}</span>
+      </li>`;
+    })
+    .join('');
+
+  el.hallOfFame.innerHTML = `<h3>명예의 전당${myRank ? ` — 이번 판 ${myRank}위` : ' — 순위권 밖'}</h3><ol>${rows}</ol>`;
 }

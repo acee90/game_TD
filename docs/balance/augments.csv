@@ -1,0 +1,16 @@
+id,kind,kindLabel,name,description,maxStacks,requiresSplash,hpMult,damageMult,rangeMult,attackSpeedMult,moveSpeedMult,towerDamageMult,damageReduction,regen,splashRadius,mineralPerKill,respawnCut
+bulwark,tank,탱커,방벽,최대 체력 +40%,3,FALSE,1.4,,,,,,,,,,
+plating,tank,탱커,중장갑,받는 피해 20% 감소,2,FALSE,,,,,,,0.2,,,,
+regen,tank,탱커,재생,초당 체력 6 회복,3,FALSE,,,,,,,,6,,,
+longbow,ranged,원거리,장궁,사거리 +35%,3,FALSE,,,1.35,,,,,,,,
+rapid,ranged,원거리,속사,공격 속도 +35%,3,FALSE,,,,1.35,,,,,,,
+marksman,ranged,원거리,명사수,"공격력 +30%, 사거리 +10%",3,FALSE,,1.3,1.1,,,,,,,,
+novasmall,mage,마법사,충격파,공격이 반경 45의 광역이 된다,1,FALSE,,,,,,,,,45,,
+novabig,mage,마법사,대폭발,광역 반경 +40 (충격파 필요),2,TRUE,,,,,,,,,40,,
+arcane,mage,마법사,비전 집중,"공격력 +25%, 공격 속도 +15%",3,FALSE,,1.25,,1.15,,,,,,,
+vigor,stat,스탯,활력,"최대 체력 +20%, 공격력 +10%",4,FALSE,1.2,1.1,,,,,,,,,
+swift,stat,스탯,신속,이동 속도 +25%,2,FALSE,,,,,1.25,,,,,,
+might,stat,스탯,완력,공격력 +45%,3,FALSE,,1.45,,,,,,,,,
+greed,utility,그 외,탐욕,영웅 처치당 미네랄 +1,3,FALSE,,,,,,,,,,1,
+phoenix,utility,그 외,불사조,부활 대기 4초 감소,2,FALSE,,,,,,,,,,,4
+warlord,utility,그 외,전쟁군주,모든 타워 공격력 +12%,3,FALSE,,,,,,1.12,,,,,

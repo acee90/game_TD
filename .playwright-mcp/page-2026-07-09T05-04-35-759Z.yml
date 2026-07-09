@@ -1,0 +1,48 @@
+- main [ref=f42e2]:
+  - region "상태" [ref=f42e3]:
+    - generic [ref=f42e4]:
+      - text: 라운드
+      - generic [ref=f42e5]: R1
+    - generic [ref=f42e6]:
+      - text: 다음
+      - generic [ref=f42e7]: 5s
+    - generic [ref=f42e8]:
+      - text: 미네랄
+      - generic [ref=f42e9]: "55"
+    - generic [ref=f42e10]:
+      - text: 가스
+      - generic [ref=f42e11]: "6"
+    - generic [ref=f42e12]:
+      - text: 라이프
+      - generic [ref=f42e13]: "20"
+    - generic [ref=f42e14]:
+      - text: 누적 킬
+      - generic [ref=f42e15]: "0"
+  - generic "십자 일주 맵" [ref=f42e16]
+  - generic [ref=f42e17]: 빈 타일 = 유닛 생성 · 유닛 타일 = 정보. 같은 유닛 2기가 모이면 자동 조합됩니다.
+  - paragraph [ref=f42e18]: 소용돌이를 클릭해 유닛을 생성하세요. 같은 유닛 2기가 모이면 조합됩니다.
+  - generic [ref=f42e19]:
+    - button "유닛 생성 12" [ref=f42e20] [cursor=pointer]
+    - button "프로브 30 (0/8)" [ref=f42e21] [cursor=pointer]
+  - generic [ref=f42e22]:
+    - button "유닛 처분" [disabled] [ref=f42e23]
+    - button "소환 가능 Lv1~Lv1" [disabled] [ref=f42e24]
+  - paragraph [ref=f42e25]: 보스 소환 (쿨타임만, 비용 없음) — 열린 레벨은 언제든 다시 부를 수 있다
+  - generic [ref=f42e26]:
+    - button "Lv1 +5" [ref=f42e27] [cursor=pointer]
+    - button "Lv2 🔒" [disabled] [ref=f42e28]
+    - button "Lv3 🔒" [disabled] [ref=f42e29]
+    - button "Lv4 🔒" [disabled] [ref=f42e30]
+    - button "Lv5 🔒" [disabled] [ref=f42e31]
+    - button "Lv6 🔒" [disabled] [ref=f42e32]
+  - paragraph [ref=f42e33]: 파일런 업그레이드 (가스) — 종족별 공격력 +10% 복리
+  - generic [ref=f42e34]:
+    - button "테란 +0 · 8가스" [disabled] [ref=f42e35]
+    - button "저그 +0 · 8가스" [disabled] [ref=f42e36]
+    - button "플토 +0 · 8가스" [disabled] [ref=f42e37]
+    - button "크리쳐 +0 · 8가스" [disabled] [ref=f42e38]
+  - paragraph [ref=f42e39]:
+    - text: 몹은 북측 왼쪽 입구에서 나와 십자 외곽선을 반시계로 한 바퀴 돌고 북측 오른쪽 출구로 나간다.
+    - text: 보스는 라운드와 무관하게 언제든 소환한다. Lv N을 처치해야 Lv N+1이 열리고,
+    - text: 한번 열린 레벨은 계속 부를 수 있다 — 낮은 레벨은 안전하지만 보상(5·8·13·20·29·39)이 적다.
+    - text: 단축키 — P 생성 · B 최고레벨 보스 · R 프로브 · X 처분 · 1234 업그레이드

@@ -1,51 +1,54 @@
-import type { WaveType } from '../data/balance';
-
-export type Mode = 'splash' | 'power';
-export type Phase = 'prep' | 'wave';
+import type { UnitDef } from '../data/units';
 
 export interface Tower {
-  race: number;      // 0 테란 / 1 저그 / 2 토스
-  tier: number;      // 0..4 (4 = 갓)
-  mode: Mode;
-  cd: number;
-  variant?: number;  // 0 돌격 / 1 표준 / 2 저격 (갓은 무시, 미지정 = 표준)
+  readonly def: UnitDef;
+  readonly tier: number;
+  /** 다음 공격까지 남은 시간(초) */
+  cooldown: number;
 }
 
 export interface Slot {
-  x: number;
-  y: number;
+  readonly x: number;
+  readonly y: number;
   tower: Tower | null;
 }
 
-export type EnemyType = WaveType | 'boss';
+export type EnemyKind = 'mob' | 'boss';
 
 export interface EnemySpec {
-  hp: number;
-  armor: number;
-  spd: number;
-  r: number;
-  type: EnemyType;
-  reward?: number;
-  boss?: number;
+  readonly kind: EnemyKind;
+  readonly name: string;
+  readonly maxHp: number;
+  readonly armor: number;
+  readonly speed: number;
+  readonly radius: number;
+  /** 보스일 때만 채워진다 */
+  readonly bossLevel?: number;
 }
 
 export interface Enemy extends EnemySpec {
-  d: number;       // 경로 진행 거리
-  maxhp: number;
+  hp: number;
+  /** 입구에서 이동한 거리. PATH_LENGTH 도달 시 돌파 */
+  distance: number;
   dead?: boolean;
+  /** 마지막으로 때린 게 영웅인가 — 막타 경험치 보너스 판정 */
+  lastHitByHero?: boolean;
 }
 
 export interface Shot {
-  x: number; y: number;
-  tx: number; ty: number;
+  x: number;
+  y: number;
+  tx: number;
+  ty: number;
   life: number;
-  c: string;
-  splash?: number;
+  color: string;
+  splashRadius?: number;
 }
 
 export interface FloatText {
-  x: number; y: number;
-  txt: string;
-  c: string;
+  x: number;
+  y: number;
+  text: string;
+  color: string;
   life: number;
 }

@@ -1,0 +1,61 @@
+- main [ref=f47e2]:
+  - region "상태" [ref=f47e3]:
+    - generic [ref=f47e4]:
+      - text: 라운드
+      - generic [ref=f47e5]: R1
+    - generic [ref=f47e6]:
+      - text: 다음
+      - generic [ref=f47e7]: 5s
+    - generic [ref=f47e8]:
+      - text: 미네랄
+      - generic [ref=f47e9]: "55"
+    - generic [ref=f47e10]:
+      - text: 가스
+      - generic [ref=f47e11]: "6"
+    - generic [ref=f47e12]:
+      - text: 라이프
+      - generic [ref=f47e13]: "20"
+    - generic [ref=f47e14]:
+      - text: 누적 킬
+      - generic [ref=f47e15]: "0"
+  - generic "십자 일주 맵" [ref=f47e16]
+  - generic [ref=f47e17]: 빈 타일 = 유닛 생성 · 유닛 타일 = 정보. 같은 유닛 2기가 모이면 자동 조합됩니다.
+  - paragraph [ref=f47e18]: 소용돌이를 클릭해 유닛을 생성하세요. 같은 유닛 2기가 모이면 조합됩니다.
+  - region "보상 현황" [ref=f47e19]:
+    - generic [ref=f47e20]:
+      - generic [ref=f47e21]: 반복 20킬
+      - generic [ref=f47e23]: 0/20 → +10
+    - generic [ref=f47e24]:
+      - generic [ref=f47e25]: 마일스톤
+      - generic [ref=f47e27]: 0/200 → +5
+    - generic [ref=f47e28]:
+      - generic [ref=f47e29]: 보스 처치
+      - generic [ref=f47e30]: Lv1 +5 · Lv2 +8 · Lv3 +13 · Lv4 +20 · Lv5 +29 · Lv6 +39
+    - generic [ref=f47e31]:
+      - generic [ref=f47e32]: 몹 돌파
+      - generic [ref=f47e33]: 라이프 -1 · 미네랄 +5
+  - generic [ref=f47e34]:
+    - button "유닛 생성 12" [ref=f47e35] [cursor=pointer]
+    - button "프로브 30 (0/8)" [ref=f47e36] [cursor=pointer]
+  - generic [ref=f47e37]:
+    - button "유닛 처분" [disabled] [ref=f47e38]
+    - button "소환 가능 Lv1~Lv1" [disabled] [ref=f47e39]
+  - paragraph [ref=f47e40]: 보스 소환 (쿨타임만, 비용 없음) — 열린 레벨은 언제든 다시 부를 수 있다
+  - generic [ref=f47e41]:
+    - button "Lv1 +5" [ref=f47e42] [cursor=pointer]
+    - button "Lv2 🔒" [disabled] [ref=f47e43]
+    - button "Lv3 🔒" [disabled] [ref=f47e44]
+    - button "Lv4 🔒" [disabled] [ref=f47e45]
+    - button "Lv5 🔒" [disabled] [ref=f47e46]
+    - button "Lv6 🔒" [disabled] [ref=f47e47]
+  - paragraph [ref=f47e48]: 파일런 업그레이드 (가스) — 종족별 공격력 +10% 복리
+  - generic [ref=f47e49]:
+    - button "테란 +0 · 8가스" [disabled] [ref=f47e50]
+    - button "저그 +0 · 8가스" [disabled] [ref=f47e51]
+    - button "플토 +0 · 8가스" [disabled] [ref=f47e52]
+    - button "크리쳐 +0 · 8가스" [disabled] [ref=f47e53]
+  - paragraph [ref=f47e54]:
+    - text: 몹은 북측 왼쪽 입구에서 나와 십자 외곽선을 반시계로 한 바퀴 돌고 북측 오른쪽 출구로 나간다.
+    - text: 보스는 라운드와 무관하게 언제든 소환한다. Lv N을 처치해야 Lv N+1이 열리고,
+    - text: 한번 열린 레벨은 계속 부를 수 있다 — 낮은 레벨은 안전하지만 보상(5·8·13·20·29·39)이 적다.
+    - text: 단축키 — P 생성 · B 최고레벨 보스 · R 프로브 · X 처분 · 1234 업그레이드

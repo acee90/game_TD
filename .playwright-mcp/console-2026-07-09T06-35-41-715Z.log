@@ -1,0 +1,4 @@
+[      88ms] [ERROR] Failed to load resource: the server responded with a status of 404 (Not Found) @ http://localhost:5182/favicon.ico:0
+[  394228ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://localhost:5182/src/data/hero.ts?t=1783579335849:0
+[  395114ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://localhost:5182/src/data/hero.ts?t=1783579336749:0
+[  395920ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://localhost:5182/src/data/hero.ts?t=1783579337544:0

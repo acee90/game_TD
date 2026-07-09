@@ -1,331 +1,586 @@
 // ───────── 게임 로직 (DOM 없음 — 테스트 가능) ─────────
+// 출처: docs/갓타워디펜스X_VZ056_맵파일분석_v1.0.md
+
 import * as B from '../data/balance';
-import { DOOR_OUT, LOOP, SLOT_POS, pathPos } from '../core/map';
-import type { Enemy, EnemySpec, FloatText, Mode, Phase, Shot, Slot, Tower } from './types';
-
-export interface Wave {
-  type: B.WaveType;
-  q: EnemySpec[];
-}
-
-export function pickType(r: number): B.WaveType {
-  if (r < 3) return 'normal';
-  const m = r % 3;
-  return m === 0 ? 'heavy' : m === 1 ? 'swarm' : 'normal';
-}
-
-export function buildWave(r: number): Wave {
-  const t = pickType(r);
-  const hp = B.waveHP(r);
-  const q: EnemySpec[] = [];
-  if (t === 'swarm') {
-    for (let i = 0; i < 16 + r; i++)
-      q.push({ hp: hp * 0.55, armor: hp * 0.02, spd: 78, r: 8, type: t });
-  } else if (t === 'heavy') {
-    for (let i = 0; i < 5; i++)
-      q.push({ hp: hp * 2.6, armor: hp * 0.13, spd: 42, r: 13, type: t });
-  } else {
-    for (let i = 0; i < 9; i++)
-      q.push({ hp, armor: hp * 0.05, spd: 56, r: 10, type: t });
-  }
-  return { type: t, q };
-}
-
-// 유효 피해: 장갑을 뺀다(단일 큰 타격 = 장갑 관통 / 광역 소타격 = 장갑에 갉아먹힘)
-export const effDmg = (raw: number, armor: number) => Math.max(raw - armor, raw * 0.1);
+import * as H from '../data/hero';
+import * as S from '../data/score';
+import { PATH_LENGTH, SLOT_POS, pathPos } from '../core/map';
+import { GOD_TIER, RACE_COLOR, tagLabel, type Race } from '../data/units';
+import type { AugmentCard } from '../data/hero';
+import { attackInterval, damage, isSplash, range, slowFactor, type UpgradeLevels } from './combat';
+import { bossKillMineral, killIncome } from './economy';
+import { Hero, rollAugmentChoices } from './hero';
+import { findMerge, unitFor, type Rand } from './merge';
+import type { Enemy, EnemySpec, FloatText, Shot, Slot } from './types';
 
 export class Game {
-  gold = B.START_GOLD;
-  poll = 0;
-  round = 1;
-  phase: Phase = 'prep';
-  workers = 0;
-  up = [0, 0, 0];
-  boss = 0;
+  mineral = B.START_MINERAL;
+  gas = B.START_GAS;
+  lives = B.START_LIVES;
+  /** 진행 중인 라운드. 첫 웨이브가 시작되기 전에는 0이다. */
+  round = 0;
+  roundTimer = B.OPENING_SECONDS;
+  kills = 0;
+  probes = 0;
   over = false;
 
+  /** 누적 점수. 승리 조건이 없으므로 이게 유일한 성적표다. */
+  score = 0;
+  /** GOD 타워 보너스를 이미 받은 유닛 이름 */
+  private readonly scoredGods = new Set<string>();
+  message = '소용돌이를 클릭해 유닛을 생성하세요. 같은 유닛 2기가 모이면 조합됩니다.';
+
+  /** 처치한 최고 보스 레벨. Lv N+1 소환은 Lv N을 잡아야 열린다. */
+  bossCleared = 0;
+  bossesKilled = 0;
+  bossCooldown = 0;
+
+  upgrades: UpgradeLevels = [0, 0, 0, 0];
+
+  /** 제단과 영웅은 시작부터 있다 */
+  readonly hero: Hero;
+  /** 증강 선택지가 떠 있으면 게임이 멈춘다 */
+  augmentChoices: AugmentCard[] = [];
+
+  /**
+   * 높은 등급 증강을 고른 대가. 몹 체력에 영구히 곱해진다.
+   * 지금 세지느냐, 나중을 지키느냐 — 매 선택이 도박이다.
+   */
+  enemyHpMultiplier = 1;
+
   slots: Slot[] = SLOT_POS.map(([x, y]) => ({ x, y, tower: null }));
-  sel: Slot | null = null;
+  selected: Slot | null = null;
 
   enemies: Enemy[] = [];
   shots: Shot[] = [];
   floats: FloatText[] = [];
-  spawnQ: EnemySpec[] = [];
-  spawnT = 0;
-  alive = 0;
 
-  next: Wave = buildWave(1);
-  msg = '준비 단계: 다음 웨이브 성격을 보고 스플/파워를 맞춘 뒤 시작하세요.';
-  lastReward = 0;
+  private spawnQueue: EnemySpec[] = [];
+  private spawnTimer = 0;
+  private gasFraction = 0;
+  private heroHitTimer = 0;
 
-  rand: () => number;
-  constructor(rand: () => number = Math.random) {
+  /** 유닛 추첨용 난수. 테스트에서 결정적 함수를 주입한다. */
+  private readonly rand: Rand;
+
+  constructor(rand: Rand = Math.random) {
     this.rand = rand;
+    this.hero = new Hero();
   }
 
-  // ── 타워 수치 (갓 = 모드 기반 / 하위 티어 = 종족 정체성 × 역할 변형) ──
-  isGod(t: Tower) { return t.tier === B.GOD_TIER; }
-  isCreature(t: Tower) { return t.race === B.CREATURE; }
-  isSpirit(t: Tower) { return this.isCreature(t) && !this.isGod(t) && (t.variant ?? 0) === 1; }
-  isBeast(t: Tower) { return this.isCreature(t) && !this.isGod(t) && (t.variant ?? 0) === 0; }
-  variant(t: Tower): B.Variant {
-    if (this.isBeast(t)) return { name: '야수', rngMult: B.BEAST_RNG, dmgMult: B.BEAST_DMG };
-    if (this.isSpirit(t)) return { name: '정령', rngMult: B.SPIRIT_RNG, dmgMult: 0 };
-    return B.VARIANTS[t.variant ?? 0];
-  }
-  // 크리쳐는 종족 강화가 안 먹힌다 (무커밋 = 정체성)
-  upMult(t: Tower) { return this.isCreature(t) ? 1 : Math.pow(B.UP_MULT, this.up[t.race]); }
-  tdmg(t: Tower) {
-    const base = B.DMG0 * B.TDMG[t.tier] * this.upMult(t);
-    if (this.isGod(t)) return base * (this.isCreature(t) ? B.CREATURE_GOD : 1);
-    return base * B.RSTAT[t.race].dmgMult * this.variant(t).dmgMult;
-  }
-  atkInt(t: Tower) { return this.isGod(t) ? B.ATK_INT : B.RSTAT[t.race].atkInt; }
-  trng(t: Tower) {
-    return B.TRNG[t.tier] * (this.isGod(t)
-      ? (t.mode === 'power' ? B.POWER_RNG : 1)
-      : B.RSTAT[t.race].rangeMult * this.variant(t).rngMult);
-  }
-  isSplash(t: Tower) { return this.isGod(t) ? t.mode === 'splash' : B.RSTAT[t.race].splash; }
-  unitName(t: Tower) {
-    return this.isGod(t)
-      ? B.GOD_NAMES[t.race]
-      : B.UNIT_NAMES[t.race][t.tier][t.variant ?? 0];
+  /** 증강 선택 중에는 시간이 흐르지 않는다 */
+  get paused(): boolean {
+    return this.augmentChoices.length > 0;
   }
 
-  // ── 생산 (갓타디식: 자리 먼저, 유닛은 배치 후 공개) / 합성 / 판매 ──
-  produceAt(slot: Slot): boolean {
-    if (slot.tower) { this.msg = '빈 타일을 선택하세요.'; return false; }
-    if (this.gold < B.PRODUCE_COST) { this.msg = `골드 부족 — 생산 ${B.PRODUCE_COST} 필요.`; return false; }
-    this.gold -= B.PRODUCE_COST;
-    const t: Tower = {
-      race: Math.floor(this.rand() * 4), tier: 0, mode: 'splash', cd: 0,
-      variant: Math.floor(this.rand() * 2),
-    };
-    slot.tower = t;
-    this.float(slot.x, slot.y, this.unitName(t), B.RCOL[t.race]);
-    this.msg = `${this.unitName(t)}(${B.RACE[t.race]} · ${this.variant(t).name}) 등장!`;
-    this.sel = slot;
-    this.tryMerge();
-    if (!slot.tower) this.sel = null; // 즉시 합성으로 소모된 경우
+  // ── 제단 · 영웅 ──
+  /** 제단은 게임 시작과 함께 십자 중앙 타일에 주어진다. 그 자리에는 타워를 놓을 수 없다. */
+  get altarSlot(): Slot {
+    return this.slots[H.ALTAR_SLOT];
+  }
+
+  moveHero(x: number, y: number): void {
+    this.hero.moveTo(x, y);
+  }
+
+  /** 증강 하나를 고른다. 남은 선택이 있으면 다음 선택지를 띄운다. */
+  chooseAugment(index: number): boolean {
+    const card = this.augmentChoices[index];
+    if (!card) return false;
+
+    const rarity = H.RARITIES[card.rarity];
+    this.hero.addAugment(card);
+    this.enemyHpMultiplier *= rarity.enemyHpMult;
+    this.augmentChoices = [];
+
+    const cost =
+      rarity.enemyHpMult > 1
+        ? ` — 몹 체력 +${Math.round((rarity.enemyHpMult - 1) * 100)}% (누적 ×${this.enemyHpMultiplier.toFixed(2)})`
+        : '';
+    this.message = `[${rarity.label}] ${card.augment.name}: ${card.augment.description}${cost}`;
+    this.offerAugmentIfPending();
     return true;
   }
 
-  // 버튼/단축키 편의: 무작위 빈 타일에 생산 (자리도 운에 맡기는 최속 템포)
-  produce(): boolean {
-    const empty = this.slots.filter(s => !s.tower);
-    if (!empty.length) { this.msg = '빈 타일이 없습니다 — 합성/판매로 정리하세요.'; return false; }
-    return this.produceAt(empty[Math.floor(this.rand() * empty.length)]);
+  private offerAugmentIfPending(): void {
+    const hero = this.hero;
+    if (hero.pendingAugmentPicks <= 0) return;
+    this.augmentChoices = rollAugmentChoices(hero, this.rand);
+    if (this.augmentChoices.length === 0) hero.pendingAugmentPicks = 0;
   }
 
-  // 같은 종족+티어 2기 → 상위 티어(종족 랜덤). 연쇄 검사.
-  tryMerge(): void {
-    for (let ti = 0; ti < B.GOD_TIER; ti++)
-      for (let r = 0; r < 4; r++) {
-        const g = this.slots.filter(s => s.tower && s.tower.tier === ti && s.tower.race === r);
-        if (g.length >= 2) {
-          const keep = g[0], drop = g[1];
-          drop.tower = null;
-          keep.tower = {
-            race: Math.floor(this.rand() * 4),
-            tier: ti + 1,
-            mode: keep.tower!.mode,
-            cd: 0,
-            variant: Math.floor(this.rand() * 2),
-          };
-          this.float(keep.x, keep.y, ti + 1 === B.GOD_TIER ? '★갓★' : '합성!',
-            ti + 1 === B.GOD_TIER ? '#ffd23f' : '#fff');
-          return this.tryMerge();
+  /** 필드에 살아있는 보스들의 레벨 */
+  get liveBossLevels(): number[] {
+    return this.enemies.filter((e) => e.kind === 'boss').map((e) => e.bossLevel ?? 1);
+  }
+
+  // ── 소환 가능한 보스 레벨 ──
+  /** 아직 열리지 않은 가장 높은 레벨. Lv N을 잡아야 Lv N+1이 열린다. */
+  get maxBossLevel(): number {
+    return Math.min(this.bossCleared + 1, B.BOSS_MAX_LEVEL);
+  }
+
+  /** 열린 레벨은 언제든 다시 고를 수 있다. 낮은 레벨은 안전하지만 보상이 적다. */
+  canSummonBossLevel(level: number): boolean {
+    return this.canSummonBoss && level >= 1 && level <= this.maxBossLevel;
+  }
+
+  /** 쿨타임만이 소환을 막는다. 앞선 보스와 교전 중이어도 쿨타임이 차면 또 부를 수 있다. */
+  get canSummonBoss(): boolean {
+    return !this.over && this.bossCooldown <= 0;
+  }
+
+  /**
+   * 보스 소환 — 라운드 진행과 무관한 상시 액션. 비용 없음, 쿨타임만.
+   * 레벨을 생략하면 열려 있는 가장 높은 레벨을 부른다.
+   */
+  summonBoss(level: number = this.maxBossLevel): boolean {
+    if (!this.canSummonBossLevel(level)) {
+      this.message =
+        this.bossCooldown > 0
+          ? `쿨타임 ${Math.ceil(this.bossCooldown)}초 남았습니다.`
+          : `Lv${level} 보스는 아직 열리지 않았습니다 — Lv${this.maxBossLevel}까지 소환할 수 있습니다.`;
+      return false;
+    }
+    this.bossCooldown = B.BOSS_COOLDOWN_SECONDS;
+    this.spawn({
+      kind: 'boss',
+      name: `Lv${level} BOSS`,
+      maxHp: B.bossHP(level),
+      armor: B.bossArmor(level),
+      speed: B.BOSS_SPEED,
+      radius: 18,
+      bossLevel: level,
+    });
+    const unlocks =
+      level === this.maxBossLevel && level < B.BOSS_MAX_LEVEL
+        ? ` 처치하면 Lv${level + 1} 소환이 열립니다.`
+        : '';
+    this.message = `Lv${level} BOSS를 소환합니다. 보상 +${bossKillMineral(level)}.${unlocks}`;
+    return true;
+  }
+
+  // ── 유닛 생성 / 조합 / 판매 ──
+  spawnUnit(slot: Slot): boolean {
+    if (slot === this.altarSlot) {
+      this.message = '제단 타일에는 유닛을 놓을 수 없습니다.';
+      return false;
+    }
+    if (slot.tower) {
+      this.message = '빈 타일을 선택하세요.';
+      return false;
+    }
+    if (this.mineral < B.SPAWN_UNIT_MINERAL) {
+      this.message = `미네랄 부족 — ${B.SPAWN_UNIT_MINERAL} 필요.`;
+      return false;
+    }
+    this.mineral -= B.SPAWN_UNIT_MINERAL;
+    const def = unitFor(0, this.rand, this.bossesKilled);
+    slot.tower = { def, tier: 0, cooldown: 0 };
+    this.float(slot.x, slot.y, def.name, RACE_COLOR[def.race]);
+    this.selected = slot;
+    this.resolveMerges();
+    if (!slot.tower) this.selected = null;
+    return true;
+  }
+
+  spawnUnitAnywhere(): boolean {
+    const empty = this.slots.find((s) => !s.tower && s !== this.altarSlot);
+    if (!empty) {
+      this.message = '빈 타일이 없습니다 — 조합하거나 판매하세요.';
+      return false;
+    }
+    return this.spawnUnit(empty);
+  }
+
+  /** 연쇄 조합까지 전부 해소한다 */
+  resolveMerges(): void {
+    for (let guard = 0; guard < 64; guard++) {
+      const result = findMerge(this.slots, this.rand, this.bossesKilled);
+      if (!result) return;
+
+      let removed = 0;
+      for (const slot of this.slots) {
+        if (removed >= B.MERGE_REQUIRED) break;
+        if (slot.tower?.def.name === result.consumed && slot.tower.tier === result.tier - 1) {
+          slot.tower = null;
+          removed++;
         }
       }
+      result.slot.tower = { def: result.produced, tier: result.tier, cooldown: 0 };
+      const isGod = result.tier === GOD_TIER;
+      if (isGod && !this.scoredGods.has(result.produced.name)) {
+        this.scoredGods.add(result.produced.name);
+        this.score += S.GOD_TOWER_SCORE;
+      }
+      this.float(
+        result.slot.x,
+        result.slot.y,
+        isGod ? `★ ${result.produced.name}` : result.produced.name,
+        isGod ? '#ffd23f' : '#ffffff',
+      );
+      this.message = `${result.produced.name} 【 ${tagLabel(result.produced)} 】를 조합하였습니다.`;
+    }
   }
 
-  sellSel(): boolean {
-    if (!this.sel?.tower) return false;
-    this.gold += B.sellPrice(this.sel.tower.tier);
-    this.sel.tower = null;
-    this.sel = null;
-    this.msg = '판매 완료.';
+  sellSelected(): boolean {
+    const slot = this.selected;
+    if (!slot?.tower) return false;
+    slot.tower = null;
+    this.selected = null;
+    this.message = '유닛을 처분하였습니다.';
     return true;
   }
 
-  // ── 스플/파워 전환 — 갓 전용 (갓타디의 백미: "갓 뜸 = 운영 시작") ──
-  setGodsMode(mode: Mode): number {
-    let n = 0;
-    for (const s of this.slots)
-      if (s.tower && this.isGod(s.tower)) { s.tower.mode = mode; n++; }
-    this.msg = n === 0
-      ? '변환할 갓이 없습니다 — 동일 종족 Lv4 2기를 합성하세요.'
-      : `갓 ${n}기 → ${mode === 'splash' ? '광역(라인청소)' : '단일(보스·중갑)'} 변환`;
-    return n;
-  }
-  toggleSel(): void {
-    const t = this.sel?.tower;
-    if (t && this.isGod(t)) t.mode = t.mode === 'splash' ? 'power' : 'splash';
-  }
-
-  // ── 웨이브 예보 (흐름을 읽고 빌드를 커밋하는 근거) ──
-  forecast(n = 3): B.WaveType[] {
-    const out: B.WaveType[] = [];
-    for (let i = 1; i <= n; i++) out.push(pickType(this.round + i));
-    return out;
-  }
-
-  // ── 일꾼 / 강화 / 보스 선택 ──
-  hire(): boolean {
-    const c = B.hireCost(this.workers);
-    if (this.gold < c) { this.msg = `골드 부족 — 일꾼 ${c} 필요.`; return false; }
-    if (this.workers >= B.WORKER_MAX) { this.msg = `일꾼은 최대 ${B.WORKER_MAX}기.`; return false; }
-    this.gold -= c;
-    this.workers++;
-    this.msg = `일꾼 고용! 웨이브당 +${B.WORKER_INCOME}골드 (지금 투자 = 미래 소득, 대신 이번 방어는 얇아짐)`;
+  // ── 프로브 / 업그레이드 ──
+  buyProbe(): boolean {
+    if (this.probes >= B.PROBE_MAX) {
+      this.message = `프로브는 최대 ${B.PROBE_MAX}기입니다.`;
+      return false;
+    }
+    if (this.mineral < B.PROBE_MINERAL) {
+      this.message = `미네랄 부족 — 프로브 ${B.PROBE_MINERAL} 필요.`;
+      return false;
+    }
+    this.mineral -= B.PROBE_MINERAL;
+    this.probes++;
+    this.message = '프로브를 생산하였습니다. 가스를 채취합니다.';
     return true;
   }
 
-  upgrade(r: number): boolean {
-    if (r >= B.CREATURE) { this.msg = '크리쳐는 강화할 수 없습니다 (무커밋 = 정체성).'; return false; }
-    const c = B.upCost(this.up[r]);
-    if (this.gold < c) { this.msg = `골드 부족 — ${B.RACE[r]} 강화 ${c} 필요`; return false; }
-    this.gold -= c;
-    this.up[r]++;
-    this.msg = `${B.RACE[r]} 강화 → Lv${this.up[r]} (공격력 +10% 복리 · 다음 비용 ${B.upCost(this.up[r])})`;
+  upgrade(race: Race): boolean {
+    const cost = B.upgradeGasCost(this.upgrades[race]);
+    if (this.gas < cost) {
+      this.message = `가스 부족 — 업그레이드 ${cost} 필요.`;
+      return false;
+    }
+    this.gas -= cost;
+    const next: UpgradeLevels = [
+      this.upgrades[0], this.upgrades[1], this.upgrades[2], this.upgrades[3],
+    ];
+    next[race] += 1;
+    this.upgrades = next;
+    this.message = `파일런 업그레이드 → Lv${this.upgrades[race]}`;
     return true;
   }
 
-  chooseBoss(n: number): void {
-    if (this.phase !== 'prep') return;
-    this.boss = n;
+  upgradeCost(race: Race): number {
+    return B.upgradeGasCost(this.upgrades[race]);
   }
 
-  // ── 웨이브 진행 ──
-  startWave(): boolean {
-    if (this.phase !== 'prep') return false;
-    this.phase = 'wave';
-    this.spawnQ = this.next.q.slice();
-    this.spawnT = 0;
-    const bt = B.BOSS_TIERS[this.boss];
-    if (bt) {
-      this.spawnQ.push({
-        hp: B.waveHP(this.round) * bt.hpMult,
-        armor: B.waveHP(this.round) * 0.18,
-        spd: 30, r: 20, type: 'boss',
-        reward: bt.reward(this.round), boss: this.boss,
+  // ── 라운드 ──
+  private beginRound(): void {
+    // 직전 라운드를 넘긴 대가 — 첫 라운드에는 없다
+    if (this.round >= 1) {
+      const reward = B.waveReward(this.round);
+      this.mineral += reward;
+      this.score += S.roundScore(this.round);
+      this.float(this.slots[0].x, this.slots[0].y, `웨이브 +${reward}`, '#ffd23f');
+    }
+
+    this.round++;
+    const hp = B.enemyHP(this.round) * this.enemyHpMultiplier;
+    const armor = B.enemyArmor(this.round);
+
+    for (let i = 0; i < B.enemyCount(this.round); i++) {
+      this.spawnQueue.push({
+        kind: 'mob',
+        name: `R${this.round}`,
+        maxHp: hp,
+        armor,
+        speed: B.ENEMY_SPEED,
+        radius: 9,
       });
     }
-    this.alive = this.spawnQ.length;
-    this.msg = `${B.WTYPES[this.next.type].name} 웨이브 진행 중…`;
-    return true;
+    this.message = `Round Start — ${this.round}라운드`;
   }
 
-  private endWave(): void {
-    this.lastReward = B.waveReward(this.round) + this.workers * B.WORKER_INCOME;
-    this.gold += this.lastReward;
-    this.round++;
-    this.phase = 'prep';
-    this.boss = 0;
-    this.sel = null;
-    this.next = buildWave(this.round);
-    this.msg = `웨이브 클리어! +${this.lastReward}골드. 다음 성격을 보고 형태를 맞추세요.`;
+  /** 모든 적은 북측 왼쪽 문 하나에서 나온다 */
+  private spawn(spec: EnemySpec): void {
+    this.enemies.push({ ...spec, hp: spec.maxHp, distance: 0 });
   }
 
-  private leak(e: Enemy): void {
-    const p = e.type === 'boss'
-      ? (B.BOSS_TIERS[e.boss ?? 1]?.leakPenalty ?? 28)
-      : B.LEAK_POLL[e.type];
-    this.poll = Math.min(100, this.poll + p);
-    this.float(DOOR_OUT[0], DOOR_OUT[1], e.type === 'boss' ? '보스 누출!' : '누출',
-      e.type === 'boss' ? '#ff5a3c' : '#ff8a3c');
-    if (this.poll >= 100) this.over = true;
-  }
-
-  float(x: number, y: number, txt: string, c: string): void {
-    this.floats.push({ x, y, txt, c, life: 0.9 });
-  }
-
-  // ── 프레임 업데이트 ──
-  update(dt: number): void {
-    if (this.over) return;
-    if (this.phase === 'wave') {
-      // 스폰
-      if (this.spawnQ.length) {
-        this.spawnT -= dt;
-        if (this.spawnT <= 0) {
-          const spec = this.spawnQ.shift()!;
-          this.enemies.push({ ...spec, d: 0, maxhp: spec.hp });
-          this.spawnT = spec.type === 'swarm' ? 0.35 : 0.7;
-        }
-      }
-      // 정령 감속 오라: 범위 내 적의 이속 배수 (중첩 시 최솟값)
-      const spirits = this.slots.filter(s => s.tower && this.isSpirit(s.tower));
-      const slowOf = (e: Enemy): number => {
-        let m = 1;
-        const p = pathPos(e.d);
-        for (const s of spirits) {
-          if (Math.hypot(p[0] - s.x, p[1] - s.y) <= this.trng(s.tower!))
-            m = Math.min(m, B.SPIRIT_SLOW[s.tower!.tier]);
-        }
-        return m;
-      };
-      // 이동 + 누출
-      for (const e of this.enemies) {
-        e.d += e.spd * slowOf(e) * dt;
-        if (e.d >= LOOP) { e.dead = true; this.leak(e); }
-      }
-      // 타워 공격 (정령은 공격하지 않음 — 감속 전담)
-      for (const s of this.slots) {
-        const t = s.tower;
-        if (!t || this.isSpirit(t)) continue;
-        t.cd -= dt;
-        if (t.cd > 0) continue;
-        const rng = this.trng(t), raw = this.tdmg(t);
-        const inRange = this.enemies.filter(e => {
-          if (e.dead) return false;
-          const p = pathPos(e.d);
-          return Math.hypot(p[0] - s.x, p[1] - s.y) <= rng;
-        });
-        if (!inRange.length) continue;
-        if (this.isSplash(t)) {
-          // 광역: 범위 내 전체에 감소 피해 (갓 스플 0.7 / 토스 0.8)
-          const mult = this.isGod(t) ? B.SPLASH_DMG : B.TOSS_SPLASH;
-          for (const e of inRange) e.hp -= effDmg(raw * mult, e.armor);
-          const p = pathPos(inRange[0].d);
-          this.shots.push({ x: s.x, y: s.y, tx: p[0], ty: p[1], life: 0.08, c: '#55c8ff', splash: rng });
-        } else if (this.isGod(t)) {
-          // 갓 파워: 체력 최대(보스/중갑 우선) 하나에 큰 피해
-          let tg = inRange[0];
-          for (const e of inRange) if (e.hp > tg.hp) tg = e;
-          tg.hp -= effDmg(raw * B.POWER_DMG, tg.armor);
-          const p = pathPos(tg.d);
-          this.shots.push({ x: s.x, y: s.y, tx: p[0], ty: p[1], life: 0.08, c: '#ff8a3c' });
-        } else {
-          // 단일(테란/저그): 선두(누출 임박) 우선
-          let tg = inRange[0];
-          for (const e of inRange) if (e.d > tg.d) tg = e;
-          tg.hp -= effDmg(raw, tg.armor);
-          const p = pathPos(tg.d);
-          this.shots.push({ x: s.x, y: s.y, tx: p[0], ty: p[1], life: 0.08, c: B.RCOL[t.race] });
-        }
-        t.cd = this.atkInt(t);
-      }
-      // 처치
-      for (const e of this.enemies) {
-        if (e.hp <= 0 && !e.dead) {
-          e.dead = true;
-          this.gold += B.KILL_GOLD;
-          if (e.type === 'boss' && e.reward) {
-            this.gold += e.reward;
-            const p = pathPos(e.d);
-            this.float(p[0], p[1], '+' + e.reward, '#ffd23f');
-          }
-        }
-      }
-      this.enemies = this.enemies.filter(e => !e.dead);
-      this.alive = this.enemies.length + this.spawnQ.length;
-      if (this.alive === 0) this.endWave();
+  // ── 누출 / 처치 ──
+  private breakthrough(enemy: Enemy): void {
+    const cost = enemy.kind === 'boss' ? B.bossLeakLives(enemy.bossLevel ?? 1) : 1;
+    this.lives -= cost;
+    this.mineral += B.LEAK_MINERAL;
+    this.score = Math.max(0, this.score - S.leakPenalty(this.round) * cost);
+    const [x, y] = pathPos(enemy.distance);
+    this.float(x, y, `Life -${cost} · 미네랄 +${B.LEAK_MINERAL}`, '#ff5a3c');
+    if (enemy.kind === 'boss') {
+      this.message = `${enemy.name} 돌파! 다음 레벨은 열리지 않습니다.`;
     }
-    for (const s of this.shots) s.life -= dt;
-    this.shots = this.shots.filter(s => s.life > 0);
-    for (const f of this.floats) { f.life -= dt; f.y -= 18 * dt; }
-    this.floats = this.floats.filter(f => f.life > 0);
+    if (this.lives <= 0) {
+      this.lives = 0;
+      this.over = true;
+      this.message = '패배';
+    }
+  }
+
+  private onKilled(enemy: Enemy): void {
+    const [x, y] = pathPos(enemy.distance);
+
+    if (enemy.kind === 'boss') {
+      const level = enemy.bossLevel ?? 1;
+      const reward = bossKillMineral(level);
+      const unlocked = level > this.bossCleared;
+      this.mineral += reward;
+      this.bossesKilled++;
+      this.bossCleared = Math.max(this.bossCleared, level);
+      this.float(x, y, `[ Lv${level} BOSS KILL ] +${reward}`, '#ffd23f');
+      this.score += S.bossScore(level);
+      this.grantXp(H.xpPerBoss(level));
+
+      const suffix = !unlocked
+        ? ''
+        : this.bossCleared >= B.BOSS_MAX_LEVEL
+          ? ' · 모든 보스를 잡았습니다.'
+          : ` · Lv${level + 1} 소환이 열렸습니다.`;
+      this.message = `Lv${level} BOSS 처치! +${reward} 미네랄${suffix}`;
+      return;
+    }
+
+    const before = this.kills;
+    this.kills++;
+    this.score += S.KILL_SCORE;
+    const income = killIncome(before, this.kills);
+    if (income.mineral > 0) {
+      this.mineral += income.mineral;
+      this.float(x, y, `+${income.mineral}`, '#8fd6ff');
+      if (income.notes.length) this.message = income.notes.join(' · ');
+    }
+    this.mineral += this.hero.stats.mineralPerKill;
+    this.grantXp(enemy.lastHitByHero ? H.XP_PER_MOB * H.HERO_LASTHIT_XP_MULT : H.XP_PER_MOB);
+  }
+
+  /** 경험치는 타워가 잡든 영웅이 잡든 들어온다. 레벨업 시 증강 선택을 띄운다. */
+  private grantXp(amount: number): void {
+    const hero = this.hero;
+    const levels = hero.gainXp(amount);
+    if (levels > 0) {
+      this.score += S.HERO_LEVEL_SCORE * levels;
+      this.float(hero.x, hero.y, `Lv${hero.level}!`, '#ffd23f');
+    }
+    if (this.augmentChoices.length === 0) this.offerAugmentIfPending();
+  }
+
+  float(x: number, y: number, text: string, color: string): void {
+    this.floats.push({ x, y, text, color, life: 0.9 });
+  }
+
+  // ── 프레임 ──
+  update(dt: number): void {
+    // 밀린 증강 선택이 있으면 먼저 띄운다 — 그래야 아래에서 일시정지된다
+    if (this.augmentChoices.length === 0) this.offerAugmentIfPending();
+    if (this.over || this.paused) return;
+
+    if (this.bossCooldown > 0) this.bossCooldown = Math.max(0, this.bossCooldown - dt);
+
+    this.gasFraction += this.probes * B.GAS_PER_PROBE_SECOND * dt;
+    if (this.gasFraction >= 1) {
+      const whole = Math.floor(this.gasFraction);
+      this.gas += whole;
+      this.gasFraction -= whole;
+    }
+
+    this.roundTimer -= dt;
+    if (this.roundTimer <= 0) {
+      this.roundTimer = B.ROUND_SECONDS;
+      this.beginRound();
+    }
+
+    if (this.spawnQueue.length) {
+      this.spawnTimer -= dt;
+      if (this.spawnTimer <= 0) {
+        this.spawn(this.spawnQueue.shift()!);
+        this.spawnTimer = B.SPAWN_INTERVAL;
+      }
+    }
+
+    this.advanceEnemies(dt);
+
+    this.fireTowers(dt);
+    this.stepHero(dt);
+
+    for (const enemy of this.enemies) {
+      if (enemy.hp <= 0 && !enemy.dead) {
+        enemy.dead = true;
+        this.onKilled(enemy);
+      }
+    }
+    this.enemies = this.enemies.filter((e) => !e.dead);
+
+    for (const shot of this.shots) shot.life -= dt;
+    this.shots = this.shots.filter((s) => s.life > 0);
+    for (const f of this.floats) {
+      f.life -= dt;
+      f.y -= 18 * dt;
+    }
+    this.floats = this.floats.filter((f) => f.life > 0);
+  }
+
+  /**
+   * 몹 전진. 영웅이 앞쪽 시야 안에 있으면 멈춰서 영웅부터 친다.
+   * 이미 영웅을 지나쳐버린 몹은 되돌아오지 않는다 — 그래야 교착이 안 생긴다.
+   */
+  private advanceEnemies(dt: number): void {
+    const hero = this.hero;
+    const heroBlocks = hero.alive;
+
+    for (const enemy of this.enemies) {
+      const speed = enemy.speed * this.slowAt(enemy.distance);
+
+      if (heroBlocks && this.isAggroed(enemy, hero!)) {
+        const gap = hero!.distance - enemy.distance;
+        // 영웅에게 다가가되 지나치지 않는다
+        if (gap > H.ENEMY_TOUCH_RANGE) {
+          enemy.distance += Math.min(speed * dt, gap - H.ENEMY_TOUCH_RANGE);
+        }
+        continue;
+      }
+      enemy.distance += speed * dt;
+      if (enemy.distance >= PATH_LENGTH) {
+        enemy.dead = true;
+        this.breakthrough(enemy);
+      }
+    }
+  }
+
+  /**
+   * 경로 위 한 지점에 걸린 이동속도 배수.
+   * 크리쳐 타워 여러 기가 겹쳐도 가장 강한 감속 하나만 적용한다.
+   */
+  slowAt(distance: number): number {
+    const [x, y] = pathPos(distance);
+    let slowest = 1;
+    for (const slot of this.slots) {
+      const tower = slot.tower;
+      if (!tower) continue;
+      const factor = slowFactor(tower);
+      if (factor >= slowest) continue;
+      if (Math.hypot(slot.x - x, slot.y - y) <= range(tower)) slowest = factor;
+    }
+    return slowest;
+  }
+
+  /** 몹 앞쪽 시야 안에 살아있는 영웅이 있는가 */
+  private isAggroed(enemy: Enemy, hero: Hero): boolean {
+    const gap = hero.distance - enemy.distance;
+    if (gap < -H.ENEMY_TOUCH_RANGE) return false; // 이미 지나쳤다
+    return gap <= H.HERO_AGGRO_RANGE;
+  }
+
+  /** 영웅 이동 · 공격, 그리고 적의 반격 */
+  private stepHero(dt: number): void {
+    const hero = this.hero;
+    hero.step(dt);
+    if (!hero.alive) return;
+
+    const stats = hero.stats;
+
+    // 영웅 공격 — 사거리 안에서 가장 가까운 적
+    if (hero.attackCooldown <= 0) {
+      const target = this.nearestEnemy(hero.x, hero.y, stats.range);
+      if (target) {
+        const [tx, ty] = pathPos(target.distance);
+        if (stats.splashRadius > 0) {
+          for (const enemy of this.enemies) {
+            const [ex, ey] = pathPos(enemy.distance);
+            if (Math.hypot(ex - tx, ey - ty) <= stats.splashRadius) {
+              enemy.hp -= B.effectiveDamage(stats.damage, enemy.armor);
+              enemy.lastHitByHero = true;
+            }
+          }
+          this.shots.push({
+            x: hero.x, y: hero.y, tx, ty, life: 0.1,
+            color: '#c065e0', splashRadius: stats.splashRadius,
+          });
+        } else {
+          target.hp -= B.effectiveDamage(stats.damage, target.armor);
+          target.lastHitByHero = true;
+          this.shots.push({ x: hero.x, y: hero.y, tx, ty, life: 0.1, color: '#ffffff' });
+        }
+        hero.attackCooldown = stats.attackInterval;
+      }
+    }
+
+    // 적의 반격 — 영웅에 닿은 적이 때린다
+    this.heroHitTimer -= dt;
+    if (this.heroHitTimer <= 0) {
+      let incoming = 0;
+      for (const enemy of this.enemies) {
+        const gap = Math.abs(enemy.distance - hero.distance);
+        if (gap > H.ENEMY_TOUCH_RANGE + enemy.radius) continue;
+        incoming +=
+          enemy.kind === 'boss'
+            ? H.bossDamage(enemy.bossLevel ?? 1, this.round)
+            : H.enemyDamage(this.round);
+      }
+      if (incoming > 0) {
+        hero.takeDamage(incoming);
+        this.float(hero.x, hero.y, `-${Math.round(incoming)}`, '#ff5a3c');
+        if (!hero.alive) {
+          this.message = `영웅 사망 — ${Math.ceil(hero.respawnTimer)}초 뒤 제단에서 부활합니다.`;
+        }
+      }
+      this.heroHitTimer = H.ENEMY_ATTACK_INTERVAL;
+    }
+  }
+
+  private nearestEnemy(x: number, y: number, reach: number): Enemy | null {
+    let best: Enemy | null = null;
+    let bestDistance = reach;
+    for (const enemy of this.enemies) {
+      if (enemy.dead) continue;
+      const [ex, ey] = pathPos(enemy.distance);
+      const distance = Math.hypot(ex - x, ey - y);
+      if (distance <= bestDistance) {
+        bestDistance = distance;
+        best = enemy;
+      }
+    }
+    return best;
+  }
+
+  private fireTowers(dt: number): void {
+    for (const slot of this.slots) {
+      const tower = slot.tower;
+      if (!tower) continue;
+      tower.cooldown -= dt;
+      if (tower.cooldown > 0) continue;
+
+      const reach = range(tower);
+      const inReach = this.enemies.filter((e) => {
+        if (e.dead) return false;
+        const [x, y] = pathPos(e.distance);
+        return Math.hypot(x - slot.x, y - slot.y) <= reach;
+      });
+      if (!inReach.length) continue;
+
+      const raw = damage(tower, this.upgrades) * this.hero.stats.towerDamageMult;
+      const color = RACE_COLOR[tower.def.race];
+
+      if (isSplash(tower)) {
+        for (const e of inReach) {
+          e.hp -= B.effectiveDamage(raw, e.armor);
+          e.lastHitByHero = false;
+        }
+        const [x, y] = pathPos(inReach[0].distance);
+        this.shots.push({ x: slot.x, y: slot.y, tx: x, ty: y, life: 0.08, color, splashRadius: reach });
+      } else {
+        // 파워는 체력 최대(보스) 우선, 그 외에는 가장 멀리 간 적(돌파 임박) 우선
+        const power = tower.def.tags.includes('power');
+        // 파워는 체력 최대(보스) 우선, 그 외에는 출구에 가장 가까운 적 우선
+        const target = inReach.reduce((best, e) =>
+          power ? (e.hp > best.hp ? e : best) : e.distance > best.distance ? e : best,
+        );
+        target.hp -= B.effectiveDamage(raw, target.armor);
+        target.lastHitByHero = false;
+        const [x, y] = pathPos(target.distance);
+        this.shots.push({ x: slot.x, y: slot.y, tx: x, ty: y, life: 0.08, color });
+      }
+      tower.cooldown = attackInterval(tower);
+    }
   }
 }
