@@ -21,6 +21,11 @@ namespace GodTD.View
         public int Index;
     }
 
+    /// <summary>영웅 클릭 판정용 — 좌클릭으로 영웅을 고를 수 있게 한다</summary>
+    public sealed class HeroMarker : MonoBehaviour
+    {
+    }
+
     public sealed class GameView : MonoBehaviour
     {
         /// <summary>웹 px → 월드 유닛</summary>
@@ -39,6 +44,12 @@ namespace GodTD.View
         public Game Game { get; private set; }
         public GameHud Hud { get; set; }
         public GameViewFx Fx { get; private set; }
+
+        /// <summary>무엇을 골랐는가 — 하단 커맨드 바가 이걸 보고 통째로 바뀐다</summary>
+        public Selection Selection { get; private set; } = Selection.None;
+
+        /// <summary>커맨드 카드 페이지 (보스 소환은 하위 메뉴)</summary>
+        public CardPage Page { get; private set; } = CardPage.Root;
 
         Camera cam;
         Transform staticRoot;
@@ -137,6 +148,8 @@ namespace GodTD.View
         public void Restart()
         {
             Game = new Game();
+            Selection = Selection.None;
+            Page = CardPage.Root;
             foreach (var pair in enemyBodies) Destroy(pair.Value.Go);
             enemyBodies.Clear();
             for (int i = 0; i < towerObjects.Length; i++)
@@ -181,54 +194,106 @@ namespace GodTD.View
         }
 
         // ───────── 입력 ─────────
+        // 좌클릭 = 선택 · 우클릭 = 영웅 이동 (Warcraft II 이후 RTS 표준)
+        // 단축키는 커맨드 카드의 물리적 위치에 대응한다 — QWE/ASD/ZXC.
+
+        /// <summary>선택을 바꾼다. 타워일 때만 Core의 Game.Selected를 함께 갱신한다.</summary>
+        public void SetSelection(Selection next)
+        {
+            Selection = next;
+            Game.Selected = next.IsTower ? next.Slot : null;
+            Page = CardPage.Root;   // 선택이 바뀌면 하위 메뉴에서 빠져나온다
+        }
+
         void HandleInput()
         {
             var game = Game;
-            if (Input.GetKeyDown(KeyCode.P)) game.SpawnUnitAnywhere();
-            if (Input.GetKeyDown(KeyCode.B)) game.SummonBoss();
-            if (Input.GetKeyDown(KeyCode.R)) game.BuyProbe();
-            if (Input.GetKeyDown(KeyCode.X)) game.SellSelected();
-            if (Input.GetKeyDown(KeyCode.Alpha1)) game.Upgrade(Race.Terran);
-            if (Input.GetKeyDown(KeyCode.Alpha2)) game.Upgrade(Race.Zerg);
-            if (Input.GetKeyDown(KeyCode.Alpha3)) game.Upgrade(Race.Protoss);
-            if (Input.GetKeyDown(KeyCode.Alpha4)) game.Upgrade(Race.Creature);
-            if (Input.GetKeyDown(KeyCode.Alpha5)) game.BuyStat(StatId.Str);
-            if (Input.GetKeyDown(KeyCode.Alpha6)) game.BuyStat(StatId.Agi);
-            if (Input.GetKeyDown(KeyCode.Alpha7)) game.BuyStat(StatId.Int);
 
-            // 마우스 휠 = 줌
+            // 마우스 휠 = 줌 (오버레이 중에도 허용)
             float wheel = Input.GetAxis("Mouse ScrollWheel");
             if (wheel != 0f)
                 camDistanceTarget = Mathf.Clamp(
                     camDistanceTarget - wheel * CAM_ZOOM_SPEED, CAM_DIST_MIN, CAM_DIST_MAX);
 
-            if (!Input.GetMouseButtonDown(0)) return;
-            if (game.Over || game.Paused) return; // 오버레이가 떠 있으면 월드 클릭 무시
+            if (game.Over || game.Paused) return; // 오버레이가 떠 있으면 월드·카드 입력 무시
+
+            // 선택 대상이 조합·판매로 사라졌으면 해제한다
+            if (!Selection.StillValid(game)) SetSelection(Selection.None);
+
+            HandleEscape();
+            HandleCardHotkeys();
+            HandleMouse();
+        }
+
+        void HandleEscape()
+        {
+            if (!Input.GetKeyDown(KeyCode.Escape)) return;
+            if (Page != CardPage.Root) Page = CardPage.Root;   // 하위 메뉴 → 루트
+            else SetSelection(Selection.None);                 // 루트 → 선택 해제
+        }
+
+        /// <summary>그리드 단축키 — 칸 위치가 곧 키다. 선택이 바뀌어도 대응은 유지된다.</summary>
+        void HandleCardHotkeys()
+        {
+            var cmds = CommandCard.Build(Game, Selection, Page);
+            for (int i = 0; i < CommandCard.SLOTS; i++)
+            {
+                if (!Input.GetKeyDown(CommandCard.HOTKEYS[i])) continue;
+                InvokeCommand(cmds[i]);
+                return;
+            }
+        }
+
+        /// <summary>카드 한 칸을 실행한다 — 키보드와 버튼이 같은 경로를 탄다</summary>
+        public void InvokeCommand(Command cmd)
+        {
+            if (cmd.IsEmpty || !cmd.Enabled) return;
+            if (cmd.OpensSubmenu)
+            {
+                Page = CardPage.BossSummon;
+                return;
+            }
+            cmd.Invoke?.Invoke();
+            // 판매·조합으로 선택 대상이 사라졌을 수 있다
+            if (!Selection.StillValid(Game)) SetSelection(Selection.None);
+        }
+
+        void HandleMouse()
+        {
+            bool left = Input.GetMouseButtonDown(0);
+            bool right = Input.GetMouseButtonDown(1);
+            if (!left && !right) return;
             if (Hud != null && Hud.IsPointerOverHud(Input.mousePosition)) return;
 
             var ray = cam.ScreenPointToRay(Input.mousePosition);
-            if (!Physics.Raycast(ray, out var hit, 500f)) return;
-
-            // 타일 클릭 = 유닛 생성/선택 (제단은 영웅 이동)
-            var marker = hit.collider.GetComponentInParent<TileMarker>();
-            if (marker != null)
+            if (!Physics.Raycast(ray, out var hit, 500f))
             {
-                var slot = game.Slots[marker.Index];
-                if (slot == game.AltarSlot)
-                {
-                    game.MoveHero(slot.X, slot.Y);
-                    return;
-                }
-                if (slot.Tower != null) game.Selected = slot;
-                else game.SpawnUnit(slot);
+                if (left) SetSelection(Selection.None);
                 return;
             }
 
-            // 빈 곳 클릭 = 영웅 이동 (경로 위 스냅)
-            float px = hit.point.x / SCALE;
-            float py = -hit.point.z / SCALE;
-            game.Selected = null;
-            game.MoveHero(px, py);
+            // 우클릭 = 영웅 이동. 어디를 찍든 경로 위로 투영된다.
+            if (right)
+            {
+                Game.MoveHero(hit.point.x / SCALE, -hit.point.z / SCALE);
+                return;
+            }
+
+            // 좌클릭 = 선택
+            if (hit.collider.GetComponentInParent<HeroMarker>() != null)
+            {
+                SetSelection(Selection.Hero());
+                return;
+            }
+
+            var marker = hit.collider.GetComponentInParent<TileMarker>();
+            if (marker != null)
+            {
+                SetSelection(Selection.Of(Game.Slots[marker.Index]));
+                return;
+            }
+
+            SetSelection(Selection.None);   // 빈 바닥 클릭 = 선택 해제
         }
 
         // ───────── 카메라 · 조명 ─────────
@@ -586,7 +651,8 @@ namespace GodTD.View
             {
                 heroObject = GameObject.CreatePrimitive(PrimitiveType.Sphere);
                 heroObject.name = "Hero";
-                Destroy(heroObject.GetComponent<Collider>());
+                // 콜라이더를 남긴다 — 좌클릭으로 영웅을 선택하기 위해서다
+                heroObject.AddComponent<HeroMarker>();
                 heroObject.transform.SetParent(dynamicRoot, false);
                 float d = HeroData.HERO_RADIUS * 2f * SCALE;
                 heroObject.transform.localScale = new Vector3(d, d, d);

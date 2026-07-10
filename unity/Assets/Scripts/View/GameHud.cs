@@ -131,51 +131,26 @@ namespace GodTD.View
             GUILayout.BeginArea(new Rect(rightPanel.x + 10, rightPanel.y + 10,
                 rightPanel.width - 20, rightPanel.height - 20));
 
-            GUI.enabled = !game.Over && game.Mineral >= Balance.SPAWN_UNIT_MINERAL;
-            if (GUILayout.Button($"유닛 생성 {Balance.SPAWN_UNIT_MINERAL} (P)")) game.SpawnUnitAnywhere();
+            // H1: 커맨드 카드(3×3, QWE/ASD/ZXC)가 실제 명령 경로다. 이 패널은 H2에서
+            // 하단 커맨드 바로 대체된다 — 지금은 카드를 그대로 세로로 펼쳐 보여준다.
+            GUILayout.Label($"<b>{CommandCard.PageTitle(view.Selection, view.Page)}</b>", small);
 
-            GUI.enabled = !game.Over && game.Probes < Balance.PROBE_MAX && game.Mineral >= game.ProbeCost;
-            if (GUILayout.Button($"프로브 {game.ProbeCost} ({game.Probes}/{Balance.PROBE_MAX}) (R)"))
-                game.BuyProbe();
-
-            GUI.enabled = game.Selected?.Tower != null;
-            if (GUILayout.Button("유닛 판매 (X)")) game.SellSelected();
-
-            // 골드 스탯 구매 — 힘(공격·체력) / 민첩(공속) / 지능(스킬), 단축키 5/6/7
-            GUILayout.Space(8);
-            GUILayout.Label("<b>영웅 스탯 (미네랄)</b>", small);
-            for (int i = 0; i < HeroData.STAT_IDS.Length; i++)
+            var cmds = CommandCard.Build(game, view.Selection, view.Page);
+            for (int i = 0; i < CommandCard.SLOTS; i++)
             {
-                var stat = HeroData.STAT_IDS[i];
-                GUI.enabled = game.CanBuyStat(stat);
-                if (GUILayout.Button(
-                    $"{HeroData.StatLabel(stat)} {game.Hero.Bought.Of(stat)} · {game.StatCost(stat)} ({5 + i})"))
-                    game.BuyStat(stat);
-            }
-
-            GUILayout.Space(8);
-            GUILayout.Label("<b>파일런 업그레이드 (가스)</b>", small);
-            for (int i = 0; i < 4; i++)
-            {
-                var race = (Race)i;
-                int cost = game.UpgradeCost(race);
-                GUI.enabled = !game.Over && game.Gas >= cost;
-                if (GUILayout.Button($"{Units.RACES[i]} +{game.Upgrades[race]} · {cost}가스 ({i + 1})"))
-                    game.Upgrade(race);
-            }
-
-            GUILayout.Space(8);
-            GUILayout.Label("<b>보스 소환 (쿨타임 공유, B = 최고 레벨)</b>", small);
-            for (int level = 1; level <= Balance.BOSS_MAX_LEVEL; level++)
-            {
-                bool open = level <= game.MaxBossLevel;
-                GUI.enabled = game.CanSummonBossLevel(level);
-                string text = open
-                    ? $"Lv{level} 보스 · +{Balance.BOSS_KILL_MINERAL[level - 1]} 미네랄"
-                    : $"Lv{level} 🔒 (Lv{level - 1} 처치 시 해금)";
-                if (GUILayout.Button(text)) game.SummonBoss(level);
+                var cmd = cmds[i];
+                if (cmd.IsEmpty) continue;
+                GUI.enabled = cmd.Enabled;
+                GUI.backgroundColor = cmd.Accent;
+                string text = $"[{CommandCard.HOTKEY_LABELS[i]}] {cmd.Label}";
+                if (cmd.Detail != null) text += $"\n<size=10>{cmd.Detail}</size>";
+                if (GUILayout.Button(text, card)) view.InvokeCommand(cmd);
             }
             GUI.enabled = true;
+            GUI.backgroundColor = Color.white;
+
+            if (view.Page != CardPage.Root)
+                GUILayout.Label("<size=11>Esc — 뒤로</size>", small);
 
             GUILayout.EndArea();
         }
@@ -226,22 +201,14 @@ namespace GodTD.View
                     ? $" · 피해 {Mathf.RoundToInt(stats.Damage * skill.DamageMult)}"
                     : "";
                 if (skill.Targets > 0) extra += $" · {skill.Targets}발";
+                // 스킬은 자동 시전이라 버튼이 아니다 — 쿨타임 게이지로만 보여준다
                 GUILayout.Label($"스킬 {skill.Def.Name}{extra} · {state} (자동 시전)", small);
                 Bar(1f - Mathf.Max(0f, hero.SkillCooldown) / skill.Cooldown, new Color(0.49f, 0.91f, 1f));
-
-                // 가스 스킬 개조 — 증강(질) 위에 얹는 가스(양) 트랙
-                GUILayout.BeginHorizontal();
-                GUI.enabled = game.CanBuyGasSkill(GasSkillTrack.Damage);
-                if (GUILayout.Button(
-                    $"스킬 피해 +8% · {game.GasSkillCost(GasSkillTrack.Damage)}가스 ({hero.GasSkillDamage})"))
-                    game.BuyGasSkill(GasSkillTrack.Damage);
-                GUI.enabled = game.CanBuyGasSkill(GasSkillTrack.Cdr);
-                if (GUILayout.Button(
-                    $"쿨타임 -6% · {game.GasSkillCost(GasSkillTrack.Cdr)}가스 ({hero.GasSkillCdr})"))
-                    game.BuyGasSkill(GasSkillTrack.Cdr);
-                GUI.enabled = true;
-                GUILayout.EndHorizontal();
             }
+
+            // 스탯 구매·스킬 개조는 영웅을 선택하면 커맨드 카드에 뜬다
+            if (!view.Selection.IsHero)
+                GUILayout.Label("<size=11>영웅을 클릭하면 강화·개조 명령이 열립니다</size>", small);
 
             GUILayout.EndArea();
         }
@@ -278,8 +245,8 @@ namespace GodTD.View
             }
             else
             {
-                GUILayout.Label("빈 타일 = 유닛 생성 · 유닛 타일 = 선택 · 빈 곳 = 영웅 이동 · 휠 = 줌." +
-                    " 같은 유닛 2기가 모이면 자동 조합됩니다.", small);
+                GUILayout.Label("<b>좌클릭</b> 선택 (영웅·타워·타일) · <b>우클릭</b> 영웅 이동 · <b>Esc</b> 선택 해제 · 휠 = 줌\n" +
+                    "명령은 <b>QWE / ASD / ZXC</b> — 고른 대상에 따라 바뀝니다. 같은 유닛 2기가 모이면 자동 조합됩니다.", small);
             }
             GUILayout.Label(game.Message, small);
             GUILayout.EndArea();
