@@ -1,2 +1,9 @@
 .DS_Store
 .playwright-mcp/
+
+# Unity 에디터 생성물
+unity/Library/
+unity/Logs/
+unity/UserSettings/
+unity/Temp/
+unity/obj/

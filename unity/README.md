@@ -19,17 +19,36 @@
   버전(예: 6000.x / Unity 6.5)을 선택하고 열기
 - "Upgrade project?" 다이얼로그가 뜨면 **Confirm** — 코드만 있는 프로젝트라
   마이그레이션 리스크가 없다 (버전을 올려 열면 ProjectVersion.txt가 자동 갱신된다)
-- 사용 API(CreatePrimitive · OnGUI · LineRenderer · Physics.Raycast)는 Unity 6에서
-  전부 동일하게 동작한다
+- 사용 API(CreatePrimitive · OnGUI · LineRenderer · Physics.Raycast · Standard 셰이더 ·
+  ParticleSystem · TrailRenderer · TextMesh)는 2022.3과 Unity 6 양쪽에서 동일하게 동작한다
+  (렌더 파이프라인 패키지가 없어 빌트인 RP로 열린다)
 
 ### 빈 씬에서 Play만 누르면 되는 이유
 
 `Assets/Scripts/View/Bootstrap.cs`가
 `[RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]`로
-씬 로드 직후 자동 실행되어, 카메라·맵·HUD를 코드로 조립한다.
-씬에 아무것도 배치할 필요가 없고, 렌더링은 전부
-`GameObject.CreatePrimitive`(큐브 = 타일/타워, 스피어 = 몹/영웅, 캡슐 = 보스)와
-`LineRenderer`(경로·탄환·사거리 링), 색은 `Sprites/Default` 머티리얼 캐시로 처리한다.
+씬 로드 직후 자동 실행되어, 카메라·조명·맵·HUD를 전부 코드로 조립한다.
+씬에 아무것도 배치할 필요가 없고 에셋도 0이다.
+
+### 렌더링 — 보드게임 디오라마 (프레젠테이션 패스)
+
+웹 캔버스의 탑다운 복제가 아니라 Unity다운 3D 장면으로 그린다:
+
+- **카메라**: 기울어진 원근(피치 55°·요 12°, FOV 42) + 부드러운 따라가기
+  (포커스가 영웅 쪽으로 살짝 쏠린다). **마우스 휠 = 줌**.
+- **조명·그림자**: Directional light(소프트 섀도) + Flat ambient,
+  배경은 버텍스 컬러 그라데이션 메시.
+- **머티리얼**: `Standard` 셰이더(메탈릭/스무스니스) 색별 캐시.
+  GOD 타워·보스·제단·문은 **emissive 발광**, 타워는 티어가 오를수록 높이·발광 증가.
+- **지오메트리**: `GameObject.CreatePrimitive`만 사용 — 큐브 = 타일(받침판 베벨)·타워,
+  스피어 = 몹/영웅(보라 포인트 라이트), 캡슐 = 보스, 실린더 = 허수아비.
+- **연출(GameViewFx.cs)**: 스폰 스케일 팝, 피격 화이트 플래시, 사망 파티클 버스트
+  (보스는 전용 폭발+파문), 레벨업/부활 확장 링, 조합 시 골드 버스트+등장 플래시.
+- **투사체**: Core 판정은 즉발 그대로 두고, 뷰에서 Shot의 (x,y)→(tx,ty)를 보간해
+  발광 구 + `TrailRenderer`로 날아가는 연출만 얹는다. 광역은 바닥 파문(펄스).
+- **월드 텍스트·HP바**: 데미지/보상/조합 플로팅 텍스트는 `TextMesh` 빌보드,
+  몹/보스/영웅/허수아비 HP바는 월드 스페이스 쿼드 2장.
+- **HUD**: OnGUI 즉시모드 유지 — 반투명 패널 + 계열색 액센트 라인으로 정돈.
 
 ## 조작
 
@@ -38,6 +57,7 @@
 | 빈 타일 클릭 | 유닛 생성 (미네랄 12) |
 | 유닛 타일 클릭 | 선택 (사거리 링 + 정보 표시) |
 | 빈 곳 클릭 | 영웅 이동 — 클릭 좌표를 경로에 투영해 스냅 |
+| 마우스 휠 | 카메라 줌 |
 | P | 아무 빈 타일에 유닛 생성 |
 | B | 열려 있는 최고 레벨 보스 소환 |
 | R | 프로브 생산 |
@@ -51,7 +71,7 @@
 
 ```
 unity/
-├── Packages/manifest.json            # 기본 모듈만 (imgui, physics, textrendering)
+├── Packages/manifest.json            # 기본 모듈만 (imgui, physics, particlesystem, textrendering …)
 ├── ProjectSettings/ProjectVersion.txt
 └── Assets/Scripts/
     ├── Core/    # 순수 C# 시뮬레이션 — UnityEngine 의존 없음, 테스트 가능
@@ -71,8 +91,9 @@ unity/
     │   └── Game.Skills.cs  # ← web/src/game/game.ts (스킬 시전 부분, partial)
     └── View/    # UnityEngine 레이어
         ├── Bootstrap.cs    # 진입점 (RuntimeInitializeOnLoadMethod)
-        ├── GameView.cs     # ← web/src/render/render.ts + main.ts (렌더·입력)
-        └── GameHud.cs      # ← web/src/ui/ui.ts (OnGUI 즉시모드 HUD)
+        ├── GameView.cs     # ← web/src/render/render.ts + main.ts (카메라·조명·씬·입력)
+        ├── GameViewFx.cs   # 연출 — 파티클·투사체·펄스/링·TextMesh·월드 HP바
+        └── GameHud.cs      # ← web/src/ui/ui.ts (OnGUI 즉시모드 HUD, 반투명 패널)
 ```
 
 - Core는 `System.Random` 주입(`Func<double>`)으로 난수를 받아 시드 고정 테스트가 가능하다.
@@ -114,7 +135,6 @@ unity/
 - **명예의 전당 영속 저장** (web/src/ui/hall-of-fame.ts) — localStorage 기반이라 제외.
   게임오버 화면에 이번 판 점수·기록만 띄운다.
 - 웹 HUD의 진행 바 연출 일부(반복 보상 바 등)는 텍스트로 축약
-- 캔버스의 둥근 모서리·글로우 같은 시각 디테일 (프리미티브로 대체)
 
 ## 컴파일 검증
 
