@@ -316,6 +316,14 @@ namespace GodTD.Core
         /// </summary>
         public const float ADAPTIVE_KIND_WEIGHT = 0.9f;
 
+        // ───────── 증강 리롤 (가스) ─────────
+        // 마음에 안 드는 선택지 3장을 가스로 다시 뽑는다. 한 선택당 최대 2회 —
+        // 무제한이면 플래티넘이 뜰 때까지 굴리는 단순 노동이 된다.
+        public const int AUGMENT_REROLL_MAX = 2;
+        public const int AUGMENT_REROLL_BASE_GAS = 12;
+        /// <summary>n번째 리롤(0부터)의 가스 값 — 같은 선택 안에서 두 번째가 더 비싸다</summary>
+        public static int AugmentRerollCost(int used) => AUGMENT_REROLL_BASE_GAS * (used + 1);
+
         /// <summary>같은 계열 증강이 이만큼 모이면 특화가 발동한다</summary>
         public const int SYNERGY_THRESHOLD = 3;
         /// <summary>이만큼 모이면 대특화</summary>

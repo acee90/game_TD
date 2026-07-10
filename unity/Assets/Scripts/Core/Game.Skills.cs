@@ -95,10 +95,10 @@ namespace GodTD.Core
             return true;
         }
 
-        /// <summary>스킬 피해 한 방</summary>
+        /// <summary>스킬 피해 한 방 — 지능(skillPower)이 곱해진다</summary>
         void SkillHit(Enemy enemy, ResolvedSkill skill)
         {
-            float raw = Hero.Stats.Damage * skill.DamageMult;
+            float raw = Hero.Stats.Damage * skill.DamageMult * Hero.Stats.SkillPower;
             float dealt = Balance.EffectiveDamage(raw, enemy.Armor);
             enemy.Hp -= dealt;
             HeroDamageDealt += dealt;

@@ -10,21 +10,37 @@ using System;
 
 namespace GodTD.Core
 {
+    /// <summary>골드로 사는 영웅 스탯 — 힘(공격·체력) / 민첩(공속) / 지능(스킬 피해)</summary>
+    public enum StatId { Str, Agi, Int }
+
     public static class HeroData
     {
+        public static readonly StatId[] STAT_IDS = { StatId.Str, StatId.Agi, StatId.Int };
+
+        public static string StatLabel(StatId stat)
+        {
+            switch (stat)
+            {
+                case StatId.Str: return "힘";
+                case StatId.Agi: return "민첩";
+                default: return "지능";
+            }
+        }
+
         /// <summary>제단은 게임 시작과 함께 주어진다. 십자 중앙 타일을 차지한다. (MapData.SLOT_POS[0])</summary>
         public const int ALTAR_SLOT = 0;
 
         // ── 파워 커브 ──
         // 초반에는 타워가 주력이고 영웅은 거들 뿐이다. 영웅 1레벨 DPS는 Lv1 타워 한 기 수준이다.
         //
-        // **레벨 성장은 선형이다.** 후반 역전은 레벨이 아니라 **증강 시너지**가 만든다.
-        // 레벨을 지수로 두면 아무 증강이나 골라도 저절로 세져서, 증강 선택이 결과를 못 바꾼다.
-        // 선형으로 두면 증강 없는 영웅은 끝까지 GOD 타워 아래에 머물고, 계열을 몰아 특화·대특화를
-        // 터뜨린 영웅만 넘어선다. 그 격차가 곧 빌드의 값어치다.
+        // ───────── 세 개의 곱연산 축 ─────────
+        // 영웅 파워 = 스탯(골드) × 레벨 배수(경험치) × 증강 배수(선택).
+        // 자원마다 축이 하나씩이다 — 골드는 스탯 포인트를 사고, 경험치는 그 스탯을
+        // 배수로 키우고, 증강은 그 위에 또 곱해지거나 특수능력(스킬·광역·시너지)을 얹는다.
+        //
+        // 레벨 배수는 레벨에 **선형**(1 + g×(L-1))이다. 지수로 두면 아무 증강이나 골라도
+        // 저절로 세져서 선택이 결과를 못 바꾼다. 후반 역전은 여전히 증강 시너지 몫이다.
 
-        public const float HERO_BASE_HP = 200f;
-        public const float HERO_BASE_DAMAGE = 9f;
         public const float HERO_BASE_RANGE = 130f;
         public const float HERO_ATTACK_INTERVAL = 0.8f;
         public const float HERO_SPEED = 88f;
@@ -32,33 +48,64 @@ namespace GodTD.Core
         public const float HERO_ARRIVE_EPSILON = 2f;
         public const float HERO_RADIUS = 11f;
 
+        // ───────── 스탯 — 골드로 산다 ─────────
+        // 힘: 기본 공격력과 체력.  민첩: 공격 속도.  지능: 스킬 피해.
+        //
+        // 포인트당 효과는 **선형**이지만 약해지지 않는다 — 레벨 배수와 증강 배수가
+        // 그 위에 곱해지기 때문에, 같은 +1힘도 후반에 사면 절대값이 몇 배로 커진다.
+        // 대신 포인트가 쌓일수록 "전체 대비" 증가율은 줄어들므로(1/n) 비용은 완만한
+        // 선형 증가로 충분하다 — 옛 배수형(×1.12, 비용 1.28^n)과 달리 많이 살 수 있다.
+
+        public const int HERO_BASE_STR = 7;
+        public const int HERO_BASE_AGI = 8;
+        public const int HERO_BASE_INT = 8;
+
+        /// <summary>힘 1당 공격력</summary>
+        public const float DMG_PER_STR = 1f;
+        /// <summary>힘 1당 최대 체력</summary>
+        public const float HP_PER_STR = 18f;
+        /// <summary>민첩 1당 공격 속도 +4%</summary>
+        public const float AS_PER_AGI = 0.04f;
+        /// <summary>공격 간격 하한 — 민첩을 아무리 사도 이 밑으로는 안 내려간다</summary>
+        public const float MIN_ATTACK_INTERVAL = 0.25f;
+        /// <summary>지능 1당 스킬 피해 +3.5%</summary>
+        public const float SKILL_PER_INT = 0.035f;
+
+        /// <summary>스탯 구매 비용 — 그 스탯을 n번 산 뒤의 다음 구매 가격</summary>
+        public const int STAT_BASE_COST = 25;
+        public const int STAT_COST_GROWTH = 14;
+        public static int StatCost(int bought) => STAT_BASE_COST + STAT_COST_GROWTH * bought;
+
         /// <summary>
-        /// 레벨당 성장 — 곱셈이 아니라 덧셈이다. 경험치 비용을 지수로 만든 만큼 기울기를 가파르게 뒀다.
-        ///
-        /// 기준은 **타워와 영웅에 골고루 투자한 판**에서 재는 GOD 타워 한 기(DPS 1182) 대비 배수다.
-        /// 타입 배수가 사라져 단일 영웅 기준 DPS가 올랐기 때문에 26 → 22로 내려 초반 가드를 지킨다.
+        /// n번째 구매(0부터)가 주는 포인트 — 살수록 한 번에 더 많이 준다.
+        /// 20번마다 +1: 1pt → 2pt → 3pt … 후반의 넘치는 골드가 점점 굵은 구매로
+        /// 환전되도록. 가격도 선형으로 오르므로 포인트당 값은 대체로 평평하다.
         /// </summary>
-        public const float HERO_DAMAGE_PER_LEVEL = 22f;
-        public const float HERO_HP_PER_LEVEL = 90f;
+        public const int STAT_GRANT_EVERY = 20;
+        public static int StatGrant(int bought) => 1 + bought / STAT_GRANT_EVERY;
 
-        // ───────── 골드 영웅 강화 ─────────
-        // 미네랄로 영웅을 강화한다. **퍼센트**여야 한다.
-        //
-        // 영웅 공격력은 레벨당 선형으로 쌓이고 증강은 곱연산이다. 여기에 고정값을 더하면 후반엔
-        // 반올림 오차가 되고, 퍼센트를 곱하면 레벨이 쌓은 기본값과 증강이 만든 배수 양쪽에
-        // 다 곱해져서 **후반으로 갈수록 한 번의 강화가 커진다.**
-        //
-        // 그래서 두 가지가 생긴다. 타일 41칸이 다 차면 갈 곳 없던 미네랄에 무한 소비처가 생기고,
-        // "유닛을 한 기 더 뽑을까 영웅을 강화할까"라는 선택이 생긴다.
-        //
-        // 비용은 초선형이라야 무한 스케일링이 안 된다.
-        public const float HERO_UPGRADE_BASE_COST = 35f;
-        public const float HERO_UPGRADE_COST_GROWTH = 1.28f;
-        public const float HERO_UPGRADE_DAMAGE_MULT = 1.12f;
-        public const float HERO_UPGRADE_HP_MULT = 1.08f;
+        /// <summary>n번 샀을 때의 누적 포인트</summary>
+        public static int StatPointsFor(int bought)
+        {
+            int points = 0;
+            for (int i = 0; i < bought; i++) points += StatGrant(i);
+            return points;
+        }
 
-        public static int HeroUpgradeCost(int bought) =>
-            (int)MathF.Round(HERO_UPGRADE_BASE_COST * MathF.Pow(HERO_UPGRADE_COST_GROWTH, bought));
+        /// <summary>
+        /// 레벨 배수 — 스탯이 만든 공격력·체력에 곱해진다. 레벨에 선형.
+        /// Lv9에 ×6.6, Lv24에 ×17.1, Lv47에 ×33.2. 초반 가드(Lv9 &lt; GOD 1/4)와
+        /// "혼합 3증강 = GOD 1~1.5기" 앵커를 기본 스탯과 함께 정한다.
+        /// </summary>
+        public const float LEVEL_MULT_GROWTH = 2.4f;
+        public static float LevelMult(int level) => 1f + LEVEL_MULT_GROWTH * (level - 1);
+
+        /// <summary>
+        /// 체력의 레벨 배수는 공격력보다 완만하다. 같은 기울기를 쓰면 힘몰빵 탱커가
+        /// 후반에 부술 수 없는 벽이 되어 생존 라운드를 혼자 20라운드씩 벌었다.
+        /// </summary>
+        public const float HP_LEVEL_MULT_GROWTH = 2.4f;
+        public static float HpLevelMult(int level) => 1f + HP_LEVEL_MULT_GROWTH * (level - 1);
 
         /// <summary>
         /// 다음 레벨까지 필요한 경험치. **지수**다.

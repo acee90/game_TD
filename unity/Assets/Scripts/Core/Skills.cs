@@ -18,6 +18,9 @@ namespace GodTD.Core
 {
     public enum SkillId { Whirlwind, Volley, Meteor, Decoy }
 
+    /// <summary>가스 스킬 개조 트랙 — 웹의 'damage' | 'cdr'</summary>
+    public enum GasSkillTrack { Damage, Cdr }
+
     public sealed class SkillDef
     {
         public readonly SkillId Id;
@@ -153,6 +156,16 @@ namespace GodTD.Core
         public const float DECOY_AGGRO_RANGE = 62f;
         /// <summary>허수아비를 세울 만한가 — 영웅 앞쪽 이 거리 안에 몹이 있으면 세운다</summary>
         public const float DECOY_AUTOCAST_RANGE = 170f;
+
+        // ───────── 가스 스킬 개조 트랙 ─────────
+        // 가스의 두 번째 소비처 — "타워 업그레이드냐 영웅 스킬이냐"가 선택이 되도록.
+        // 트랙은 둘: 스킬 피해 +8%/구매(곱), 쿨타임 -6%/구매(곱, 하한은 Resolve의 1초).
+        public const float GAS_SKILL_DAMAGE_MULT = 1.08f;
+        public const float GAS_SKILL_CDR_MULT = 0.94f;
+        public const int GAS_SKILL_BASE_COST = 30;
+        public const float GAS_SKILL_COST_GROWTH = 1.35f;
+        public static int GasSkillCost(int bought) =>
+            (int)MathF.Round(GAS_SKILL_BASE_COST * MathF.Pow(GAS_SKILL_COST_GROWTH, bought));
 
         /// <summary>여러 조각을 접는다. 곱셈형은 곱하고, 덧셈형은 더하고, 감속은 가장 강한 것을 쓴다.</summary>
         public static SkillMods FoldMods(IReadOnlyList<SkillModPatch> patches)

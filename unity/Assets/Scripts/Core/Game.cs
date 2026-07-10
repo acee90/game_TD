@@ -1,6 +1,6 @@
 // 원본: web/src/game/game.ts
 // ───────── 게임 로직 (UnityEngine 없음 — 순수 C#, 테스트 가능) ─────────
-// 출처: docs/갓타워디펜스X_VZ056_맵파일분석_v1.0.md
+// 출처: docs/reference/god-td-x-vz056-map-analysis-v1.0.md
 
 using System;
 using System.Collections.Generic;
@@ -41,6 +41,8 @@ namespace GodTD.Core
         public readonly Hero Hero;
         /// <summary>증강 선택지가 떠 있으면 게임이 멈춘다</summary>
         public List<AugmentCard> AugmentChoices = new List<AugmentCard>();
+        /// <summary>이번 증강 선택에서 쓴 리롤 수 — 새 선택지가 뜰 때 0으로 돌아간다</summary>
+        public int RerollsUsed;
 
         public readonly List<Slot> Slots;
         public Slot Selected;
@@ -98,7 +100,67 @@ namespace GodTD.Core
             var hero = Hero;
             if (hero.PendingAugmentPicks <= 0) return;
             AugmentChoices = Hero.RollAugmentChoices(hero, rand);
+            RerollsUsed = 0;
             if (AugmentChoices.Count == 0) hero.PendingAugmentPicks = 0;
+        }
+
+        // ── 증강 리롤 (가스) ──
+        public int RerollCost => Augments.AugmentRerollCost(RerollsUsed);
+
+        public bool CanReroll =>
+            AugmentChoices.Count > 0 &&
+            RerollsUsed < Augments.AUGMENT_REROLL_MAX &&
+            Gas >= RerollCost;
+
+        /// <summary>선택지 3장을 가스로 다시 뽑는다 — 한 선택당 최대 2회</summary>
+        public bool RerollAugments()
+        {
+            if (AugmentChoices.Count == 0) return false;
+            if (RerollsUsed >= Augments.AUGMENT_REROLL_MAX)
+            {
+                Message = $"리롤은 선택당 {Augments.AUGMENT_REROLL_MAX}회까지입니다.";
+                return false;
+            }
+            int cost = RerollCost;
+            if (Gas < cost)
+            {
+                Message = $"가스 부족 — 리롤 {cost} 필요.";
+                return false;
+            }
+            Gas -= cost;
+            RerollsUsed++;
+            AugmentChoices = Hero.RollAugmentChoices(Hero, rand);
+            return true;
+        }
+
+        // ── 가스 스킬 개조 ──
+        public int GasSkillCost(GasSkillTrack track) =>
+            Skills.GasSkillCost(track == GasSkillTrack.Damage ? Hero.GasSkillDamage : Hero.GasSkillCdr);
+
+        public bool CanBuyGasSkill(GasSkillTrack track) =>
+            !Over && Hero.SkillIdHeld.HasValue && Gas >= GasSkillCost(track);
+
+        /// <summary>가스로 스킬을 개조한다 — 종족 업그레이드와 같은 지갑을 두고 경쟁한다</summary>
+        public bool BuyGasSkill(GasSkillTrack track)
+        {
+            if (!Hero.SkillIdHeld.HasValue)
+            {
+                Message = "개조할 스킬이 없습니다 — 스킬 증강을 먼저 얻으세요.";
+                return false;
+            }
+            int cost = GasSkillCost(track);
+            if (Gas < cost)
+            {
+                Message = $"가스 부족 — 개조 {cost} 필요.";
+                return false;
+            }
+            Gas -= cost;
+            if (track == GasSkillTrack.Damage) Hero.GasSkillDamage++;
+            else Hero.GasSkillCdr++;
+            Message = track == GasSkillTrack.Damage
+                ? $"스킬 피해 개조 +{Hero.GasSkillDamage} · 다음 {GasSkillCost(GasSkillTrack.Damage)}"
+                : $"스킬 쿨타임 개조 +{Hero.GasSkillCdr} · 다음 {GasSkillCost(GasSkillTrack.Cdr)}";
+            return true;
         }
 
         /// <summary>필드에 살아있는 보스들의 레벨</summary>
@@ -230,6 +292,8 @@ namespace GodTD.Core
         }
 
         // ── 프로브 / 업그레이드 ──
+        public int ProbeCost => Balance.ProbeCost(Probes);
+
         public bool BuyProbe()
         {
             if (Probes >= Balance.PROBE_MAX)
@@ -237,14 +301,15 @@ namespace GodTD.Core
                 Message = $"프로브는 최대 {Balance.PROBE_MAX}기입니다.";
                 return false;
             }
-            if (Mineral < Balance.PROBE_MINERAL)
+            int cost = ProbeCost;
+            if (Mineral < cost)
             {
-                Message = $"미네랄 부족 — 프로브 {Balance.PROBE_MINERAL} 필요.";
+                Message = $"미네랄 부족 — 프로브 {cost} 필요.";
                 return false;
             }
-            Mineral -= Balance.PROBE_MINERAL;
+            Mineral -= cost;
             Probes++;
-            Message = "프로브를 생산하였습니다. 가스를 채취합니다.";
+            Message = $"프로브 {Probes}기 — 가스를 채취합니다. 다음 {ProbeCost}.";
             return true;
         }
 
@@ -264,26 +329,24 @@ namespace GodTD.Core
 
         public int UpgradeCost(Race race) => Balance.UpgradeGasCost(Upgrades[race]);
 
-        // ── 골드 영웅 강화 ──
-        public int HeroUpgradeCostNow => Hero.NextUpgradeCost;
+        // ── 골드 스탯 구매 ──
+        public int StatCost(StatId stat) => Hero.StatCostOf(stat);
 
-        public bool CanUpgradeHero => !Over && Mineral >= HeroUpgradeCostNow;
+        public bool CanBuyStat(StatId stat) => !Over && Mineral >= StatCost(stat);
 
-        /// <summary>미네랄로 영웅 공격력·체력을 퍼센트 강화한다</summary>
-        public bool UpgradeHero()
+        /// <summary>미네랄로 스탯 1포인트를 산다 — 힘(공격·체력) / 민첩(공속) / 지능(스킬)</summary>
+        public bool BuyStat(StatId stat)
         {
-            int cost = HeroUpgradeCostNow;
+            int cost = StatCost(stat);
             if (Mineral < cost)
             {
-                Message = $"미네랄 부족 — 영웅 강화 {cost} 필요.";
+                Message = $"미네랄 부족 — {HeroData.StatLabel(stat)} {cost} 필요.";
                 return false;
             }
-            float before = Hero.Stats.MaxHp;
             Mineral -= cost;
-            Hero.GoldUpgrades++;
-            // 최대 체력이 오른 만큼 현재 체력도 같이 올린다
-            Hero.Hp += Hero.Stats.MaxHp - before;
-            Message = $"영웅 강화 +{Hero.GoldUpgrades} · 다음 {HeroUpgradeCostNow}";
+            Hero.BuyStat(stat);
+            Message =
+                $"{HeroData.StatLabel(stat)} +1 ({Hero.Bought.Of(stat)}) · 다음 {StatCost(stat)}";
             return true;
         }
 
@@ -476,8 +539,9 @@ namespace GodTD.Core
                 float debuff = enemy.SlowFactor;
                 float speed = enemy.Speed * SlowAt(enemy.Distance) * debuff;
 
-                // 허수아비가 먼저 붙잡는다
-                if (decoy != null && IsDecoyAggroed(enemy, decoy))
+                // 허수아비가 먼저 붙잡는다 — 보스는 도발 인형만 잡는다
+                if (decoy != null && IsDecoyAggroed(enemy, decoy) &&
+                    (enemy.Kind != EnemyKind.Boss || decoy.Taunts))
                 {
                     enemy.Held = true;
                     float gap = decoy.Distance - enemy.Distance;
@@ -486,7 +550,9 @@ namespace GodTD.Core
                     continue;
                 }
 
-                if (heroBlocks && IsAggroed(enemy, hero))
+                // 보스는 영웅에게 멈추지 않는다 — 지나가며 칠 뿐이다. 저지 불가라
+                // 소환한 보스를 화력으로 못 잡으면 걸어나가 목숨을 문다.
+                if (heroBlocks && enemy.Kind != EnemyKind.Boss && IsAggroed(enemy, hero))
                 {
                     enemy.Held = true;
                     float gap = hero.Distance - enemy.Distance;

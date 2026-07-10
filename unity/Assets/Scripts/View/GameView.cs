@@ -188,11 +188,13 @@ namespace GodTD.View
             if (Input.GetKeyDown(KeyCode.B)) game.SummonBoss();
             if (Input.GetKeyDown(KeyCode.R)) game.BuyProbe();
             if (Input.GetKeyDown(KeyCode.X)) game.SellSelected();
-            if (Input.GetKeyDown(KeyCode.U)) game.UpgradeHero();
             if (Input.GetKeyDown(KeyCode.Alpha1)) game.Upgrade(Race.Terran);
             if (Input.GetKeyDown(KeyCode.Alpha2)) game.Upgrade(Race.Zerg);
             if (Input.GetKeyDown(KeyCode.Alpha3)) game.Upgrade(Race.Protoss);
             if (Input.GetKeyDown(KeyCode.Alpha4)) game.Upgrade(Race.Creature);
+            if (Input.GetKeyDown(KeyCode.Alpha5)) game.BuyStat(StatId.Str);
+            if (Input.GetKeyDown(KeyCode.Alpha6)) game.BuyStat(StatId.Agi);
+            if (Input.GetKeyDown(KeyCode.Alpha7)) game.BuyStat(StatId.Int);
 
             // 마우스 휠 = 줌
             float wheel = Input.GetAxis("Mouse ScrollWheel");

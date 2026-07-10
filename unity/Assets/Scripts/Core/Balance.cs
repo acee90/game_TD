@@ -1,6 +1,6 @@
 // 원본: web/src/data/balance.ts
 // ───────── 밸런스 테이블 ─────────
-// 출처: docs/갓타워디펜스X_VZ056_맵파일분석_v1.0.md
+// 출처: docs/reference/god-td-x-vz056-map-analysis-v1.0.md
 //
 // [원본확정] 맵파일에서 직접 읽은 수치. 바꾸면 원작 재현이 깨진다.
 // [프로토]   원본이 EUD로 가려져 읽을 수 없어 플레이 가능하게 정한 수치.
@@ -69,8 +69,16 @@ namespace GodTD.Core
         // ───────── 지출 — 원본에는 트리거상 자원 차감이 없다(§8.3). 아래는 전부 [프로토] ─────────
         // 원본에서는 SC 네이티브 빌드 코스트로 처리되었을 것으로 보이나 수치를 읽을 수 없다.
         public const int SPAWN_UNIT_MINERAL = 12; // 소용돌이 클릭 → Lv1 생성 (strings:412)
-        public const int PROBE_MINERAL = 30;      // 프로브 생산 (trigger #72, 차감액 미확인)
-        public const int PROBE_MAX = 8;
+        public const int PROBE_MINERAL = 30;      // 첫 프로브 값 (trigger #72, 차감액 미확인)
+
+        /// <summary>
+        /// [프로토] 프로브 비용은 지수로 오른다 — "지금 전력이냐 미래 경제냐"의 일꾼 딜레마.
+        /// 8기 고정 상한이던 시절에는 GA가 전 세대 7~8로 수렴하는 무뇌 투자였다.
+        /// </summary>
+        public const float PROBE_COST_GROWTH = 1.3f;
+        public static int ProbeCost(int owned) =>
+            (int)MathF.Round(PROBE_MINERAL * MathF.Pow(PROBE_COST_GROWTH, owned));
+        public const int PROBE_MAX = 16;
         public const float GAS_PER_PROBE_SECOND = 0.25f;
 
         /// <summary>파일런 종족 업그레이드. 가스 소비. 원본은 SC 네이티브라 비용 미확인(§8.4~8.5) [프로토]</summary>
@@ -91,7 +99,7 @@ namespace GodTD.Core
         /// 장갑은 타격당 감산이라 저티어 유닛에게 특히 아프다. Lv1 장갑을 3보다 올리면
         /// Lv1 유닛의 유효 피해가 10% 바닥값으로 깔려서 초반이 막힌다.
         /// </summary>
-        public static float BossHP(int level) => 700f * MathF.Pow(2.15f, level - 1);
+        public static float BossHP(int level) => 1150f * MathF.Pow(2.15f, level - 1);
         public static float BossArmor(int level) => 3f * level;
         public const float BOSS_SPEED = 26f;
 

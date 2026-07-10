@@ -134,19 +134,24 @@ namespace GodTD.View
             GUI.enabled = !game.Over && game.Mineral >= Balance.SPAWN_UNIT_MINERAL;
             if (GUILayout.Button($"유닛 생성 {Balance.SPAWN_UNIT_MINERAL} (P)")) game.SpawnUnitAnywhere();
 
-            GUI.enabled = !game.Over && game.Probes < Balance.PROBE_MAX && game.Mineral >= Balance.PROBE_MINERAL;
-            if (GUILayout.Button($"프로브 {Balance.PROBE_MINERAL} ({game.Probes}/{Balance.PROBE_MAX}) (R)"))
+            GUI.enabled = !game.Over && game.Probes < Balance.PROBE_MAX && game.Mineral >= game.ProbeCost;
+            if (GUILayout.Button($"프로브 {game.ProbeCost} ({game.Probes}/{Balance.PROBE_MAX}) (R)"))
                 game.BuyProbe();
 
             GUI.enabled = game.Selected?.Tower != null;
             if (GUILayout.Button("유닛 판매 (X)")) game.SellSelected();
 
-            GUI.enabled = game.CanUpgradeHero;
-            if (GUILayout.Button(
-                $"영웅 강화 {game.HeroUpgradeCostNow} — {game.Hero.GoldUpgrades}회 (U)\n" +
-                $"공 +{Mathf.RoundToInt((HeroData.HERO_UPGRADE_DAMAGE_MULT - 1f) * 100)}%" +
-                $" · 체 +{Mathf.RoundToInt((HeroData.HERO_UPGRADE_HP_MULT - 1f) * 100)}%"))
-                game.UpgradeHero();
+            // 골드 스탯 구매 — 힘(공격·체력) / 민첩(공속) / 지능(스킬), 단축키 5/6/7
+            GUILayout.Space(8);
+            GUILayout.Label("<b>영웅 스탯 (미네랄)</b>", small);
+            for (int i = 0; i < HeroData.STAT_IDS.Length; i++)
+            {
+                var stat = HeroData.STAT_IDS[i];
+                GUI.enabled = game.CanBuyStat(stat);
+                if (GUILayout.Button(
+                    $"{HeroData.StatLabel(stat)} {game.Hero.Bought.Of(stat)} · {game.StatCost(stat)} ({5 + i})"))
+                    game.BuyStat(stat);
+            }
 
             GUILayout.Space(8);
             GUILayout.Label("<b>파일런 업그레이드 (가스)</b>", small);
@@ -178,7 +183,9 @@ namespace GodTD.View
         // ───────── 영웅 패널 ─────────
         void DrawHeroPanel(Game game)
         {
-            heroPanel = new Rect(12, Screen.height - 216, 410, 176);
+            // 스킬이 있으면 가스 개조 버튼 줄만큼 패널이 커진다
+            float height = game.Hero.Skill != null ? 208f : 176f;
+            heroPanel = new Rect(12, Screen.height - 40 - height, 410, height);
             Panel(heroPanel, ACCENT_HERO);
             GUILayout.BeginArea(new Rect(heroPanel.x + 10, heroPanel.y + 8,
                 heroPanel.width - 20, heroPanel.height - 16));
@@ -221,6 +228,19 @@ namespace GodTD.View
                 if (skill.Targets > 0) extra += $" · {skill.Targets}발";
                 GUILayout.Label($"스킬 {skill.Def.Name}{extra} · {state} (자동 시전)", small);
                 Bar(1f - Mathf.Max(0f, hero.SkillCooldown) / skill.Cooldown, new Color(0.49f, 0.91f, 1f));
+
+                // 가스 스킬 개조 — 증강(질) 위에 얹는 가스(양) 트랙
+                GUILayout.BeginHorizontal();
+                GUI.enabled = game.CanBuyGasSkill(GasSkillTrack.Damage);
+                if (GUILayout.Button(
+                    $"스킬 피해 +8% · {game.GasSkillCost(GasSkillTrack.Damage)}가스 ({hero.GasSkillDamage})"))
+                    game.BuyGasSkill(GasSkillTrack.Damage);
+                GUI.enabled = game.CanBuyGasSkill(GasSkillTrack.Cdr);
+                if (GUILayout.Button(
+                    $"쿨타임 -6% · {game.GasSkillCost(GasSkillTrack.Cdr)}가스 ({hero.GasSkillCdr})"))
+                    game.BuyGasSkill(GasSkillTrack.Cdr);
+                GUI.enabled = true;
+                GUILayout.EndHorizontal();
             }
 
             GUILayout.EndArea();
@@ -302,6 +322,16 @@ namespace GodTD.View
                     game.ChooseAugment(i);
             }
             GUI.backgroundColor = Color.white;
+
+            // 증강 리롤 (가스) — 선택지 3장을 다시 뽑는다
+            int left = Augments.AUGMENT_REROLL_MAX - game.RerollsUsed;
+            string rerollText = left > 0
+                ? $"리롤 {game.RerollCost}가스 · {left}회 남음 (보유 {game.Gas})"
+                : "리롤 소진";
+            GUI.enabled = game.CanReroll;
+            if (GUI.Button(new Rect(Screen.width / 2f - 140, Screen.height / 2f + 115, 280, 34), rerollText))
+                game.RerollAugments();
+            GUI.enabled = true;
         }
 
         // ───────── 게임오버 ─────────

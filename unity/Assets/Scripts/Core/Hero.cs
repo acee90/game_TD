@@ -22,10 +22,12 @@ namespace GodTD.Core
         public readonly int MineralPerKill;
         public readonly float RespawnSeconds;
         public readonly float TowerDamageMult;
+        /// <summary>스킬 피해 배수 — 지능이 키운다</summary>
+        public readonly float SkillPower;
 
         public HeroStats(float maxHp, float damage, float range, float attackInterval,
             float moveSpeed, float regen, float damageReduction, float splashRadius,
-            int mineralPerKill, float respawnSeconds, float towerDamageMult)
+            int mineralPerKill, float respawnSeconds, float towerDamageMult, float skillPower)
         {
             MaxHp = maxHp;
             Damage = damage;
@@ -38,6 +40,43 @@ namespace GodTD.Core
             MineralPerKill = mineralPerKill;
             RespawnSeconds = respawnSeconds;
             TowerDamageMult = towerDamageMult;
+            SkillPower = skillPower;
+        }
+    }
+
+    /// <summary>골드로 산 스탯 포인트. 기본값(전부 0) = 웹의 NO_STATS.</summary>
+    public readonly struct BoughtStats
+    {
+        public readonly int Str;
+        public readonly int Agi;
+        public readonly int Int;
+
+        public BoughtStats(int str, int agi, int @int)
+        {
+            Str = str;
+            Agi = agi;
+            Int = @int;
+        }
+
+        public int Of(StatId stat)
+        {
+            switch (stat)
+            {
+                case StatId.Str: return Str;
+                case StatId.Agi: return Agi;
+                default: return Int;
+            }
+        }
+
+        /// <summary>해당 스탯 +1한 새 값 — 웹의 스프레드 갱신과 같은 불변 패턴</summary>
+        public BoughtStats Plus(StatId stat)
+        {
+            switch (stat)
+            {
+                case StatId.Str: return new BoughtStats(Str + 1, Agi, Int);
+                case StatId.Agi: return new BoughtStats(Str, Agi + 1, Int);
+                default: return new BoughtStats(Str, Agi, Int + 1);
+            }
         }
     }
 
@@ -60,8 +99,18 @@ namespace GodTD.Core
         public float AttackCooldown;
         /// <summary>액티브 스킬 재사용 대기</summary>
         public float SkillCooldown;
-        /// <summary>미네랄로 산 강화 횟수</summary>
-        public int GoldUpgrades;
+        /// <summary>골드 구매 횟수 (포인트가 아니다 — 살수록 한 번에 더 많은 포인트를 준다)</summary>
+        public BoughtStats Bought;
+
+        /// <summary>가스로 산 스킬 개조 횟수</summary>
+        public int GasSkillDamage;
+        public int GasSkillCdr;
+
+        /// <summary>구매 횟수를 포인트로 환산</summary>
+        public BoughtStats Points => new BoughtStats(
+            HeroData.StatPointsFor(Bought.Str),
+            HeroData.StatPointsFor(Bought.Agi),
+            HeroData.StatPointsFor(Bought.Int));
 
         public readonly List<AugmentCard> AugmentCards = new List<AugmentCard>();
         /// <summary>아직 고르지 않은 증강 선택 횟수</summary>
@@ -80,10 +129,19 @@ namespace GodTD.Core
         public float X => MapData.PathPos(Distance).X;
         public float Y => MapData.PathPos(Distance).Y;
 
-        public HeroStats Stats => ComputeStats(Level, AugmentCards, GoldUpgrades);
+        public HeroStats Stats => ComputeStats(Level, AugmentCards, Points);
 
-        /// <summary>다음 강화 비용</summary>
-        public int NextUpgradeCost => HeroData.HeroUpgradeCost(GoldUpgrades);
+        /// <summary>이 스탯의 다음 구매 가격</summary>
+        public int StatCostOf(StatId stat) => HeroData.StatCost(Bought.Of(stat));
+
+        /// <summary>스탯 구매 한 번. 체력이 늘면 증가분을 채워준다.</summary>
+        public void BuyStat(StatId stat)
+        {
+            float before = Stats.MaxHp;
+            Bought = Bought.Plus(stat);
+            float after = Stats.MaxHp;
+            if (after > before) Hp += after - before;
+        }
 
         public int XpNeeded => HeroData.XpToNext(Level);
 
@@ -108,7 +166,7 @@ namespace GodTD.Core
             }
         }
 
-        /// <summary>개조가 반영된 스킬 수치</summary>
+        /// <summary>개조가 반영된 스킬 수치 — 증강 개조와 가스 개조가 함께 접힌다</summary>
         public ResolvedSkill Skill
         {
             get
@@ -118,6 +176,12 @@ namespace GodTD.Core
                 var patches = new List<SkillModPatch>();
                 foreach (var c in AugmentCards)
                     if (c.Augment.SkillMod != null) patches.Add(c.Augment.SkillMod);
+                if (GasSkillDamage > 0)
+                    patches.Add(new SkillModPatch
+                        { DamageMult = MathF.Pow(Skills.GAS_SKILL_DAMAGE_MULT, GasSkillDamage) });
+                if (GasSkillCdr > 0)
+                    patches.Add(new SkillModPatch
+                        { CooldownMult = MathF.Pow(Skills.GAS_SKILL_CDR_MULT, GasSkillCdr) });
                 return Skills.Resolve(id.Value, Skills.FoldMods(patches));
             }
         }
@@ -205,21 +269,26 @@ namespace GodTD.Core
             RespawnTimer = 0f;
         }
 
-        /// <summary>증강 카드를 접어서 최종 스탯을 만든다. 순수 함수 — 테스트하기 쉽다.</summary>
+        /// <summary>
+        /// 증강 카드를 접어서 최종 스탯을 만든다. 순수 함수 — 테스트하기 쉽다.
+        /// bought에는 구매 횟수가 아니라 **환산된 포인트**(Hero.Points)가 들어온다.
+        /// </summary>
         public static HeroStats ComputeStats(
             int level,
             IReadOnlyList<AugmentCard> cards,
-            int goldUpgrades = 0)
+            BoughtStats bought = default)
         {
-            // 골드 강화는 퍼센트다 — 레벨이 쌓은 기본값에 곱해진다
-            float maxHp =
-                (HeroData.HERO_BASE_HP + HeroData.HERO_HP_PER_LEVEL * (level - 1)) *
-                MathF.Pow(HeroData.HERO_UPGRADE_HP_MULT, goldUpgrades);
-            float damage =
-                (HeroData.HERO_BASE_DAMAGE + HeroData.HERO_DAMAGE_PER_LEVEL * (level - 1)) *
-                MathF.Pow(HeroData.HERO_UPGRADE_DAMAGE_MULT, goldUpgrades);
+            // 파워 = 스탯(골드) × 레벨 배수(경험치) × 증강 배수(선택)
+            int str = HeroData.HERO_BASE_STR + bought.Str;
+            int agi = HeroData.HERO_BASE_AGI + bought.Agi;
+            int intel = HeroData.HERO_BASE_INT + bought.Int;
+            float mult = HeroData.LevelMult(level);
+
+            // 체력은 공격력과 분리된 배수(HpLevelMult)를 쓴다
+            float maxHp = HeroData.HP_PER_STR * str * HeroData.HpLevelMult(level);
+            float damage = HeroData.DMG_PER_STR * str * mult;
             float range = HeroData.HERO_BASE_RANGE;
-            float attackSpeed = 1f;
+            float attackSpeed = 1f + HeroData.AS_PER_AGI * agi;
             float moveSpeed = HeroData.HERO_SPEED;
             float regen = 0f;
             float splashRadius = 0f;
@@ -253,14 +322,16 @@ namespace GodTD.Core
                 maxHp: MathF.Round(maxHp),
                 damage: MathF.Round(damage),
                 range: range,
-                attackInterval: HeroData.HERO_ATTACK_INTERVAL / attackSpeed,
+                attackInterval: MathF.Max(HeroData.MIN_ATTACK_INTERVAL,
+                    HeroData.HERO_ATTACK_INTERVAL / attackSpeed),
                 moveSpeed: moveSpeed,
                 regen: regen,
                 damageReduction: 1f - damageTaken,
                 splashRadius: splashRadius,
                 mineralPerKill: mineralPerKill,
                 respawnSeconds: MathF.Max(3f, HeroData.HERO_RESPAWN_SECONDS - respawnCut),
-                towerDamageMult: towerDamageMult);
+                towerDamageMult: towerDamageMult,
+                skillPower: 1f + HeroData.SKILL_PER_INT * intel);
         }
 
         /// <summary>이 영웅에게 뜰 수 있는 증강인가 — 타입 제한은 없다, 스킬은 하나만</summary>
