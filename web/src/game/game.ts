@@ -25,6 +25,13 @@ export class Game {
   probes = 0;
   over = false;
 
+  /** 누적 유닛 생성 횟수. 조합으로 타워가 줄어도 이 값은 내려가지 않는다. */
+  unitsSpawned = 0;
+  /** 다음 유닛의 가격 — 누적 생성 횟수를 따라 오른다 */
+  get spawnCost(): number {
+    return B.spawnUnitCost(this.unitsSpawned);
+  }
+
   /** 누적 점수. 승리 조건이 없으므로 이게 유일한 성적표다. */
   score = 0;
   /** GOD 타워 보너스를 이미 받은 유닛 이름 */
@@ -395,11 +402,13 @@ export class Game {
       this.message = '빈 타일을 선택하세요.';
       return false;
     }
-    if (this.mineral < B.SPAWN_UNIT_MINERAL) {
-      this.message = `미네랄 부족 — ${B.SPAWN_UNIT_MINERAL} 필요.`;
+    const cost = this.spawnCost;
+    if (this.mineral < cost) {
+      this.message = `미네랄 부족 — ${cost} 필요.`;
       return false;
     }
-    this.mineral -= B.SPAWN_UNIT_MINERAL;
+    this.mineral -= cost;
+    this.unitsSpawned++;
     const def = unitFor(0, this.rand, this.bossesKilled);
     slot.tower = { def, tier: 0, cooldown: 0 };
     this.float(slot.x, slot.y, def.name, RACE_COLOR[def.race]);

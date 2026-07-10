@@ -131,8 +131,8 @@ namespace GodTD.View
             if (altar) return;   // 제단엔 유닛을 놓을 수 없다 (Game.cs:216)
 
             c[0] = new Command("유닛 생성",
-                $"{Balance.SPAWN_UNIT_MINERAL} 미네랄",
-                game.Mineral >= Balance.SPAWN_UNIT_MINERAL,
+                $"{game.SpawnCost} 미네랄",
+                game.Mineral >= game.SpawnCost,
                 () => game.SpawnUnit(slot), BUILD);
         }
 
@@ -161,8 +161,8 @@ namespace GodTD.View
 
             // 타일을 일일이 고르지 않고 아무 빈 타일에 짓는 편의 명령 (구 단축키 P)
             c[6] = new Command("유닛 생성",
-                $"{Balance.SPAWN_UNIT_MINERAL} 미네랄 · 빈 타일 아무 곳",
-                game.Mineral >= Balance.SPAWN_UNIT_MINERAL,
+                $"{game.SpawnCost} 미네랄 · 빈 타일 아무 곳",
+                game.Mineral >= game.SpawnCost,
                 () => game.SpawnUnitAnywhere(), BUILD);
         }
 

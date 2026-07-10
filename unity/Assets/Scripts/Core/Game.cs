@@ -19,6 +19,11 @@ namespace GodTD.Core
         public int Probes;
         public bool Over;
 
+        /// <summary>누적 유닛 생성 횟수. 조합으로 타워가 줄어도 내려가지 않는다.</summary>
+        public int UnitsSpawned;
+        /// <summary>다음 유닛의 가격 — 누적 생성 횟수를 따라 오른다</summary>
+        public int SpawnCost => Balance.SpawnUnitCost(UnitsSpawned);
+
         /// <summary>누적 점수. 승리 조건이 없으므로 이게 유일한 성적표다.</summary>
         public long ScoreValue;
         /// <summary>GOD 타워 보너스를 이미 받은 유닛 이름</summary>
@@ -223,12 +228,14 @@ namespace GodTD.Core
                 Message = "빈 타일을 선택하세요.";
                 return false;
             }
-            if (Mineral < Balance.SPAWN_UNIT_MINERAL)
+            int cost = SpawnCost;
+            if (Mineral < cost)
             {
-                Message = $"미네랄 부족 — {Balance.SPAWN_UNIT_MINERAL} 필요.";
+                Message = $"미네랄 부족 — {cost} 필요.";
                 return false;
             }
-            Mineral -= Balance.SPAWN_UNIT_MINERAL;
+            Mineral -= cost;
+            UnitsSpawned++;
             var def = Merge.UnitFor(0, rand, BossesKilled);
             slot.Tower = new Tower(def, 0);
             Float(slot.X, slot.Y, def.Name, Units.RACE_COLOR[(int)def.Race]);

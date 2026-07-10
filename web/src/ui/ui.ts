@@ -291,8 +291,8 @@ export function refresh(el: Elements, game: Game): void {
   el.probe.textContent = `프로브 ${game.probeCost} (${game.probes}/${B.PROBE_MAX})`;
   el.probe.disabled = game.probes >= B.PROBE_MAX || game.mineral < game.probeCost;
 
-  el.spawn.textContent = `유닛 생성 ${B.SPAWN_UNIT_MINERAL}`;
-  el.spawn.disabled = game.mineral < B.SPAWN_UNIT_MINERAL;
+  el.spawn.textContent = `유닛 생성 ${game.spawnCost}`;
+  el.spawn.disabled = game.mineral < game.spawnCost;
 
   el.sell.disabled = !game.selected?.tower;
 

@@ -61,6 +61,33 @@ export const START_LIVES = 20;
 // ───────── 지출 — 원본에는 트리거상 자원 차감이 없다(§8.3). 아래는 전부 [프로토] ─────────
 // 원본에서는 SC 네이티브 빌드 코스트로 처리되었을 것으로 보이나 수치를 읽을 수 없다.
 export const SPAWN_UNIT_MINERAL = 12; // 소용돌이 클릭 → Lv1 생성 (strings:412)
+
+/**
+ * 유닛 생성 비용 — **누적 생성 횟수에 선형으로 오른다.**
+ *
+ * 고정 12일 때 측정 결과([생존곡선 진단](../../../docs/reports/survival-curve-diagnosis-v0.1.md)):
+ * 중반에 미네랄의 94%가 유닛 생성으로 흘렀고, R51엔 라운드당 13.2기를 지었다.
+ * 그 결과 GOD 타워가 R51에 20기(필드의 60%), 타일 40칸은 R61에 포화됐다.
+ * 티어 시스템이 무의미해지고, 포화 순간 타워 DPS 성장이 멈춰 절벽이 생겼다.
+ *
+ * n번째 유닛을 비싸게 만들면 세 가지가 동시에 잡힌다 —
+ * GOD 총량, 타일 포화 시점, 후반 미네랄 잉여.
+ *
+ * **머리는 싸게, 꼬리만 조인다.** 처음 SPAWN_FREE_COUNT기는 12 그대로다 —
+ * 그러지 않으면 초반 전력이 깎여 Lv1 보스를 못 잡는다(`tests/boss-balance.test.ts`가
+ * 75미네랄 = 6기를 요구한다. 오프셋 없이 0.45를 걸면 5기밖에 못 사서 처치율이
+ * 0.95 → 0.80으로 떨어졌다).
+ *
+ * 조합으로 타워가 줄어도 비용은 내려가지 않는다 — 누적 생성 횟수 기준이라
+ * "채웠다 합쳤다"로 비용을 리셋할 수 없다.
+ *
+ * GOD 1기 R26 · 5기 R54 · R51 시점 4.3기, 타일은 R81에도 23기로 여유가 남는다.
+ * (고정 12일 때: GOD 1기 R20 · 5기 R32 · R51에 20기 · R61 포화) [프로토]
+ */
+export const SPAWN_FREE_COUNT = 8;
+export const SPAWN_COST_GROWTH = 0.45;
+export const spawnUnitCost = (spawned: number): number =>
+  Math.round(SPAWN_UNIT_MINERAL + SPAWN_COST_GROWTH * Math.max(0, spawned - SPAWN_FREE_COUNT));
 export const PROBE_MINERAL = 30; // 첫 프로브 값 (trigger #72, 차감액 미확인)
 /**
  * [프로토] 프로브 비용은 지수로 오른다 — "지금 전력이냐 미래 경제냐"의 일꾼 딜레마.

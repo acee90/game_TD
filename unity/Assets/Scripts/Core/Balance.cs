@@ -72,6 +72,24 @@ namespace GodTD.Core
         public const int PROBE_MINERAL = 30;      // 첫 프로브 값 (trigger #72, 차감액 미확인)
 
         /// <summary>
+        /// 유닛 생성 비용 — 누적 생성 횟수에 선형으로 오른다. ← web/src/data/balance.ts
+        ///
+        /// 고정 12일 때 중반 미네랄의 94%가 유닛 생성으로 흘러 GOD 타워가 R51에 20기(필드의 60%),
+        /// 타일 40칸이 R61에 포화됐다(docs/reports/survival-curve-diagnosis-v0.1.md).
+        ///
+        /// 머리는 싸게, 꼬리만 조인다 — 처음 SPAWN_FREE_COUNT기는 12 그대로다.
+        /// 그러지 않으면 초반 전력이 깎여 Lv1 보스를 못 잡는다.
+        /// 조합으로 타워가 줄어도 비용은 내려가지 않는다(누적 생성 횟수 기준).
+        /// [프로토]
+        /// </summary>
+        public const int SPAWN_FREE_COUNT = 8;
+        public const float SPAWN_COST_GROWTH = 0.45f;
+        public static int SpawnUnitCost(int spawned) =>
+            (int)System.Math.Round(
+                SPAWN_UNIT_MINERAL + SPAWN_COST_GROWTH * System.Math.Max(0, spawned - SPAWN_FREE_COUNT),
+                System.MidpointRounding.AwayFromZero);
+
+        /// <summary>
         /// [프로토] 프로브 비용은 지수로 오른다 — "지금 전력이냐 미래 경제냐"의 일꾼 딜레마.
         /// 8기 고정 상한이던 시절에는 GA가 전 세대 7~8로 수렴하는 무뇌 투자였다.
         /// </summary>
