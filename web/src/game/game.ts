@@ -624,8 +624,8 @@ export class Game {
       const debuff = enemy.slowFactor ?? 1;
       const speed = enemy.speed * this.slowAt(enemy.distance) * debuff;
 
-      // 허수아비가 먼저 붙잡는다
-      if (decoy && this.isDecoyAggroed(enemy, decoy)) {
+      // 허수아비가 먼저 붙잡는다 — 보스는 도발 인형만 잡는다
+      if (decoy && this.isDecoyAggroed(enemy, decoy) && (enemy.kind !== 'boss' || decoy.taunts)) {
         enemy.held = true;
         const gap = decoy.distance - enemy.distance;
         if (gap > H.ENEMY_TOUCH_RANGE) {
@@ -634,7 +634,9 @@ export class Game {
         continue;
       }
 
-      if (heroBlocks && this.isAggroed(enemy, hero)) {
+      // 보스는 영웅에게 멈추지 않는다 — 지나가며 칠 뿐이다. 저지 불가라
+      // 소환한 보스를 화력으로 못 잡으면 걸어나가 목숨을 문다.
+      if (heroBlocks && enemy.kind !== 'boss' && this.isAggroed(enemy, hero)) {
         enemy.held = true;
         const gap = hero.distance - enemy.distance;
         // 영웅에게 다가가되 지나치지 않는다

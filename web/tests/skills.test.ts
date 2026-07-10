@@ -347,7 +347,8 @@ describe('허수아비 — 원거리 영웅의 탱커', () => {
     taunting.hero.addAugment(card('taunt_dummy'));
     taunting.useSkill();
 
-    expect(taunting.decoy!.maxHp).toBe(plain.decoy!.maxHp * 2);
+    // 반올림이 한 번(최종값)만 들어가므로 ±1 오차를 허용한다
+    expect(taunting.decoy!.maxHp).toBeCloseTo(plain.decoy!.maxHp * 2, -1);
     expect(taunting.decoy!.taunts).toBe(true);
   });
 

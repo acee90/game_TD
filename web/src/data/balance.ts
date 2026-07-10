@@ -83,7 +83,7 @@ export const BOSS_COOLDOWN_SECONDS = 45; // [프로토]
  * 장갑은 타격당 감산이라 저티어 유닛에게 특히 아프다. Lv1 장갑을 3보다 올리면
  * Lv1 유닛의 유효 피해가 10% 바닥값으로 깔려서 초반이 막힌다.
  */
-export const bossHP = (level: number): number => 700 * Math.pow(2.15, level - 1);
+export const bossHP = (level: number): number => 1150 * Math.pow(2.15, level - 1);
 export const bossArmor = (level: number): number => 3 * level;
 export const BOSS_SPEED = 26;
 /** 보스가 일주를 끝내면 라이프 손실이 크다 [프로토] */

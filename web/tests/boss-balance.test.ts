@@ -46,19 +46,37 @@ const SEEDS = Array.from({ length: 40 }, (_, i) => i + 1);
 const killRate = (budget: number): number =>
   SEEDS.filter((s) => fightLv1Boss(s, budget).killed).length / SEEDS.length;
 
+/** 조합(2단계) 유무로 가른 킬레이트 — towers < 산 유닛 수면 조합이 일어난 것 */
+function killRateBy(budget: number): { merged: number; plain: number } {
+  const unitCount = Math.floor(budget / B.SPAWN_UNIT_MINERAL);
+  const fights = SEEDS.map((s) => fightLv1Boss(s, budget));
+  const merged = fights.filter((f) => f.towers < unitCount);
+  const plain = fights.filter((f) => f.towers >= unitCount);
+  return {
+    merged: merged.filter((f) => f.killed).length / Math.max(1, merged.length),
+    plain: plain.filter((f) => f.killed).length / Math.max(1, plain.length),
+  };
+}
+
 describe('Lv1 보스 — 시작 전력으로 넘을 수 있어야 한다', () => {
   test('시작 미네랄로 유닛 네 기를 산다', () => {
     expect(Math.floor(B.START_MINERAL / B.SPAWN_UNIT_MINERAL)).toBe(4);
   });
 
-  test('75 미네랄(6기)이면 어떤 뽑기 운에도 Lv1 보스를 잡는다', () => {
-    expect(killRate(COMFORTABLE_BUDGET)).toBe(1);
+  test('75 미네랄(6기)이면 거의 어떤 뽑기 운에도 Lv1 보스를 잡는다', () => {
+    // 보스는 영웅에게 저지되지 않으므로 자리 운이 최악이면 아주 드물게 새어나간다
+    expect(killRate(COMFORTABLE_BUDGET)).toBeGreaterThanOrEqual(0.95);
   });
 
-  test('시작 미네랄만으로도 Lv1 보스는 거의 잡힌다 — 영웅 기본 스탯이 바닥을 깐다', () => {
-    // 스탯 시스템 도입으로 Lv1 영웅이 36 DPS를 치면서(기존 11) 긴 보스전에서
-    // 영웅의 누적 딜만으로도 700 HP를 채운다. "뽑기 운" 구간은 사라졌다.
-    expect(killRate(B.START_MINERAL)).toBeGreaterThan(0.9);
+  test('시작 미네랄만으로는 뽑기 운이다 — 2단계가 떠야 잡는 판이 된다', () => {
+    const overall = killRate(B.START_MINERAL);
+    expect(overall).toBeGreaterThan(0.3);
+    expect(overall).toBeLessThan(0.9);
+
+    const { merged, plain } = killRateBy(B.START_MINERAL);
+    // 조합이 뜨면 대체로 잡고, 안 뜨면 가까스로 못 잡는다
+    expect(merged).toBeGreaterThan(0.6);
+    expect(plain).toBeLessThan(0.35);
   });
 
   test('Lv1 보스가 즉사하지는 않는다', () => {

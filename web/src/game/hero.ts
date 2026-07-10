@@ -45,7 +45,7 @@ export function computeStats(
   const int = H.HERO_BASE_INT + bought.int;
   const mult = H.levelMult(level);
 
-  let maxHp = H.HP_PER_STR * str * mult;
+  let maxHp = H.HP_PER_STR * str * H.hpLevelMult(level);
   let damage = H.DMG_PER_STR * str * mult;
   let range = H.HERO_BASE_RANGE;
   let attackSpeed = 1 + H.AS_PER_AGI * agi;
@@ -112,8 +112,17 @@ export class Hero {
   attackCooldown = 0;
   /** 액티브 스킬 재사용 대기 */
   skillCooldown = 0;
-  /** 골드로 산 스탯 포인트 */
+  /** 골드 구매 횟수 (포인트가 아니다 — 살수록 한 번에 더 많은 포인트를 준다) */
   bought: BoughtStats = NO_STATS;
+
+  /** 구매 횟수를 포인트로 환산 */
+  get points(): BoughtStats {
+    return {
+      str: H.statPointsFor(this.bought.str),
+      agi: H.statPointsFor(this.bought.agi),
+      int: H.statPointsFor(this.bought.int),
+    };
+  }
 
   readonly augments: AugmentCard[] = [];
   /** 아직 고르지 않은 증강 선택 횟수 */
@@ -134,7 +143,7 @@ export class Hero {
   }
 
   get stats(): HeroStats {
-    return computeStats(this.level, this.augments, this.bought);
+    return computeStats(this.level, this.augments, this.points);
   }
 
   /** 이 스탯의 다음 1포인트 비용 */

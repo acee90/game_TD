@@ -39,14 +39,14 @@ export type StatId = 'str' | 'agi' | 'int';
 export const STAT_IDS: readonly StatId[] = ['str', 'agi', 'int'];
 export const STAT_LABEL: Record<StatId, string> = { str: '힘', agi: '민첩', int: '지능' };
 
-export const HERO_BASE_STR = 11;
+export const HERO_BASE_STR = 7;
 export const HERO_BASE_AGI = 8;
 export const HERO_BASE_INT = 8;
 
 /** 힘 1당 공격력 */
-export const DMG_PER_STR = 2;
+export const DMG_PER_STR = 1;
 /** 힘 1당 최대 체력 */
-export const HP_PER_STR = 27;
+export const HP_PER_STR = 18;
 /** 민첩 1당 공격 속도 +4% */
 export const AS_PER_AGI = 0.04;
 /** 공격 간격 하한 — 민첩을 아무리 사도 이 밑으로는 안 내려간다 */
@@ -54,10 +54,24 @@ export const MIN_ATTACK_INTERVAL = 0.25;
 /** 지능 1당 스킬 피해 +6% */
 export const SKILL_PER_INT = 0.06;
 
-/** 스탯 구매 비용 — 그 스탯을 n번 산 뒤의 다음 1포인트 값 */
+/** 스탯 구매 비용 — 그 스탯을 n번 산 뒤의 다음 구매 가격 */
 export const STAT_BASE_COST = 25;
-export const STAT_COST_GROWTH = 7;
+export const STAT_COST_GROWTH = 8;
 export const statCost = (bought: number): number => STAT_BASE_COST + STAT_COST_GROWTH * bought;
+
+/**
+ * n번째 구매(0부터)가 주는 포인트 — 살수록 한 번에 더 많이 준다.
+ * 20번마다 +1: 1pt → 2pt → 3pt … 후반의 넘치는 골드가 점점 굵은 구매로
+ * 환전되도록. 가격도 선형으로 오르므로 포인트당 값은 대체로 평평하다.
+ */
+export const STAT_GRANT_EVERY = 20;
+export const statGrant = (bought: number): number => 1 + Math.floor(bought / STAT_GRANT_EVERY);
+/** n번 샀을 때의 누적 포인트 */
+export function statPointsFor(bought: number): number {
+  let points = 0;
+  for (let i = 0; i < bought; i++) points += statGrant(i);
+  return points;
+}
 
 /**
  * 레벨 배수 — 스탯이 만든 공격력·체력에 곱해진다. 레벨에 선형.
@@ -65,8 +79,15 @@ export const statCost = (bought: number): number => STAT_BASE_COST + STAT_COST_G
  * "혼합 3증강 = GOD 1~1.5기" 앵커를 기본 스탯과 함께 정한다 —
  * tests/hero-curve.test.ts가 지킨다.
  */
-export const LEVEL_MULT_GROWTH = 0.7;
+export const LEVEL_MULT_GROWTH = 2.4;
 export const levelMult = (level: number): number => 1 + LEVEL_MULT_GROWTH * (level - 1);
+
+/**
+ * 체력의 레벨 배수는 공격력보다 완만하다. 같은 기울기를 쓰면 힘몰빵 탱커가
+ * 후반에 부술 수 없는 벽이 되어 생존 라운드를 혼자 20라운드씩 벌었다.
+ */
+export const HP_LEVEL_MULT_GROWTH = 1.0;
+export const hpLevelMult = (level: number): number => 1 + HP_LEVEL_MULT_GROWTH * (level - 1);
 
 /**
  * 다음 레벨까지 필요한 경험치. **지수**다.
