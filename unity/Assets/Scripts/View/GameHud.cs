@@ -172,7 +172,7 @@ namespace GodTD.View
             string hpText = hero.Alive
                 ? $"HP {Mathf.CeilToInt(hero.Hp)}/{stats.MaxHp:0}"
                 : $"부활 {Mathf.CeilToInt(hero.RespawnTimer)}s";
-            GUILayout.Label($"{hpText} · XP {hero.Xp}/{hero.XpNeeded}", small);
+            GUILayout.Label($"{hpText} · XP {Mathf.FloorToInt(hero.Xp)}/{hero.XpNeeded}", small);
             Bar(hero.Alive ? hero.Hp / stats.MaxHp : 0f, new Color(0.44f, 0.86f, 0.55f));
             Bar(hero.Xp / (float)hero.XpNeeded, new Color(1f, 0.82f, 0.25f));
 

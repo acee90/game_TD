@@ -93,7 +93,7 @@ namespace GodTD.Core
 
         public float Hp;
         public int Level = 1;
-        public int Xp;
+        public float Xp; // XP_PER_MOB이 0.65라 소수 — 표시는 내림
         public bool Alive = true;
         public float RespawnTimer;
         public float AttackCooldown;
@@ -201,7 +201,7 @@ namespace GodTD.Core
         }
 
         /// <summary>경험치를 넣고, 레벨이 오르면 오른 레벨 수를 돌려준다</summary>
-        public int GainXp(int amount)
+        public int GainXp(float amount)
         {
             if (!Alive) return 0;
             Xp += amount;

@@ -127,7 +127,8 @@ namespace GodTD.Core
         /// 배수를 크게 두면 영웅을 최전선에 던지는 게 항상 정답이 되고 판마다 편차가 커진다.
         /// 2배 정도면 "영웅을 굴리면 조금 빨리 큰다" 수준에서 멈춘다.
         /// </summary>
-        public const int XP_PER_MOB = 1;
+        // 1 → 0.65 (2026-07-11): 몹 수 ×1.6의 XP 인플레 상쇄 — 라운드당 XP 총량 보존 ← web
+        public const float XP_PER_MOB = 0.65f;
         public const int HERO_LASTHIT_XP_MULT = 2;
         public static int XpPerBoss(int level) => 8 * level;
 
@@ -152,7 +153,10 @@ namespace GodTD.Core
         public static float EnemyDamage(int round) => ENEMY_DAMAGE_BASE + ENEMY_DAMAGE_PER_ROUND * round;
 
         /// <summary>보스는 같은 라운드 잡몹 여러 기 몫으로 때린다</summary>
-        public static float BossDamage(int level, int round) => EnemyDamage(round) * (1.5f + 0.5f * level);
+        /// <summary>Lv3까지는 영웅·허수아비를 공격하지 않고 지나간다 — 위협은 누출 라이프뿐 ← web</summary>
+        public const int BOSS_HARMLESS_MAX_LEVEL = 3;
+        public static float BossDamage(int level, int round) =>
+            level <= BOSS_HARMLESS_MAX_LEVEL ? 0f : EnemyDamage(round) * (1.5f + 0.5f * level);
 
         /// <summary>
         /// 증강을 받는 영웅 레벨.

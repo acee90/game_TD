@@ -447,7 +447,7 @@ namespace GodTD.Core
         }
 
         /// <summary>경험치는 타워가 잡든 영웅이 잡든 들어온다. 레벨업 시 증강 선택을 띄운다.</summary>
-        void GrantXp(int amount)
+        void GrantXp(float amount)
         {
             var hero = Hero;
             int levels = hero.GainXp(amount);

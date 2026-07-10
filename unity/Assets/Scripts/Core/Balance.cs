@@ -39,8 +39,10 @@ namespace GodTD.Core
 
         // ───────── 소득 (§8.2) — 전부 Add, 플레이어 자원 차감은 원본에 0건(§8.3) ─────────
 
-        /// <summary>보스 처치 보상. trigger #601~#606. Lv1..Lv6 [원본확정]</summary>
-        public static readonly int[] BOSS_KILL_MINERAL = { 5, 8, 13, 20, 29, 39 };
+        /// <summary>보스 처치 보상 Lv1..Lv6 [프로토]</summary>
+        // 원본은 { 5, 8, 13, 20, 29, 39 } (trigger #601~#606 [원본확정]).
+        // 2026-07-11 [프로토] 대체 — 보스 HP ×2.5와 함께 리스크에 보상이 따라가게. ← web
+        public static readonly int[] BOSS_KILL_MINERAL = { 5, 10, 18, 32, 55, 90 };
 
         /// <summary>킬 마일스톤 보상. trigger #546~#566. 200킬 간격 [원본확정] — (킬 수, 미네랄)</summary>
         public static readonly (int kills, int mineral)[] KILL_MILESTONES =
@@ -58,7 +60,7 @@ namespace GodTD.Core
         /// 그러면 유닛 1기당 20킬을 모아야 해서 초반이 굶는다. 라운드마다 목돈이 들어오는 편이
         /// 타워를 세우는 리듬과 맞는다. [프로토]
         /// </summary>
-        public static int WaveReward(int round) => 14 + 3 * round;
+        public static int WaveReward(int round) => 10 + 3 * round; // 2026-07-11 초반 수입 축소
 
         /// <summary>누출 시 라이프 -1 · 미네랄 +5. strings:358 'Life -1 ! ! ! ! !미네랄 +5' [원본확정]</summary>
         public const int LEAK_MINERAL = 5;
@@ -69,7 +71,9 @@ namespace GodTD.Core
         // ───────── 지출 — 원본에는 트리거상 자원 차감이 없다(§8.3). 아래는 전부 [프로토] ─────────
         // 원본에서는 SC 네이티브 빌드 코스트로 처리되었을 것으로 보이나 수치를 읽을 수 없다.
         public const int SPAWN_UNIT_MINERAL = 12; // 소용돌이 클릭 → Lv1 생성 (strings:412)
-        public const int PROBE_MINERAL = 30;      // 첫 프로브 값 (trigger #72, 차감액 미확인)
+        // 30 → 100 (2026-07-11): 프로브가 타워 2.5기 값이라 무조건 1순위였다.
+        // 100이면 오프닝(시작 55) 구매가 불가능하고, 생존 우위가 +8R → +2R로 압축된다. ← web
+        public const int PROBE_MINERAL = 100;
 
         /// <summary>
         /// 유닛 생성 비용 — 누적 생성 횟수에 선형으로 오른다. ← web/src/data/balance.ts
@@ -93,7 +97,7 @@ namespace GodTD.Core
         /// [프로토] 프로브 비용은 지수로 오른다 — "지금 전력이냐 미래 경제냐"의 일꾼 딜레마.
         /// 8기 고정 상한이던 시절에는 GA가 전 세대 7~8로 수렴하는 무뇌 투자였다.
         /// </summary>
-        public const float PROBE_COST_GROWTH = 1.3f;
+        public const float PROBE_COST_GROWTH = 1.5f;
         public static int ProbeCost(int owned) =>
             (int)MathF.Round(PROBE_MINERAL * MathF.Pow(PROBE_COST_GROWTH, owned));
         public const int PROBE_MAX = 16;
@@ -117,7 +121,9 @@ namespace GodTD.Core
         /// 장갑은 타격당 감산이라 저티어 유닛에게 특히 아프다. Lv1 장갑을 3보다 올리면
         /// Lv1 유닛의 유효 피해가 10% 바닥값으로 깔려서 초반이 막힌다.
         /// </summary>
-        public static float BossHP(int level) => 1150f * MathF.Pow(2.15f, level - 1);
+        // 레벨 성장 2.15 → 2.5 (2026-07-11): "항상 최고 소환" 처치율이 Lv6 96%였다.
+        // 2.5에서 Lv5 54% · Lv6 75% — 레벨이 오를수록 리스크가 생긴다. ← web
+        public static float BossHP(int level) => 1150f * MathF.Pow(2.5f, level - 1);
         public static float BossArmor(int level) => 3f * level;
         public const float BOSS_SPEED = 26f;
 
@@ -130,26 +136,28 @@ namespace GodTD.Core
         // 같은 잡몹으로 두고, 특별한 적은 플레이어가 부르는 보스로만 등장시킨다.
 
         /// <summary>
-        /// 웨이브는 5라운드 사이클로 돈다.
-        ///
-        /// 사이클 안에서는 같은 몹이 나오고 수만 늘어난다(12→15→18→21→24). 사이클이 넘어가면
-        /// 새 몹이 나오면서 체력이 CYCLE_HP_JUMP배로 뛴다.
-        ///
-        /// 그래서 "웨이브 총 체력"은 사이클 안에서 **선형**이고, 5라운드마다 **기울기가 J배로 꺾인다**.
-        /// 지수 곡선을 구분선형으로 근사한 셈이라 장기 성장률은 J^(1/5) = 라운드당 1.149와 같지만,
-        /// 플레이어는 "이번 사이클은 예측 가능하게 조금씩 어려워지고, 새 몹이 나오면 각도가 선다"로 읽는다.
-        ///
-        /// J를 낮추면 꺾임이 부드러워지는 대신 게임이 길어진다. 2.0에서 사망 라운드 중앙값 R40,
-        /// 게임 길이 15분, 영웅 레벨 중앙값 36이라 30레벨 각성 창(R30~35)을 확실히 지난다. [프로토]
+        /// 웨이브는 5라운드 사이클로 돈다 — 사이클 안에서 몹 수가 늘고, 넘어가면 수가 리셋되며
+        /// 개당 체력이 뛴다("새 몹은 적지만 굵다"). 총 체력은 아래 EnemyHP가 모델로 역산한다. [프로토]
         /// </summary>
         public const int CYCLE_ROUNDS = 5;
         public static int CycleOf(int round) => (round - 1) / CYCLE_ROUNDS;
         public static int PosInCycle(int round) => (round - 1) % CYCLE_ROUNDS;
 
-        const float CYCLE_HP_JUMP = 2.0f;
-        const float CYCLE_BASE_HP = 44f;
+        // ── 2026-07-11 재설계: 웨이브 총 체력 = 목표 clear(초) × 기대 유효 DPS ← web/src/data/balance.ts
+        // 시뮬(48판)로 측정한 기대 유효 DPS(장갑 감산 반영, P50)의 구분지수 근사.
+        // 벽(R45+)은 지수 — 선형이면 지수로 크는 보드가 결국 이긴다. 보정 4회 이력은 웹 주석 참조.
+        public static float ExpectedBoardDps(int round)
+        {
+            if (round <= 13) return 58f * MathF.Pow(1.22f, round - 1);
+            if (round <= 31) return 632f * MathF.Pow(1.105f, round - 13);
+            return 3830f * MathF.Pow(1.035f, round - 31);
+        }
 
-        public static float EnemyHP(int round) => CYCLE_BASE_HP * MathF.Pow(CYCLE_HP_JUMP, CycleOf(round));
+        public static float TargetClearSeconds(int round) =>
+            round <= 44 ? 18f + 0.45f * (round - 1) : 37.4f * MathF.Pow(1.2f, round - 44);
+
+        public static float EnemyHP(int round) =>
+            MathF.Max(1f, MathF.Round(ExpectedBoardDps(round) * TargetClearSeconds(round) / EnemyCount(round)));
 
         /// <summary>
         /// 적 장갑은 계단식이다. 선형으로 매 라운드 오르면 저티어 유닛이 매 라운드 조금씩
@@ -164,12 +172,12 @@ namespace GodTD.Core
         /// 웨이브당 잡몹 수. 사이클 안에서 라운드마다 COUNT_STEP만큼 늘어난다.
         /// 원본은 스폰 로직이 EUD라 몹 수를 읽을 수 없다(§9.2, §11.1). [프로토]
         /// </summary>
-        public const int ENEMY_BASE_COUNT = 12;
-        public const int ENEMY_COUNT_STEP = 3;
+        public const int ENEMY_BASE_COUNT = 20; // 12~24 → 20~36 (밀도)
+        public const int ENEMY_COUNT_STEP = 4;
         public static int EnemyCount(int round) => ENEMY_BASE_COUNT + ENEMY_COUNT_STEP * PosInCycle(round);
 
         /// <summary>웨이브 내 스폰 간격(초) [프로토]</summary>
-        public const float SPAWN_INTERVAL = 0.3f;
+        public const float SPAWN_INTERVAL = 0.18f; // 36기 × 0.18 = 6.5초 스폰 창
         public const float ENEMY_SPEED = 52f; // [프로토]
 
         // ───────── 전투 (전부 [프로토]) ─────────

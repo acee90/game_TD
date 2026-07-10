@@ -101,6 +101,7 @@ namespace UnityEngine
         public static float Lerp(float a, float b, float t) => a + (b - a) * Clamp01(t);
         public static float SmoothStep(float from, float to, float t) => Lerp(from, to, t);
         public static int CeilToInt(float f) => (int)Math.Ceiling(f);
+        public static int FloorToInt(float f) => (int)Math.Floor(f);
         public static int RoundToInt(float f) => (int)Math.Round(f);
     }
 
