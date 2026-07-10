@@ -386,9 +386,13 @@ describe('적이 영웅을 때린다', () => {
     expect(hero.hp).toBeLessThan(full);
   });
 
-  test('보스는 잡몹보다 훨씬 아프고, 레벨이 높을수록 더 아프다', () => {
-    expect(H.bossDamage(1, 10)).toBeGreaterThan(H.enemyDamage(10));
-    expect(H.bossDamage(6, 10)).toBeGreaterThan(H.bossDamage(1, 10));
+  test('보스 접촉 피해 — Lv3까지는 무해하게 지나가고, Lv4부터 잡몹보다 훨씬 아프다', () => {
+    // 저레벨 보스는 소득원이다. 위협은 누출 라이프(2+L)만으로 충분하다 (플레이테스트 2026-07-11)
+    for (let lv = 1; lv <= H.BOSS_HARMLESS_MAX_LEVEL; lv++) {
+      expect(H.bossDamage(lv, 10)).toBe(0);
+    }
+    expect(H.bossDamage(4, 10)).toBeGreaterThan(H.enemyDamage(10));
+    expect(H.bossDamage(6, 10)).toBeGreaterThan(H.bossDamage(4, 10));
   });
 
   test('몹 공격력은 선형이다 — 영웅 체력도 선형이라 나란히 간다', () => {

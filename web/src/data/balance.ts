@@ -33,8 +33,15 @@ export const OPENING_SECONDS = 5;
 
 // ───────── 소득 (§8.2) — 전부 Add, 플레이어 자원 차감은 원본에 0건(§8.3) ─────────
 
-/** 보스 처치 보상. trigger #601~#606. Lv1..Lv6 [원본확정] */
-export const BOSS_KILL_MINERAL = [5, 8, 13, 20, 29, 39] as const;
+/**
+ * 보스 처치 보상 Lv1..Lv6.
+ *
+ * 원본은 [5, 8, 13, 20, 29, 39] (trigger #601~#606 [원본확정]).
+ * 2026-07-11 [프로토]로 대체 — 보스 HP를 레벨당 ×2.5로 세우면서(아래 bossHP)
+ * 리스크에 보상이 따라가도록 상위 레벨을 가파르게 올렸다. 플레이테스트 근거:
+ * "난이도 고민 없이 항상 최고 레벨만 부르면 된다 → 재미없다".
+ */
+export const BOSS_KILL_MINERAL = [5, 10, 18, 32, 55, 90] as const;
 
 /** 킬 마일스톤 보상. trigger #546~#566. 200킬 간격 [원본확정] */
 export const KILL_MILESTONES: readonly (readonly [kills: number, mineral: number])[] = [
@@ -51,7 +58,7 @@ export const KILL_MILESTONES: readonly (readonly [kills: number, mineral: number
  * 그러면 유닛 1기당 20킬을 모아야 해서 초반이 굶는다. 라운드마다 목돈이 들어오는 편이
  * 타워를 세우는 리듬과 맞는다. [프로토]
  */
-export const waveReward = (round: number): number => 14 + 3 * round;
+export const waveReward = (round: number): number => 10 + 3 * round;
 
 /** 누출 시 라이프 -1 · 미네랄 +5. strings:358 'Life -1 ! ! ! ! !미네랄 +5' [원본확정] */
 export const LEAK_MINERAL = 5;
@@ -88,12 +95,12 @@ export const SPAWN_FREE_COUNT = 8;
 export const SPAWN_COST_GROWTH = 0.45;
 export const spawnUnitCost = (spawned: number): number =>
   Math.round(SPAWN_UNIT_MINERAL + SPAWN_COST_GROWTH * Math.max(0, spawned - SPAWN_FREE_COUNT));
-export const PROBE_MINERAL = 30; // 첫 프로브 값 (trigger #72, 차감액 미확인)
+export const PROBE_MINERAL = 100;
 /**
  * [프로토] 프로브 비용은 지수로 오른다 — "지금 전력이냐 미래 경제냐"의 일꾼 딜레마.
  * 8기 고정 상한이던 시절에는 GA가 전 세대 7~8로 수렴하는 무뇌 투자였다.
  */
-export const PROBE_COST_GROWTH = 1.3;
+export const PROBE_COST_GROWTH = 1.5;
 export const probeCost = (owned: number): number =>
   Math.round(PROBE_MINERAL * Math.pow(PROBE_COST_GROWTH, owned));
 export const PROBE_MAX = 16;
@@ -116,8 +123,13 @@ export const BOSS_COOLDOWN_SECONDS = 45; // [프로토]
  * tests/boss-balance.test.ts가 이 기준을 지킨다 — 유닛 6기면 확실히, 4기면 아슬아슬하게 잡힌다.
  * 장갑은 타격당 감산이라 저티어 유닛에게 특히 아프다. Lv1 장갑을 3보다 올리면
  * Lv1 유닛의 유효 피해가 10% 바닥값으로 깔려서 초반이 막힌다.
+ *
+ * 레벨 성장 2.15 → 2.5 (2026-07-11): "항상 최고 해금 보스"를 부르는 봇으로 측정한
+ * 처치율이 2.15에서 Lv2·3 100%, Lv6 96%(142소환) — 사다리가 R14에 소진되고 최고 보스가
+ * 영구 현금인출기였다. 2.8은 Lv6 처치율 0%로 과잉. 2.5에서 Lv4 59% · Lv5 67% ·
+ * Lv6 84%로 레벨이 오를수록 리스크가 생긴다. 웨이브 재설계 후 재측정 대상.
  */
-export const bossHP = (level: number): number => 1150 * Math.pow(2.15, level - 1);
+export const bossHP = (level: number): number => 1150 * Math.pow(2.5, level - 1);
 export const bossArmor = (level: number): number => 3 * level;
 export const BOSS_SPEED = 26;
 /** 보스가 일주를 끝내면 라이프 손실이 크다 [프로토] */
@@ -128,27 +140,59 @@ export const bossLeakLives = (level: number): number => 2 + level;
 // 몹 구성·수·HP 곡선이 전부 EUD라 웨이브를 재현할 근거가 없다. 이 프로토는 모든 웨이브를
 // 같은 잡몹으로 두고, 특별한 적은 플레이어가 부르는 보스로만 등장시킨다.
 /**
- * 웨이브는 5라운드 사이클로 돈다.
+ * 웨이브 총 체력 = 목표 clear(초) × 기대 유효 DPS.
  *
- * 사이클 안에서는 같은 몹이 나오고 수만 늘어난다(12→15→18→21→24). 사이클이 넘어가면
- * 새 몹이 나오면서 체력이 CYCLE_HP_JUMP배로 뛴다.
+ * ── 2026-07-11 재설계: 재화→전투력 모델 기반 ──
+ * 이전의 "5라운드 사이클마다 HP ×2 점프"는 사이클 안에서 평평해, 라운드당 ×1.23으로
+ * 크는 초반 플레이어 DPS가 그 사이 앞질러 버렸다 — R30까지 난이도 상승이 체감되지 않고
+ * (플레이테스트), 위험률이 R1~60에 0%였다(생존곡선 진단).
  *
- * 그래서 "웨이브 총 체력"은 사이클 안에서 **선형**이고, 5라운드마다 **기울기가 J배로 꺾인다**.
- * 지수 곡선을 구분선형으로 근사한 셈이라 장기 성장률은 J^(1/5) = 라운드당 1.149와 같지만,
- * 플레이어는 "이번 사이클은 예측 가능하게 조금씩 어려워지고, 새 몹이 나오면 각도가 선다"로 읽는다.
+ * 새 곡선은 시뮬레이션(정책 6 × 시드 8 = 48판)에서 측정한 **기대 유효 DPS**(그 라운드
+ * 장갑 감산 반영, P50)를 구분지수로 근사하고, 거기에 목표 clear를 곱해 역산한다.
+ * 발견: 유효 DPS ≈ 누적수입 × 1.5 로 거의 상수 — 재화가 곧 전투력이다.
+ * 운(조합·증강)의 스프레드는 P10 ≈ P50×0.65, P90 ≈ P50×1.8.
  *
- * J를 낮추면 꺾임이 부드러워지는 대신 게임이 길어진다. 2.0에서 사망 라운드 중앙값 R40,
- * 게임 길이 15분, 영웅 레벨 중앙값 36이라 30레벨 각성 창(R30~35)을 확실히 지난다. [프로토]
+ * 목표 clear는 R1부터 14초(라운드 22초 대비 여유 36% — 초반부터 긴장), R50에 25초
+ * (P50 보드가 임계에 닿는다), R51+ 라운드당 +1.5초(종반 벽 — P90 보드도 R60에 턱걸이).
+ * 결과: 현행 대비 R13~21에서 2.4~3.1배 (플레이테스트 "R30까지 3~4배" 요청 구간). [프로토]
  */
 export const CYCLE_ROUNDS = 5;
 export const cycleOf = (round: number): number => Math.floor((round - 1) / CYCLE_ROUNDS);
 export const posInCycle = (round: number): number => (round - 1) % CYCLE_ROUNDS;
 
-const CYCLE_HP_JUMP = 2.0;
-const CYCLE_BASE_HP = 44;
+/**
+ * 기대 유효 DPS (P50) — scratch-model.ts 측정의 구분지수 근사.
+ *
+ * 주의: 이 곡선은 웨이브 난이도에 **되먹임**된다 — 웨이브가 세지면 몹이 오래 살고,
+ * 영웅 막타 XP가 늘어 증강이 빨라져 DPS/수입 비율이 1.5 → 2.0~2.5로 오른다.
+ * (압박이 성장을 가속하는 자기 균형 고리.) 그래서 새 웨이브 아래에서 재측정해 갱신했다.
+ */
+export const expectedBoardDps = (round: number): number => {
+  if (round <= 13) return 58 * Math.pow(1.22, round - 1);
+  if (round <= 31) return 632 * Math.pow(1.105, round - 13);
+  return 3830 * Math.pow(1.035, round - 31);
+};
 
+/**
+ * 목표 clear(초) — 웨이브를 녹이는 데 걸려야 하는 시간. R51+는 종반 벽.
+ *
+ * 보정 이력:
+ * - 1차 (14 + 0.22r, 벽 +1.5/r): 봇이 R140까지 살았다. 사망 임계를 clear 25초로 가정했지만
+ *   라이프 20 버퍼 + 누출당 +5 미네랄 + 몹 경로 노출 ~28초(1460px/52, 감속 타워가 최대 2배로
+ *   늘림) 탓에 실제 절벽 임계는 clear ≈ 노출시간의 1.5~2배다.
+ * - 2차: **선형 벽(+3초/라운드)은 상대 성장률이 감소해** 지수로 크는 보드(~4%/라운드)가
+ *   결국 이긴다 — 봇이 R138까지 살았다. 벽은 지수여야 보드를 항상 앞선다.
+ * - 3차: 벽 ×1.10은 사망을 R72~88에 놓았다(설계보다 20라운드 늦음) — 압박→성장 되먹임이
+ *   벽을 미는 동안 보드가 계속 자라기 때문. ×1.18은 R58~75(중앙 R68)로 당겼다.
+ * - 4차: 기울기 0.45, 벽 R44부터 ×1.20 — 사망 중앙값을 R50대로. 유한 종결(R60 최종 보스)이
+ *   구현되면 마지막 1%는 보스가 가른다. 봇 기준 정밀 보정은 여기까지 — 이후는 사람 플레이테스트.
+ */
+export const targetClearSeconds = (round: number): number =>
+  round <= 44 ? 18 + 0.45 * (round - 1) : 37.4 * Math.pow(1.2, round - 44);
+
+/** 웨이브 총 체력 → 몹 1기 체력. "새 몹이 사이클마다 굵어지는" 리듬은 count 리셋이 만든다 */
 export const enemyHP = (round: number): number =>
-  CYCLE_BASE_HP * Math.pow(CYCLE_HP_JUMP, cycleOf(round));
+  Math.max(1, Math.round((expectedBoardDps(round) * targetClearSeconds(round)) / enemyCount(round)));
 /**
  * 적 장갑은 계단식이다. 선형으로 매 라운드 오르면 저티어 유닛이 매 라운드 조금씩
  * 무력해져서 언제 갈아엎어야 하는지 감이 안 온다. 5라운드마다 한 칸씩 오르면
@@ -161,15 +205,19 @@ export const enemyArmor = (round: number): number =>
 
 /**
  * 웨이브당 잡몹 수. 사이클 안에서 라운드마다 COUNT_STEP만큼 늘어난다.
- * 원본은 스폰 로직이 EUD라 몹 수를 읽을 수 없다(§9.2, §11.1). [프로토]
+ * 원본은 스폰 로직이 EUD라 몹 수를 읽을 수 없다(§9.2, §11.1).
+ *
+ * 2026-07-11: 12~24 → 20~36 (플레이테스트 "몹 수를 더 늘리자").
+ * 총 체력은 enemyHP가 총량÷count로 역산하므로 count는 난이도가 아니라 **밀도**다.
+ * 사이클이 넘어가면 count가 리셋되면서 개당 체력이 뛴다 — "새 몹은 적지만 굵다". [프로토]
  */
-export const ENEMY_BASE_COUNT = 12;
-export const ENEMY_COUNT_STEP = 3;
+export const ENEMY_BASE_COUNT = 20;
+export const ENEMY_COUNT_STEP = 4;
 export const enemyCount = (round: number): number =>
   ENEMY_BASE_COUNT + ENEMY_COUNT_STEP * posInCycle(round);
 
-/** 웨이브 내 스폰 간격(초) [프로토] */
-export const SPAWN_INTERVAL = 0.3;
+/** 웨이브 내 스폰 간격(초). 36기 × 0.18 = 6.5초 스폰 창 [프로토] */
+export const SPAWN_INTERVAL = 0.18;
 export const ENEMY_SPEED = 52; // [프로토]
 
 // ───────── 전투 (전부 [프로토]) ─────────

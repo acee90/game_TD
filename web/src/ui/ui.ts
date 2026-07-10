@@ -181,7 +181,7 @@ function refreshHero(el: Elements, game: Game): void {
     : `부활 ${Math.ceil(hero.respawnTimer)}s`;
 
   el.heroXpBar.style.width = `${(hero.xp / hero.xpNeeded) * 100}%`;
-  el.heroXp.textContent = `${hero.xp}/${hero.xpNeeded}`;
+  el.heroXp.textContent = `${Math.floor(hero.xp)}/${hero.xpNeeded}`;
 
   const dps = (stats.damage / stats.attackInterval).toFixed(0);
   const parts = [

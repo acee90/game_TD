@@ -109,7 +109,13 @@ export const xpToNext = (level: number): number =>
  * 배수를 크게 두면 영웅을 최전선에 던지는 게 항상 정답이 되고 판마다 편차가 커진다.
  * 2배 정도면 "영웅을 굴리면 조금 빨리 큰다" 수준에서 멈춘다.
  */
-export const XP_PER_MOB = 1;
+/**
+ * 2026-07-11: 1 → 0.65. 웨이브당 몹 수를 12~24 → 20~36으로 늘리면서(약 ×1.6)
+ * **라운드당 XP 총량을 보존**하기 위해 킬당 XP를 반비례로 내렸다.
+ * 안 그러면 영웅 레벨 곡선이 통째로 앞당겨져 30레벨 각성 창(R30~35)이 깨진다 —
+ * tests/hero-curve.test.ts가 이 창을 지킨다.
+ */
+export const XP_PER_MOB = 0.65;
 export const HERO_LASTHIT_XP_MULT = 2;
 export const xpPerBoss = (level: number): number => 8 * level;
 
@@ -134,9 +140,16 @@ export const ENEMY_DAMAGE_PER_ROUND = 1.6;
 export const enemyDamage = (round: number): number =>
   ENEMY_DAMAGE_BASE + ENEMY_DAMAGE_PER_ROUND * round;
 
-/** 보스는 같은 라운드 잡몹 여러 기 몫으로 때린다 */
+/**
+ * 보스 접촉 피해.
+ *
+ * **Lv3까지는 영웅·허수아비를 공격하지 않고 그냥 지나간다** (플레이테스트 2026-07-11:
+ * 저레벨 보스는 "소환하면 얻는 소득"이고, 위협은 못 잡았을 때의 누출 라이프(2+L)만으로
+ * 충분하다). Lv4부터는 잡몹 여러 기 몫으로 때린다 — 고레벨 소환의 대가.
+ */
+export const BOSS_HARMLESS_MAX_LEVEL = 3;
 export const bossDamage = (level: number, round: number): number =>
-  enemyDamage(round) * (1.5 + 0.5 * level);
+  level <= BOSS_HARMLESS_MAX_LEVEL ? 0 : enemyDamage(round) * (1.5 + 0.5 * level);
 
 /**
  * 증강을 받는 영웅 레벨.
