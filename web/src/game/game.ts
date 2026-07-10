@@ -1,5 +1,5 @@
 // ───────── 게임 로직 (DOM 없음 — 테스트 가능) ─────────
-// 출처: docs/갓타워디펜스X_VZ056_맵파일분석_v1.0.md
+// 출처: docs/god-td-x-vz056-map-analysis-v1.0.md
 
 import * as B from '../data/balance';
 import * as H from '../data/hero';

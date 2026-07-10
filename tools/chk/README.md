@@ -1,7 +1,7 @@
 # CHK 추출 도구
 
 스타크래프트: 브루드워 유즈맵(`.scx` = MPQ 아카이브)에서 시나리오 데이터(`staredit\scenario.chk`)를
-꺼내 사람이 읽을 수 있는 JSON/텍스트로 덤프한다. `docs/갓타워디펜스X_VZ056_맵파일분석_v1.0.md`가
+꺼내 사람이 읽을 수 있는 JSON/텍스트로 덤프한다. `docs/god-td-x-vz056-map-analysis-v1.0.md`가
 이 도구의 출력만을 근거로 작성되었다.
 
 ## 설치
