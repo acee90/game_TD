@@ -10,6 +10,7 @@ docs/
 ├── reference/   원본(갓타디) 분석 자료              ← [원본확정]의 출처
 ├── archive/     대체된 옛 방향 문서                 ← 기준으로 쓰지 않는다
 ├── balance/     밸런스 CSV                         ← 코드에서 자동 생성 (수정 금지)
+├── exec-plans/  실행 계획                          ← 세션을 넘겨 이어하는 작업의 인수인계 문서
 └── documentation-rules.md
 ```
 
@@ -46,6 +47,12 @@ docs/
 | [merge-td-design-draft-v0.3.md](archive/merge-td-design-draft-v0.3.md) | 대체됨 → [vision.md](design/vision.md) | 옛 방향 (모바일 · 고정 40라운드) |
 | [sequence-table-v0.1.md](archive/sequence-table-v0.1.md) | 대체됨 | 40라운드 레벨 디자인 (v0.3의 부속) |
 | [tower-skill-sheet-v0.1.md](archive/tower-skill-sheet-v0.1.md) | 대체됨 | 8아키타입 스킬 시트 (v0.3의 부속) |
+
+## exec-plans/ — 실행 계획
+
+| 문서 | 상태 | 내용 |
+|---|---|---|
+| [unity-sync-plan.md](exec-plans/unity-sync-plan.md) | 진행 중 | Unity 동기화 이어하기 (미커밋 부분 반영 상태 포함) |
 
 ## balance/ — 자동 생성 시트
 
