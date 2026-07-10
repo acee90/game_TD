@@ -19,7 +19,11 @@
 
 ## 기술 후보
 
-- **Unity UI Toolkit HUD** — OnGUI 대체 (프레젠테이션 패스에서 보류).
+- **Unity UI Toolkit HUD** — OnGUI 대체. [실행 계획](../exec-plans/unity-art-quality-plan.md) §2.4에서
+  조사 완료: USS는 box-shadow·backdrop-filter를 지원하지 않아 정통 글래스모피즘은 불가.
+  한글은 어느 쪽이든 폰트 에셋 커밋이 선결. 방향 확정 후 P6에서 판단.
+- **Unity 뷰 디자인 퀄리티** — [실행 계획](../exec-plans/unity-art-quality-plan.md) 참조. 승인 대기.
+  에셋 0 원칙 폐기 결정됨. 아트 방향 3안은 프리뷰 후 결정.
 - **Unity 명예의 전당 영속 저장** — 웹 localStorage 대응.
 - **시트 업로드 자동화** — gen:balance 후 구글 시트 갱신 스크립트.
 - **밸런스 CSV 확장** — 타워별 비용/DPS/역할, 적/웨이브 압력, 라운드별 수입·지출,
