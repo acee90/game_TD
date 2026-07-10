@@ -48,8 +48,8 @@ describe('밸런스 CSV — 코드와 일치해야 한다', () => {
   test('상수 표의 값이 코드와 같다', () => {
     const rows = read('hero-constants.csv').slice(1);
     const value = (key: string) => Number(rows.find((r) => r.startsWith(`${key},`))!.split(',')[1]);
-    expect(value('HERO_DAMAGE_PER_LEVEL')).toBe(H.HERO_DAMAGE_PER_LEVEL);
-    expect(value('HERO_HP_PER_LEVEL')).toBe(H.HERO_HP_PER_LEVEL);
+    expect(value('DMG_PER_STR')).toBe(H.DMG_PER_STR);
+    expect(value('LEVEL_MULT_GROWTH')).toBe(H.LEVEL_MULT_GROWTH);
     expect(value('XP_COST_GROWTH')).toBe(H.XP_COST_GROWTH);
     expect(value('SYNERGY_THRESHOLD')).toBe(H.SYNERGY_THRESHOLD);
   });

@@ -20,23 +20,35 @@ export interface HeroStats {
   readonly mineralPerKill: number;
   readonly respawnSeconds: number;
   readonly towerDamageMult: number;
+  /** 스킬 피해 배수 — 지능이 키운다 */
+  readonly skillPower: number;
 }
+
+/** 골드로 산 스탯 포인트 */
+export interface BoughtStats {
+  readonly str: number;
+  readonly agi: number;
+  readonly int: number;
+}
+
+export const NO_STATS: BoughtStats = { str: 0, agi: 0, int: 0 };
 
 /** 증강 카드를 접어서 최종 스탯을 만든다. 순수 함수 — 테스트하기 쉽다. */
 export function computeStats(
   level: number,
   cards: readonly AugmentCard[],
-  goldUpgrades = 0,
+  bought: BoughtStats = NO_STATS,
 ): HeroStats {
-  // 골드 강화는 퍼센트다 — 레벨이 쌓은 기본값에 곱해진다
-  let maxHp =
-    (H.HERO_BASE_HP + H.HERO_HP_PER_LEVEL * (level - 1)) *
-    Math.pow(H.HERO_UPGRADE_HP_MULT, goldUpgrades);
-  let damage =
-    (H.HERO_BASE_DAMAGE + H.HERO_DAMAGE_PER_LEVEL * (level - 1)) *
-    Math.pow(H.HERO_UPGRADE_DAMAGE_MULT, goldUpgrades);
+  // 파워 = 스탯(골드) × 레벨 배수(경험치) × 증강 배수(선택)
+  const str = H.HERO_BASE_STR + bought.str;
+  const agi = H.HERO_BASE_AGI + bought.agi;
+  const int = H.HERO_BASE_INT + bought.int;
+  const mult = H.levelMult(level);
+
+  let maxHp = H.HP_PER_STR * str * mult;
+  let damage = H.DMG_PER_STR * str * mult;
   let range = H.HERO_BASE_RANGE;
-  let attackSpeed = 1;
+  let attackSpeed = 1 + H.AS_PER_AGI * agi;
   let moveSpeed = H.HERO_SPEED;
   let regen = 0;
   let splashRadius = 0;
@@ -70,7 +82,7 @@ export function computeStats(
     maxHp: Math.round(maxHp),
     damage: Math.round(damage),
     range,
-    attackInterval: H.HERO_ATTACK_INTERVAL / attackSpeed,
+    attackInterval: Math.max(H.MIN_ATTACK_INTERVAL, H.HERO_ATTACK_INTERVAL / attackSpeed),
     moveSpeed,
     regen,
     damageReduction: 1 - damageTaken,
@@ -78,6 +90,7 @@ export function computeStats(
     mineralPerKill,
     respawnSeconds: Math.max(3, H.HERO_RESPAWN_SECONDS - respawnCut),
     towerDamageMult,
+    skillPower: 1 + H.SKILL_PER_INT * int,
   };
 }
 
@@ -99,8 +112,8 @@ export class Hero {
   attackCooldown = 0;
   /** 액티브 스킬 재사용 대기 */
   skillCooldown = 0;
-  /** 미네랄로 산 강화 횟수 */
-  goldUpgrades = 0;
+  /** 골드로 산 스탯 포인트 */
+  bought: BoughtStats = NO_STATS;
 
   readonly augments: AugmentCard[] = [];
   /** 아직 고르지 않은 증강 선택 횟수 */
@@ -121,12 +134,20 @@ export class Hero {
   }
 
   get stats(): HeroStats {
-    return computeStats(this.level, this.augments, this.goldUpgrades);
+    return computeStats(this.level, this.augments, this.bought);
   }
 
-  /** 다음 강화 비용 */
-  get nextUpgradeCost(): number {
-    return H.heroUpgradeCost(this.goldUpgrades);
+  /** 이 스탯의 다음 1포인트 비용 */
+  statCost(stat: H.StatId): number {
+    return H.statCost(this.bought[stat]);
+  }
+
+  /** 스탯 1포인트. 체력이 늘면 증가분을 채워준다. */
+  buyStat(stat: H.StatId): void {
+    const before = this.stats.maxHp;
+    this.bought = { ...this.bought, [stat]: this.bought[stat] + 1 };
+    const after = this.stats.maxHp;
+    if (after > before) this.hp += after - before;
   }
 
   get xpNeeded(): number {

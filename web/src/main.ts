@@ -39,7 +39,9 @@ canvas.addEventListener('pointerdown', (event) => {
 el.spawn.addEventListener('click', () => game.spawnUnitAnywhere());
 el.probe.addEventListener('click', () => game.buyProbe());
 el.sell.addEventListener('click', () => game.sellSelected());
-el.heroUp.addEventListener('click', () => game.upgradeHero());
+el.statButtons.str.addEventListener('click', () => game.buyStat('str'));
+el.statButtons.agi.addEventListener('click', () => game.buyStat('agi'));
+el.statButtons.int.addEventListener('click', () => game.buyStat('int'));
 el.bossLevels.forEach((button, i) => button.addEventListener('click', () => game.summonBoss(i + 1)));
 el.upgrades.forEach((button, i) => button.addEventListener('click', () => game.upgrade(i as Race)));
 el.augCards.addEventListener('click', (event) => {
@@ -52,7 +54,9 @@ const KEYS: Record<string, () => void> = {
   b: () => game.summonBoss(),
   r: () => game.buyProbe(),
   x: () => game.sellSelected(),
-  u: () => game.upgradeHero(),
+  '5': () => game.buyStat('str'),
+  '6': () => game.buyStat('agi'),
+  '7': () => game.buyStat('int'),
   '1': () => game.upgrade(0),
   '2': () => game.upgrade(1),
   '3': () => game.upgrade(2),

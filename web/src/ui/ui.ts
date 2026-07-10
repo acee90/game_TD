@@ -35,7 +35,7 @@ export interface Elements {
   readonly heroXpBar: HTMLElement;
   readonly heroXp: HTMLElement;
   readonly heroStats: HTMLElement;
-  readonly heroUp: HTMLButtonElement;
+  readonly statButtons: Record<HD.StatId, HTMLButtonElement>;
   readonly heroAugs: HTMLElement;
   readonly skill: HTMLElement;
   readonly skillCd: HTMLElement;
@@ -79,7 +79,11 @@ export function bindElements(): Elements {
     heroXpBar: $('heroXpBar'),
     heroXp: $('heroXp'),
     heroStats: $('heroStats'),
-    heroUp: $('heroUp') as HTMLButtonElement,
+    statButtons: {
+      str: $('statStr') as HTMLButtonElement,
+      agi: $('statAgi') as HTMLButtonElement,
+      int: $('statInt') as HTMLButtonElement,
+    },
     heroAugs: $('heroAugs'),
     skill: $('skill'),
     skillCd: $('skillCd'),
@@ -182,10 +186,11 @@ function refreshHero(el: Elements, game: Game): void {
   ].filter(Boolean);
   el.heroStats.textContent = parts.join(' · ');
 
-  el.heroUp.textContent =
-    `영웅 강화 ${game.heroUpgradeCost} (공 +${Math.round((HD.HERO_UPGRADE_DAMAGE_MULT - 1) * 100)}% · ` +
-    `체 +${Math.round((HD.HERO_UPGRADE_HP_MULT - 1) * 100)}%) — ${hero.goldUpgrades}회`;
-  el.heroUp.disabled = !game.canUpgradeHero;
+  for (const stat of HD.STAT_IDS) {
+    const button = el.statButtons[stat];
+    button.textContent = `${HD.STAT_LABEL[stat]} ${hero.bought[stat]} · ${game.statCost(stat)}`;
+    button.disabled = !game.canBuyStat(stat);
+  }
 
   el.heroAugs.innerHTML = hero.augments
     .map((card) => {

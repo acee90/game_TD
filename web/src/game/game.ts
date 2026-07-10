@@ -161,7 +161,7 @@ export class Game {
 
   /** 스킬 피해 한 방 */
   private skillHit(enemy: Enemy, skill: K.ResolvedSkill): void {
-    const raw = this.hero.stats.damage * skill.damageMult;
+    const raw = this.hero.stats.damage * skill.damageMult * this.hero.stats.skillPower;
     const dealt = B.effectiveDamage(raw, enemy.armor);
     enemy.hp -= dealt;
     this.heroDamageDealt += dealt;
@@ -429,28 +429,26 @@ export class Game {
     return B.upgradeGasCost(this.upgrades[race]);
   }
 
-  // ── 골드 영웅 강화 ──
-  get heroUpgradeCost(): number {
-    return this.hero.nextUpgradeCost;
+  // ── 골드 스탯 구매 ──
+  statCost(stat: H.StatId): number {
+    return this.hero.statCost(stat);
   }
 
-  get canUpgradeHero(): boolean {
-    return !this.over && this.mineral >= this.heroUpgradeCost;
+  canBuyStat(stat: H.StatId): boolean {
+    return !this.over && this.mineral >= this.statCost(stat);
   }
 
-  /** 미네랄로 영웅 공격력·체력을 퍼센트 강화한다 */
-  upgradeHero(): boolean {
-    const cost = this.heroUpgradeCost;
+  /** 미네랄로 스탯 1포인트를 산다 — 힘(공격·체력) / 민첩(공속) / 지능(스킬) */
+  buyStat(stat: H.StatId): boolean {
+    const cost = this.statCost(stat);
     if (this.mineral < cost) {
-      this.message = `미네랄 부족 — 영웅 강화 ${cost} 필요.`;
+      this.message = `미네랄 부족 — ${H.STAT_LABEL[stat]} ${cost} 필요.`;
       return false;
     }
-    const before = this.hero.stats.maxHp;
     this.mineral -= cost;
-    this.hero.goldUpgrades++;
-    // 최대 체력이 오른 만큼 현재 체력도 같이 올린다
-    this.hero.hp += this.hero.stats.maxHp - before;
-    this.message = `영웅 강화 +${this.hero.goldUpgrades} · 다음 ${this.heroUpgradeCost}`;
+    this.hero.buyStat(stat);
+    this.message =
+      `${H.STAT_LABEL[stat]} +1 (${this.hero.bought[stat]}) · 다음 ${this.statCost(stat)}`;
     return true;
   }
 

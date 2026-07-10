@@ -13,13 +13,14 @@ export const ALTAR_SLOT = 0;
 // ── 파워 커브 ──
 // 초반에는 타워가 주력이고 영웅은 거들 뿐이다. 영웅 1레벨 DPS는 Lv1 타워 한 기 수준이다.
 //
-// **레벨 성장은 선형이다.** 후반 역전은 레벨이 아니라 **증강 시너지**가 만든다.
-// 레벨을 지수로 두면 아무 증강이나 골라도 저절로 세져서, 증강 선택이 결과를 못 바꾼다.
-// 선형으로 두면 증강 없는 영웅은 끝까지 GOD 타워 아래에 머물고, 계열을 몰아 특화·대특화를
-// 터뜨린 영웅만 넘어선다. 그 격차가 곧 빌드의 값어치다.
+// ───────── 세 개의 곱연산 축 ─────────
+// 영웅 파워 = 스탯(골드) × 레벨 배수(경험치) × 증강 배수(선택).
+// 자원마다 축이 하나씩이다 — 골드는 스탯 포인트를 사고, 경험치는 그 스탯을
+// 배수로 키우고, 증강은 그 위에 또 곱해지거나 특수능력(스킬·광역·시너지)을 얹는다.
+//
+// 레벨 배수는 레벨에 **선형**(1 + g×(L-1))이다. 지수로 두면 아무 증강이나 골라도
+// 저절로 세져서 선택이 결과를 못 바꾼다. 후반 역전은 여전히 증강 시너지 몫이다.
 
-export const HERO_BASE_HP = 200;
-export const HERO_BASE_DAMAGE = 9;
 export const HERO_BASE_RANGE = 130;
 export const HERO_ATTACK_INTERVAL = 0.8;
 export const HERO_SPEED = 88;
@@ -27,36 +28,45 @@ export const HERO_SPEED = 88;
 export const HERO_ARRIVE_EPSILON = 2;
 export const HERO_RADIUS = 11;
 
+// ───────── 스탯 — 골드로 산다 ─────────
+// 힘: 기본 공격력과 체력.  민첩: 공격 속도.  지능: 스킬 피해.
+//
+// 포인트당 효과는 **선형**이지만 약해지지 않는다 — 레벨 배수와 증강 배수가
+// 그 위에 곱해지기 때문에, 같은 +1힘도 후반에 사면 절대값이 몇 배로 커진다.
+// 대신 포인트가 쌓일수록 "전체 대비" 증가율은 줄어들므로(1/n) 비용은 완만한
+// 선형 증가로 충분하다 — 옛 배수형(×1.12, 비용 1.28^n)과 달리 많이 살 수 있다.
+export type StatId = 'str' | 'agi' | 'int';
+export const STAT_IDS: readonly StatId[] = ['str', 'agi', 'int'];
+export const STAT_LABEL: Record<StatId, string> = { str: '힘', agi: '민첩', int: '지능' };
+
+export const HERO_BASE_STR = 11;
+export const HERO_BASE_AGI = 8;
+export const HERO_BASE_INT = 8;
+
+/** 힘 1당 공격력 */
+export const DMG_PER_STR = 2;
+/** 힘 1당 최대 체력 */
+export const HP_PER_STR = 27;
+/** 민첩 1당 공격 속도 +4% */
+export const AS_PER_AGI = 0.04;
+/** 공격 간격 하한 — 민첩을 아무리 사도 이 밑으로는 안 내려간다 */
+export const MIN_ATTACK_INTERVAL = 0.25;
+/** 지능 1당 스킬 피해 +6% */
+export const SKILL_PER_INT = 0.06;
+
+/** 스탯 구매 비용 — 그 스탯을 n번 산 뒤의 다음 1포인트 값 */
+export const STAT_BASE_COST = 25;
+export const STAT_COST_GROWTH = 7;
+export const statCost = (bought: number): number => STAT_BASE_COST + STAT_COST_GROWTH * bought;
+
 /**
- * 레벨당 성장 — 곱셈이 아니라 덧셈이다. 경험치 비용을 지수로 만든 만큼 기울기를 가파르게 뒀다.
- *
- * 기준은 **타워와 영웅에 골고루 투자한 판**에서 재는 GOD 타워 한 기(DPS 1182) 대비 배수다.
- * 궁수 기준 3증강에 1.25배, 5증강에 2.81배가 나온다. 전사는 절반쯤인데, 딜을 버리고
- * 블로킹을 사는 타입이라 그렇다.
- *
- * tests/hero-curve.test.ts가 이 관계를 지킨다.
+ * 레벨 배수 — 스탯이 만든 공격력·체력에 곱해진다. 레벨에 선형.
+ * Lv9에 ×6.6, Lv24에 ×17.1, Lv47에 ×33.2. 초반 가드(Lv9 < GOD 1/4)와
+ * "혼합 3증강 = GOD 1~1.5기" 앵커를 기본 스탯과 함께 정한다 —
+ * tests/hero-curve.test.ts가 지킨다.
  */
-export const HERO_DAMAGE_PER_LEVEL = 22;
-export const HERO_HP_PER_LEVEL = 90;
-
-// ───────── 골드 영웅 강화 ─────────
-// 미네랄로 영웅을 강화한다. **퍼센트**여야 한다.
-//
-// 영웅 공격력은 레벨당 선형으로 쌓이고 증강은 곱연산이다. 여기에 고정값을 더하면 후반엔
-// 반올림 오차가 되고, 퍼센트를 곱하면 레벨이 쌓은 기본값과 증강이 만든 배수 양쪽에
-// 다 곱해져서 **후반으로 갈수록 한 번의 강화가 커진다.**
-//
-// 그래서 두 가지가 생긴다. 타일 41칸이 다 차면 갈 곳 없던 미네랄에 무한 소비처가 생기고,
-// "유닛을 한 기 더 뽑을까 영웅을 강화할까"라는 선택이 생긴다.
-//
-// 비용은 초선형이라야 무한 스케일링이 안 된다.
-export const HERO_UPGRADE_BASE_COST = 35;
-export const HERO_UPGRADE_COST_GROWTH = 1.28;
-export const HERO_UPGRADE_DAMAGE_MULT = 1.12;
-export const HERO_UPGRADE_HP_MULT = 1.08;
-
-export const heroUpgradeCost = (bought: number): number =>
-  Math.round(HERO_UPGRADE_BASE_COST * Math.pow(HERO_UPGRADE_COST_GROWTH, bought));
+export const LEVEL_MULT_GROWTH = 0.7;
+export const levelMult = (level: number): number => 1 + LEVEL_MULT_GROWTH * (level - 1);
 
 /**
  * 다음 레벨까지 필요한 경험치. **지수**다.

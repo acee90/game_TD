@@ -74,7 +74,7 @@ interface RunResult {
   round: number;
   score: number;
   heroLevel: number;
-  goldUpgrades: number;
+  statPoints: number;
   augments: number;
   probes: number;
   heroShare: number;
@@ -107,9 +107,13 @@ function runGame(g: Genome, seed: number): RunResult {
       }
       // 유닛: 빈 타일이 있는 한 채운다 (조합의 재료)
       while (game.mineral >= B.SPAWN_UNIT_MINERAL && game.spawnUnitAnywhere()) {}
-      // 영웅 강화: 예비금 위로만
-      while (game.canUpgradeHero && game.mineral >= game.heroUpgradeCost + g.heroReserve) {
-        if (!game.upgradeHero()) break;
+      // 스탯 구매: 예비금 위로만, 가장 덜 산 스탯부터 (균형 구매)
+      for (let guard = 0; guard < 64; guard++) {
+        const stat = (['str', 'agi', 'int'] as const).reduce((a, b) =>
+          game.hero.bought[a] <= game.hero.bought[b] ? a : b,
+        );
+        if (!(game.canBuyStat(stat) && game.mineral >= game.statCost(stat) + g.heroReserve)) break;
+        if (!game.buyStat(stat)) break;
       }
       spendGas(game);
     }
@@ -122,7 +126,7 @@ function runGame(g: Genome, seed: number): RunResult {
     round: lastRound,
     score: game.score,
     heroLevel: game.hero.level,
-    goldUpgrades: game.hero.goldUpgrades,
+    statPoints: game.hero.bought.str + game.hero.bought.agi + game.hero.bought.int,
     augments: game.hero.augments.length,
     probes: game.probes,
     heroShare: game.heroDamageDealt / Math.max(1, game.heroDamageDealt + game.towerDamageDealt),
@@ -235,7 +239,7 @@ function evaluate(name: string, g: Genome, seeds: number[]): void {
       `  점수(중앙) ${Math.round(med(scores) / 1000)}k` +
       `  영웅Lv ${med(rs.map((x) => x.heroLevel).sort((a, b) => a - b))}` +
       `  증강 ${med(rs.map((x) => x.augments).sort((a, b) => a - b))}` +
-      `  골드강화 ${med(rs.map((x) => x.goldUpgrades).sort((a, b) => a - b))}` +
+      `  스탯 ${med(rs.map((x) => x.statPoints).sort((a, b) => a - b))}` +
       `  영웅몫 ${(med(rs.map((x) => x.heroShare).sort((a, b) => a - b)) * 100).toFixed(0)}%` +
       `  탱킹어시스트 ${(med(rs.map((x) => x.tankAssist).sort((a, b) => a - b)) * 100).toFixed(0)}%`,
   );

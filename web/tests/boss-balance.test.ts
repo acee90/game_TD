@@ -55,10 +55,10 @@ describe('Lv1 보스 — 시작 전력으로 넘을 수 있어야 한다', () =>
     expect(killRate(COMFORTABLE_BUDGET)).toBe(1);
   });
 
-  test('시작 미네랄만으로 Lv1 보스를 잡는 건 뽑기 운이다', () => {
-    const rate = killRate(B.START_MINERAL);
-    expect(rate).toBeGreaterThan(0.15);
-    expect(rate).toBeLessThan(1);
+  test('시작 미네랄만으로도 Lv1 보스는 거의 잡힌다 — 영웅 기본 스탯이 바닥을 깐다', () => {
+    // 스탯 시스템 도입으로 Lv1 영웅이 36 DPS를 치면서(기존 11) 긴 보스전에서
+    // 영웅의 누적 딜만으로도 700 HP를 채운다. "뽑기 운" 구간은 사라졌다.
+    expect(killRate(B.START_MINERAL)).toBeGreaterThan(0.9);
   });
 
   test('Lv1 보스가 즉사하지는 않는다', () => {

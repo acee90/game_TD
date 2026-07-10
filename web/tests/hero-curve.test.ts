@@ -31,8 +31,8 @@ const ATTACK_THREE = ['might', 'might', 'might'];
 
 /** 원거리 계열을 몰았을 때 — 저격 태세가 터진다 */
 const ARCHER_THREE = ['marksman', 'marksman', 'marksman'];
-const archerDps = (level: number, ids: string[], goldUpgrades = 0): number => {
-  const stats = computeStats(level, ids.map(card), goldUpgrades);
+const archerDps = (level: number, ids: string[], str = 0): number => {
+  const stats = computeStats(level, ids.map(card), { str, agi: 0, int: 0 });
   return stats.damage / stats.attackInterval;
 };
 
@@ -213,24 +213,30 @@ describe('궁수 기준선 — 3증강에 GOD 타워 한 기, 5증강에 각성'
     expect(archerDps(35, FOCUSED_FIVE, 0)).toBeGreaterThan(archerDps(35, MIXED_FIVE, 0));
   });
 
-  test('골드 강화는 증강을 대체하지 못한다 — 12번 사서도 혼합 5증강에 못 미친다', () => {
-    // 12번이면 누적 2,292 미네랄. 비용이 1.28배씩 붙어 더 사기도 어렵다.
-    expect(archerDps(35, [], 12)).toBeLessThan(archerDps(35, MIXED_FIVE, 0));
+  test('스탯은 증강을 대체하지 못한다 — 힘 20을 사도 혼합 5증강에 못 미친다', () => {
+    // 20포인트면 누적 1,830 미네랄. 스탯(골드)은 증강(선택)의 증폭기지 대체재가 아니다.
+    expect(archerDps(35, [], 20)).toBeLessThan(archerDps(35, MIXED_FIVE, 0));
   });
 
-  test('골드 강화 비용은 초선형이라 무한정 살 수 없다', () => {
+  test('스탯 구매는 선형이지만 레벨 배수가 곱해져 후반 1포인트가 더 크다', () => {
+    const worth = (level: number) => archerDps(level, [], 1) - archerDps(level, [], 0);
+    expect(worth(40)).toBeGreaterThan(worth(10) * 3);
+  });
+
+  test('스탯 비용은 완만한 선형 증가 — 배수형과 달리 수십 포인트를 살 수 있다', () => {
+    expect(H.statCost(10) - H.statCost(9)).toBe(H.statCost(1) - H.statCost(0));
     const cum = (n: number) =>
-      Array.from({ length: n }, (_, i) => H.heroUpgradeCost(i)).reduce((a, b) => a + b, 0);
-    expect(cum(20)).toBeGreaterThan(10 * cum(10));
+      Array.from({ length: n }, (_, i) => H.statCost(i)).reduce((a, b) => a + b, 0);
+    expect(cum(30)).toBeLessThan(5000); // 옛 배수형은 17회에 이미 ~8,200이었다
   });
 });
 
 describe('초반은 타워의 시간', () => {
-  test('영웅 1레벨 DPS는 GOD 타워의 1%도 안 된다', () => {
-    expect(heroDps(1)).toBeLessThan(GOD_TOWER_DPS * 0.02);
+  test('영웅 1레벨 DPS는 GOD 타워의 5%도 안 된다', () => {
+    expect(heroDps(1)).toBeLessThan(GOD_TOWER_DPS * 0.05);
   });
 
-  test('첫 증강 전(1~9레벨)에는 GOD 타워의 5분의 1도 안 된다', () => {
-    expect(heroDps(9)).toBeLessThan(GOD_TOWER_DPS * 0.2);
+  test('첫 증강 전(1~9레벨)에는 GOD 타워의 4분의 1도 안 된다', () => {
+    expect(heroDps(9)).toBeLessThan(GOD_TOWER_DPS * 0.25);
   });
 });

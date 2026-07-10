@@ -100,6 +100,7 @@ describe('라운드 진행 — 고정 간격', () => {
 
     for (let round = 0; round < 60; round++) {
       for (let step = 0; step < 100; step++) {
+        if (game.paused) game.chooseAugment(0); // 증강 일시정지에 갇히지 않게
         game.update(0.3);
         expect(game.enemies.every((e) => e.kind !== 'boss')).toBe(true);
       }
