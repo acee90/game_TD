@@ -7,7 +7,7 @@
 **[docs/documentation-rules.md](docs/documentation-rules.md)를 따른다.** 요약:
 
 - 게임 디자인 문서는 계획서가 아니라 **결정 기록**이다. 프로토타입 → 측정 → 결정 → 기록 순서.
-- 계층: 비전·필러([docs/vision.md](docs/vision.md)) / 명세([docs/game-system-spec.md](docs/game-system-spec.md)) / 근거 자료(정량 리포트+플레이테스트) / 시트([docs/balance/](docs/balance/)). 아이디어는 [docs/backlog.md](docs/backlog.md).
+- 계층: 비전·필러([docs/design/vision.md](docs/design/vision.md)) / 명세([docs/design/game-system-spec.md](docs/design/game-system-spec.md)) / 근거 자료(정량 리포트+플레이테스트) / 시트([docs/balance/](docs/balance/)). 아이디어는 [docs/design/backlog.md](docs/design/backlog.md).
 - 모든 문서에 상태 헤더(현행/초안/대체됨/보관) — **"현행"만 기준으로 삼는다.** 파일명은 영문 kebab-case.
 - **수치의 원본은 코드다** (`web/src/data/*.ts`). 시트는 `cd web && npm run gen:balance`로
   생성하고 손으로 고치지 않는다. `tests/balance-csv.test.ts`가 일치를 강제한다.

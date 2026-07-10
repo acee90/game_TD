@@ -1,5 +1,5 @@
 // ───────── 밸런스 테이블 ─────────
-// 출처: docs/god-td-x-vz056-map-analysis-v1.0.md
+// 출처: docs/reference/god-td-x-vz056-map-analysis-v1.0.md
 //
 // [원본확정] 맵파일에서 직접 읽은 수치. 바꾸면 원작 재현이 깨진다.
 // [프로토]   원본이 EUD로 가려져 읽을 수 없어 플레이 가능하게 정한 수치.

@@ -10,22 +10,9 @@
 
 ## 0. 문서 지도
 
-| 문서 | 상태 | 역할 |
-|---|---|---|
-| [vision.md](vision.md) | 현행 | 비전 · 코어 필러 — 최상위 기준 |
-| **이 문서** | 현행 | 시스템 전체 명세 + 목표 지표 + 설계 결정 기록 |
-| [backlog.md](backlog.md) | 현행 | 미확정 아이디어 대기실 |
-| [documentation-rules.md](documentation-rules.md) | 현행 | 문서화 규칙 |
-| [god-td-x-vz056-map-analysis-v1.0.md](god-td-x-vz056-map-analysis-v1.0.md) | 현행 (참조) | 원본 맵 리버스엔지니어링 — [원본확정]의 출처 |
-| [dopamine-design-review-v0.1.md](dopamine-design-review-v0.1.md) | 현행 (리포트) | 보상 리듬 측정과 80/20 처방 |
-| [ga-policy-validation-v0.1.md](ga-policy-validation-v0.1.md) | 현행 (리포트) | GA 밸런스 검증 v0.1/v0.2 |
-| [hero-tower-power-balance-v0.1.md](hero-tower-power-balance-v0.1.md) | 현행 (리포트) | 영웅/타워 지분 실측 |
-| `balance/*.csv` | 현행 (자동 생성) | 밸런스 시트 (`npm run gen:balance`) |
-| [merge-td-design-draft-v0.3.md](merge-td-design-draft-v0.3.md) | **대체됨** → vision.md | 옛 방향(모바일·고정 40라운드) 초안 |
-| [sequence-table-v0.1.md](sequence-table-v0.1.md) | 대체됨 (v0.3 초안의 부속) | 40라운드 레벨 디자인 |
-| [tower-skill-sheet-v0.1.md](tower-skill-sheet-v0.1.md) | 대체됨 (v0.3 초안의 부속) | 8아키타입 스킬 시트 |
-| [god-td-system-notes-v0.1.md](god-td-system-notes-v0.1.md) | 보관 | 초기 시스템 정리 (맵분석으로 대체) |
-| [god-td-ops-layer-analysis-v0.1.md](god-td-ops-layer-analysis-v0.1.md) | 보관 | 운영 레이어 초기 분석 |
+전체 문서 목록과 상태는 **[docs/README.md](../README.md)**에 있다. 이 명세는
+[vision.md](vision.md)(비전·필러)를 상위 기준으로 두고, 근거는
+[../reports/](../reports/)의 측정 리포트가 받친다.
 
 수치 표기: **[원본확정]** = 맵파일에서 직접 읽음. **[프로토]** = 원본이 EUD로 가려져
 읽을 수 없어 플레이 가능하게 정한 값.

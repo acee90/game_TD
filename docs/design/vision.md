@@ -2,7 +2,7 @@
 
 > 상태: **현행** · 최종 갱신: 2026-07-10
 > 이 문서가 모든 하위 문서·결정의 최상위 기준이다. 초안이던
-> [merge-td-design-draft-v0.3.md](merge-td-design-draft-v0.3.md)(모바일·고정 40라운드)는
+> [merge-td-design-draft-v0.3.md](../archive/merge-td-design-draft-v0.3.md)(모바일·고정 40라운드)는
 > 이 문서로 **대체됐다**.
 
 ---
