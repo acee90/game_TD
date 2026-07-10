@@ -223,11 +223,12 @@ describe('궁수 기준선 — 3증강에 GOD 타워 한 기, 5증강에 각성'
     expect(worth(40)).toBeGreaterThan(worth(10) * 3);
   });
 
-  test('스탯 비용은 완만한 선형 증가 — 배수형과 달리 수십 포인트를 살 수 있다', () => {
+  test('스탯 비용은 선형 증가 — 배수형과 달리 수십 포인트를 살 수 있다', () => {
     expect(H.statCost(10) - H.statCost(9)).toBe(H.statCost(1) - H.statCost(0));
     const cum = (n: number) =>
       Array.from({ length: n }, (_, i) => H.statCost(i)).reduce((a, b) => a + b, 0);
-    expect(cum(30)).toBeLessThan(5000); // 옛 배수형은 17회에 이미 ~8,200이었다
+    // 30회(성장 곡선 포함 ≈ 40pt)에 ~6,800 — 옛 배수형은 17회에 이미 ~8,200이었다
+    expect(cum(30)).toBeLessThan(8000);
   });
 });
 

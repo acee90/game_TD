@@ -51,12 +51,12 @@ export const HP_PER_STR = 18;
 export const AS_PER_AGI = 0.04;
 /** 공격 간격 하한 — 민첩을 아무리 사도 이 밑으로는 안 내려간다 */
 export const MIN_ATTACK_INTERVAL = 0.25;
-/** 지능 1당 스킬 피해 +6% */
-export const SKILL_PER_INT = 0.06;
+/** 지능 1당 스킬 피해 +3.5% */
+export const SKILL_PER_INT = 0.035;
 
 /** 스탯 구매 비용 — 그 스탯을 n번 산 뒤의 다음 구매 가격 */
 export const STAT_BASE_COST = 25;
-export const STAT_COST_GROWTH = 8;
+export const STAT_COST_GROWTH = 14;
 export const statCost = (bought: number): number => STAT_BASE_COST + STAT_COST_GROWTH * bought;
 
 /**
@@ -86,7 +86,7 @@ export const levelMult = (level: number): number => 1 + LEVEL_MULT_GROWTH * (lev
  * 체력의 레벨 배수는 공격력보다 완만하다. 같은 기울기를 쓰면 힘몰빵 탱커가
  * 후반에 부술 수 없는 벽이 되어 생존 라운드를 혼자 20라운드씩 벌었다.
  */
-export const HP_LEVEL_MULT_GROWTH = 1.0;
+export const HP_LEVEL_MULT_GROWTH = 2.4;
 export const hpLevelMult = (level: number): number => 1 + HP_LEVEL_MULT_GROWTH * (level - 1);
 
 /**
