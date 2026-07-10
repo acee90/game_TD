@@ -61,8 +61,15 @@ export const START_LIVES = 20;
 // ───────── 지출 — 원본에는 트리거상 자원 차감이 없다(§8.3). 아래는 전부 [프로토] ─────────
 // 원본에서는 SC 네이티브 빌드 코스트로 처리되었을 것으로 보이나 수치를 읽을 수 없다.
 export const SPAWN_UNIT_MINERAL = 12; // 소용돌이 클릭 → Lv1 생성 (strings:412)
-export const PROBE_MINERAL = 30; // 프로브 생산 (trigger #72, 차감액 미확인)
-export const PROBE_MAX = 8;
+export const PROBE_MINERAL = 30; // 첫 프로브 값 (trigger #72, 차감액 미확인)
+/**
+ * [프로토] 프로브 비용은 지수로 오른다 — "지금 전력이냐 미래 경제냐"의 일꾼 딜레마.
+ * 8기 고정 상한이던 시절에는 GA가 전 세대 7~8로 수렴하는 무뇌 투자였다.
+ */
+export const PROBE_COST_GROWTH = 1.3;
+export const probeCost = (owned: number): number =>
+  Math.round(PROBE_MINERAL * Math.pow(PROBE_COST_GROWTH, owned));
+export const PROBE_MAX = 16;
 export const GAS_PER_PROBE_SECOND = 0.25;
 
 /** 파일런 종족 업그레이드. 가스 소비. 원본은 SC 네이티브라 비용 미확인(§8.4~8.5) [프로토] */

@@ -85,6 +85,16 @@ export const DECOY_AGGRO_RANGE = 62;
 /** 허수아비를 세울 만한가 — 영웅 앞쪽 이 거리 안에 몹이 있으면 세운다 */
 export const DECOY_AUTOCAST_RANGE = 170;
 
+// ───────── 가스 스킬 개조 트랙 ─────────
+// 가스의 두 번째 소비처 — "타워 업그레이드냐 영웅 스킬이냐"가 선택이 되도록.
+// 트랙은 둘: 스킬 피해 +8%/구매(곱), 쿨타임 -6%/구매(곱, 하한은 resolveSkill의 1초).
+export const GAS_SKILL_DAMAGE_MULT = 1.08;
+export const GAS_SKILL_CDR_MULT = 0.94;
+export const GAS_SKILL_BASE_COST = 30;
+export const GAS_SKILL_COST_GROWTH = 1.35;
+export const gasSkillCost = (bought: number): number =>
+  Math.round(GAS_SKILL_BASE_COST * Math.pow(GAS_SKILL_COST_GROWTH, bought));
+
 /**
  * 스킬을 개조하는 값들. 증강이 여기에 기여한다.
  * 곱셈형은 1에서, 덧셈형은 0에서 출발한다.

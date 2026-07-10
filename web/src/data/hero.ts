@@ -410,6 +410,14 @@ export function skillGateAllows(augment: Augment, currentSkill: SkillId | null):
  */
 export const ADAPTIVE_KIND_WEIGHT = 0.9;
 
+// ───────── 증강 리롤 (가스) ─────────
+// 마음에 안 드는 선택지 3장을 가스로 다시 뽑는다. 한 선택당 최대 2회 —
+// 무제한이면 플래티넘이 뜰 때까지 굴리는 단순 노동이 된다.
+export const AUGMENT_REROLL_MAX = 2;
+export const AUGMENT_REROLL_BASE_GAS = 12;
+/** n번째 리롤(0부터)의 가스 값 — 같은 선택 안에서 두 번째가 더 비싸다 */
+export const augmentRerollCost = (used: number): number => AUGMENT_REROLL_BASE_GAS * (used + 1);
+
 export const SYNERGY_THRESHOLD = 3;
 /** 이만큼 모이면 대특화 */
 export const MASTERY_THRESHOLD = 5;

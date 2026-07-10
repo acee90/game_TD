@@ -42,6 +42,9 @@ el.sell.addEventListener('click', () => game.sellSelected());
 el.statButtons.str.addEventListener('click', () => game.buyStat('str'));
 el.statButtons.agi.addEventListener('click', () => game.buyStat('agi'));
 el.statButtons.int.addEventListener('click', () => game.buyStat('int'));
+el.reroll.addEventListener('click', () => game.rerollAugments());
+el.gasSkillDmg.addEventListener('click', () => game.buyGasSkill('damage'));
+el.gasSkillCdr.addEventListener('click', () => game.buyGasSkill('cdr'));
 el.bossLevels.forEach((button, i) => button.addEventListener('click', () => game.summonBoss(i + 1)));
 el.upgrades.forEach((button, i) => button.addEventListener('click', () => game.upgrade(i as Race)));
 el.augCards.addEventListener('click', (event) => {

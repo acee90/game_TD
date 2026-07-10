@@ -5,7 +5,8 @@
 import { ALTAR_PATH_DISTANCE, PATH_LENGTH, nearestPathDistance, pathPos } from '../core/map';
 import * as H from '../data/hero';
 import type { AugmentCard, AugmentEffect } from '../data/hero';
-import { foldMods, resolveSkill, type ResolvedSkill, type SkillId } from '../data/skills';
+import * as K from '../data/skills';
+import { foldMods, resolveSkill, type ResolvedSkill, type SkillId, type SkillModPatch } from '../data/skills';
 
 export interface HeroStats {
   readonly maxHp: number;
@@ -115,6 +116,10 @@ export class Hero {
   /** 골드 구매 횟수 (포인트가 아니다 — 살수록 한 번에 더 많은 포인트를 준다) */
   bought: BoughtStats = NO_STATS;
 
+  /** 가스로 산 스킬 개조 횟수 */
+  gasSkillDamage = 0;
+  gasSkillCdr = 0;
+
   /** 구매 횟수를 포인트로 환산 */
   get points(): BoughtStats {
     return {
@@ -177,14 +182,19 @@ export class Hero {
     return this.augments.find((c) => c.augment.grantsSkill)?.augment.grantsSkill ?? null;
   }
 
-  /** 개조가 반영된 스킬 수치 */
+  /** 개조가 반영된 스킬 수치 — 증강 개조와 가스 개조가 함께 접힌다 */
   get skill(): ResolvedSkill | null {
     const id = this.skillId;
     if (!id) return null;
     const patches = this.augments
       .map((c) => c.augment.skillMod)
       .filter((m): m is NonNullable<typeof m> => m !== undefined);
-    return resolveSkill(id, foldMods(patches));
+    const gas: SkillModPatch[] = [];
+    if (this.gasSkillDamage > 0)
+      gas.push({ damageMult: Math.pow(K.GAS_SKILL_DAMAGE_MULT, this.gasSkillDamage) });
+    if (this.gasSkillCdr > 0)
+      gas.push({ cooldownMult: Math.pow(K.GAS_SKILL_CDR_MULT, this.gasSkillCdr) });
+    return resolveSkill(id, foldMods([...patches, ...gas]));
   }
 
   get skillReady(): boolean {

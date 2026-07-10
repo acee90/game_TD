@@ -47,6 +47,8 @@ export class Game {
   readonly hero: Hero;
   /** 증강 선택지가 떠 있으면 게임이 멈춘다 */
   augmentChoices: AugmentCard[] = [];
+  /** 이번 증강 선택에서 쓴 리롤 수 — 새 선택지가 뜰 때 0으로 돌아간다 */
+  rerollsUsed = 0;
 
   /**
    * 높은 등급 증강을 고른 대가. 몹 체력에 영구히 곱해진다.
@@ -267,7 +269,69 @@ export class Game {
     const hero = this.hero;
     if (hero.pendingAugmentPicks <= 0) return;
     this.augmentChoices = rollAugmentChoices(hero, this.rand);
+    this.rerollsUsed = 0;
     if (this.augmentChoices.length === 0) hero.pendingAugmentPicks = 0;
+  }
+
+  // ── 증강 리롤 (가스) ──
+  get rerollCost(): number {
+    return H.augmentRerollCost(this.rerollsUsed);
+  }
+
+  get canReroll(): boolean {
+    return (
+      this.augmentChoices.length > 0 &&
+      this.rerollsUsed < H.AUGMENT_REROLL_MAX &&
+      this.gas >= this.rerollCost
+    );
+  }
+
+  /** 선택지 3장을 가스로 다시 뽑는다 — 한 선택당 최대 2회 */
+  rerollAugments(): boolean {
+    if (this.augmentChoices.length === 0) return false;
+    if (this.rerollsUsed >= H.AUGMENT_REROLL_MAX) {
+      this.message = `리롤은 선택당 ${H.AUGMENT_REROLL_MAX}회까지입니다.`;
+      return false;
+    }
+    const cost = this.rerollCost;
+    if (this.gas < cost) {
+      this.message = `가스 부족 — 리롤 ${cost} 필요.`;
+      return false;
+    }
+    this.gas -= cost;
+    this.rerollsUsed++;
+    this.augmentChoices = rollAugmentChoices(this.hero, this.rand);
+    return true;
+  }
+
+  // ── 가스 스킬 개조 ──
+  gasSkillCost(track: 'damage' | 'cdr'): number {
+    return K.gasSkillCost(track === 'damage' ? this.hero.gasSkillDamage : this.hero.gasSkillCdr);
+  }
+
+  canBuyGasSkill(track: 'damage' | 'cdr'): boolean {
+    return !this.over && this.hero.skillId !== null && this.gas >= this.gasSkillCost(track);
+  }
+
+  /** 가스로 스킬을 개조한다 — 종족 업그레이드와 같은 지갑을 두고 경쟁한다 */
+  buyGasSkill(track: 'damage' | 'cdr'): boolean {
+    if (this.hero.skillId === null) {
+      this.message = '개조할 스킬이 없습니다 — 스킬 증강을 먼저 얻으세요.';
+      return false;
+    }
+    const cost = this.gasSkillCost(track);
+    if (this.gas < cost) {
+      this.message = `가스 부족 — 개조 ${cost} 필요.`;
+      return false;
+    }
+    this.gas -= cost;
+    if (track === 'damage') this.hero.gasSkillDamage++;
+    else this.hero.gasSkillCdr++;
+    this.message =
+      track === 'damage'
+        ? `스킬 피해 개조 +${this.hero.gasSkillDamage} · 다음 ${this.gasSkillCost('damage')}`
+        : `스킬 쿨타임 개조 +${this.hero.gasSkillCdr} · 다음 ${this.gasSkillCost('cdr')}`;
+    return true;
   }
 
   /** 필드에 살아있는 보스들의 레벨 */
@@ -394,18 +458,23 @@ export class Game {
   }
 
   // ── 프로브 / 업그레이드 ──
+  get probeCost(): number {
+    return B.probeCost(this.probes);
+  }
+
   buyProbe(): boolean {
     if (this.probes >= B.PROBE_MAX) {
       this.message = `프로브는 최대 ${B.PROBE_MAX}기입니다.`;
       return false;
     }
-    if (this.mineral < B.PROBE_MINERAL) {
-      this.message = `미네랄 부족 — 프로브 ${B.PROBE_MINERAL} 필요.`;
+    const cost = this.probeCost;
+    if (this.mineral < cost) {
+      this.message = `미네랄 부족 — 프로브 ${cost} 필요.`;
       return false;
     }
-    this.mineral -= B.PROBE_MINERAL;
+    this.mineral -= cost;
     this.probes++;
-    this.message = '프로브를 생산하였습니다. 가스를 채취합니다.';
+    this.message = `프로브 ${this.probes}기 — 가스를 채취합니다. 다음 ${this.probeCost}.`;
     return true;
   }
 

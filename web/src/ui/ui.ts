@@ -46,6 +46,10 @@ export interface Elements {
   readonly bossState: HTMLElement;
   readonly bossLevels: readonly HTMLButtonElement[];
   readonly probe: HTMLButtonElement;
+  readonly reroll: HTMLButtonElement;
+  readonly gasSkillRow: HTMLElement;
+  readonly gasSkillDmg: HTMLButtonElement;
+  readonly gasSkillCdr: HTMLButtonElement;
   readonly spawn: HTMLButtonElement;
   readonly sell: HTMLButtonElement;
   readonly upgrades: readonly HTMLButtonElement[];
@@ -94,6 +98,10 @@ export function bindElements(): Elements {
     bossState: $('bossState'),
     bossLevels: [1, 2, 3, 4, 5, 6].map((n) => $<HTMLButtonElement>(`boss${n}`)),
     probe: $<HTMLButtonElement>('probe'),
+    reroll: $<HTMLButtonElement>('reroll'),
+    gasSkillRow: $('gasSkillRow'),
+    gasSkillDmg: $<HTMLButtonElement>('gasSkillDmg'),
+    gasSkillCdr: $<HTMLButtonElement>('gasSkillCdr'),
     spawn: $<HTMLButtonElement>('spawn'),
     sell: $<HTMLButtonElement>('sell'),
     upgrades: [0, 1, 2, 3].map((i) => $<HTMLButtonElement>(`up${i}`)),
@@ -202,6 +210,7 @@ function refreshHero(el: Elements, game: Game): void {
 
   const skill = hero.skill;
   el.skill.hidden = skill === null;
+  if (skill === null) el.gasSkillRow.hidden = true;
   if (skill) {
     const remain = Math.max(0, hero.skillCooldown);
     const charged = 1 - remain / skill.cooldown;
@@ -216,6 +225,12 @@ function refreshHero(el: Elements, game: Game): void {
       ? game.shouldAutoCastSkill ? '시전!' : '대기 중'
       : `${remain.toFixed(1)}s`;
     el.skillText.textContent = `${skill.def.name}${damage}${targets} · ${state}`;
+
+    el.gasSkillRow.hidden = false;
+    el.gasSkillDmg.textContent = `스킬 피해 +8% · ${game.gasSkillCost('damage')}가스 (${hero.gasSkillDamage})`;
+    el.gasSkillDmg.disabled = !game.canBuyGasSkill('damage');
+    el.gasSkillCdr.textContent = `쿨타임 -6% · ${game.gasSkillCost('cdr')}가스 (${hero.gasSkillCdr})`;
+    el.gasSkillCdr.disabled = !game.canBuyGasSkill('cdr');
   }
 
   const synergies = HD.activeSynergies(hero.augments);
@@ -234,6 +249,10 @@ function refreshAugmentOverlay(el: Elements, game: Game): void {
   el.augOverlay.style.display = 'flex';
   el.augSub.textContent =
     `영웅 Lv${game.hero.level} — 하나를 고르세요`;
+  const left = HD.AUGMENT_REROLL_MAX - game.rerollsUsed;
+  el.reroll.textContent =
+    left > 0 ? `리롤 ${game.rerollCost}가스 · ${left}회 남음 (보유 ${Math.floor(game.gas)})` : '리롤 소진';
+  el.reroll.disabled = !game.canReroll;
   el.augCards.innerHTML = game.augmentChoices
     .map((card, i) => {
       const kindColor = HD.AUGMENT_KIND_COLOR[card.augment.kind];
@@ -269,8 +288,8 @@ export function refresh(el: Elements, game: Game): void {
     button.classList.toggle('top', open && level === game.maxBossLevel);
   });
 
-  el.probe.textContent = `프로브 ${B.PROBE_MINERAL} (${game.probes}/${B.PROBE_MAX})`;
-  el.probe.disabled = game.probes >= B.PROBE_MAX || game.mineral < B.PROBE_MINERAL;
+  el.probe.textContent = `프로브 ${game.probeCost} (${game.probes}/${B.PROBE_MAX})`;
+  el.probe.disabled = game.probes >= B.PROBE_MAX || game.mineral < game.probeCost;
 
   el.spawn.textContent = `유닛 생성 ${B.SPAWN_UNIT_MINERAL}`;
   el.spawn.disabled = game.mineral < B.SPAWN_UNIT_MINERAL;
