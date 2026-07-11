@@ -177,6 +177,7 @@ namespace UnityEngine
         public Color color { get; set; }
         public void SetFloat(string name, float value) { }
         public void SetInt(string name, int value) { }
+        public void SetTexture(string name, Texture value) { }
         public Texture mainTexture { get; set; }
         public void SetColor(string name, Color value) { }
         public void EnableKeyword(string keyword) { }
@@ -426,6 +427,35 @@ namespace UnityEngine
     public class RectOffset
     {
         public RectOffset(int left, int right, int top, int bottom) { }
+    }
+
+    public enum RenderTextureFormat { Default }
+
+    public class RenderTexture : Texture
+    {
+        public int width => 0;
+        public int height => 0;
+        public RenderTextureFormat format => default;
+        public static RenderTexture GetTemporary(int width, int height, int depthBuffer, RenderTextureFormat format) => null;
+        public static void ReleaseTemporary(RenderTexture temp) { }
+    }
+
+    public static class Graphics
+    {
+        public static void Blit(Texture source, RenderTexture dest) { }
+        public static void Blit(Texture source, RenderTexture dest, Material mat, int pass) { }
+    }
+
+    [AttributeUsage(AttributeTargets.Field)]
+    public sealed class RangeAttribute : Attribute
+    {
+        public RangeAttribute(float min, float max) { }
+    }
+
+    [AttributeUsage(AttributeTargets.Class)]
+    public sealed class RequireComponent : Attribute
+    {
+        public RequireComponent(Type requiredComponent) { }
     }
 
     public class GUIStyle

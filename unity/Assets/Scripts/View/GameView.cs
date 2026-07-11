@@ -344,6 +344,7 @@ namespace GodTD.View
             cam.backgroundColor = BG;
             cam.nearClipPlane = 1f;
             cam.farClipPlane = 300f;
+            if (cam.GetComponent<BloomEffect>() == null) cam.gameObject.AddComponent<BloomEffect>();
         }
 
         void BuildLights()
