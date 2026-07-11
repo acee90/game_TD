@@ -8,7 +8,8 @@
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
     "test": "vitest run",
-    "gen:balance": "vite-node tools/gen-balance-csv.ts"
+    "gen:balance": "vite-node tools/gen-balance-csv.ts",
+    "sim:ga": "vite-node tools/ga-sim.ts"
   },
   "devDependencies": {
     "@types/node": "^26.1.1",

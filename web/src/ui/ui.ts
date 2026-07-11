@@ -35,13 +35,22 @@ export interface Elements {
   readonly heroXpBar: HTMLElement;
   readonly heroXp: HTMLElement;
   readonly heroStats: HTMLElement;
+  readonly statButtons: Record<HD.StatId, HTMLButtonElement>;
+  readonly buyXp: HTMLButtonElement;
   readonly heroAugs: HTMLElement;
+  readonly skill: HTMLElement;
+  readonly skillCd: HTMLElement;
+  readonly skillText: HTMLElement;
   readonly augOverlay: HTMLElement;
   readonly augSub: HTMLElement;
   readonly augCards: HTMLElement;
   readonly bossState: HTMLElement;
   readonly bossLevels: readonly HTMLButtonElement[];
   readonly probe: HTMLButtonElement;
+  readonly reroll: HTMLButtonElement;
+  readonly gasSkillRow: HTMLElement;
+  readonly gasSkillDmg: HTMLButtonElement;
+  readonly gasSkillCdr: HTMLButtonElement;
   readonly spawn: HTMLButtonElement;
   readonly sell: HTMLButtonElement;
   readonly upgrades: readonly HTMLButtonElement[];
@@ -75,13 +84,26 @@ export function bindElements(): Elements {
     heroXpBar: $('heroXpBar'),
     heroXp: $('heroXp'),
     heroStats: $('heroStats'),
+    statButtons: {
+      str: $('statStr') as HTMLButtonElement,
+      agi: $('statAgi') as HTMLButtonElement,
+      int: $('statInt') as HTMLButtonElement,
+    },
+    buyXp: $<HTMLButtonElement>('buyXp'),
     heroAugs: $('heroAugs'),
+    skill: $('skill'),
+    skillCd: $('skillCd'),
+    skillText: $('skillText'),
     augOverlay: $('augOverlay'),
     augSub: $('augSub'),
     augCards: $('augCards'),
     bossState: $('bossState'),
     bossLevels: [1, 2, 3, 4, 5, 6].map((n) => $<HTMLButtonElement>(`boss${n}`)),
     probe: $<HTMLButtonElement>('probe'),
+    reroll: $<HTMLButtonElement>('reroll'),
+    gasSkillRow: $('gasSkillRow'),
+    gasSkillDmg: $<HTMLButtonElement>('gasSkillDmg'),
+    gasSkillCdr: $<HTMLButtonElement>('gasSkillCdr'),
     spawn: $<HTMLButtonElement>('spawn'),
     sell: $<HTMLButtonElement>('sell'),
     upgrades: [0, 1, 2, 3].map((i) => $<HTMLButtonElement>(`up${i}`)),
@@ -161,7 +183,7 @@ function refreshHero(el: Elements, game: Game): void {
     : `부활 ${Math.ceil(hero.respawnTimer)}s`;
 
   el.heroXpBar.style.width = `${(hero.xp / hero.xpNeeded) * 100}%`;
-  el.heroXp.textContent = `${hero.xp}/${hero.xpNeeded}`;
+  el.heroXp.textContent = `${Math.floor(hero.xp)}/${hero.xpNeeded}`;
 
   const dps = (stats.damage / stats.attackInterval).toFixed(0);
   const parts = [
@@ -174,6 +196,16 @@ function refreshHero(el: Elements, game: Game): void {
   ].filter(Boolean);
   el.heroStats.textContent = parts.join(' · ');
 
+  // 레벨업 포인트가 들어갈 스탯 — 선택(focus)은 무료·즉시, ● 가 현재 선택
+  for (const stat of HD.STAT_IDS) {
+    const button = el.statButtons[stat];
+    const mark = hero.focus === stat ? '●' : '';
+    button.textContent = `${mark}${HD.STAT_LABEL[stat]} ${hero.bought[stat]}`;
+    button.disabled = false;
+  }
+  el.buyXp.textContent = `XP +${HD.XP_BUY_AMOUNT} (${HD.XP_BUY_GOLD})`;
+  el.buyXp.disabled = !game.canBuyXp;
+
   el.heroAugs.innerHTML = hero.augments
     .map((card) => {
       const color = HD.AUGMENT_KIND_COLOR[card.augment.kind];
@@ -181,6 +213,31 @@ function refreshHero(el: Elements, game: Game): void {
       return `<span class="aug" style="background:${color};box-shadow:0 0 0 1.5px ${border}">${card.augment.name}</span>`;
     })
     .join('');
+
+  const skill = hero.skill;
+  el.skill.hidden = skill === null;
+  if (skill === null) el.gasSkillRow.hidden = true;
+  if (skill) {
+    const remain = Math.max(0, hero.skillCooldown);
+    const charged = 1 - remain / skill.cooldown;
+    el.skill.classList.toggle('ready', game.canUseSkill);
+    el.skillCd.style.transform = `scaleX(${charged.toFixed(3)})`;
+
+    const damage = skill.damageMult > 0
+      ? ` · 피해 ${Math.round(hero.stats.damage * skill.damageMult)}`
+      : '';
+    const targets = skill.targets > 0 ? ` · ${skill.targets}발` : '';
+    const state = game.canUseSkill
+      ? game.shouldAutoCastSkill ? '시전!' : '대기 중'
+      : `${remain.toFixed(1)}s`;
+    el.skillText.textContent = `${skill.def.name}${damage}${targets} · ${state}`;
+
+    el.gasSkillRow.hidden = false;
+    el.gasSkillDmg.textContent = `스킬 피해 +8% · ${game.gasSkillCost('damage')}가스 (${hero.gasSkillDamage})`;
+    el.gasSkillDmg.disabled = !game.canBuyGasSkill('damage');
+    el.gasSkillCdr.textContent = `쿨타임 -6% · ${game.gasSkillCost('cdr')}가스 (${hero.gasSkillCdr})`;
+    el.gasSkillCdr.disabled = !game.canBuyGasSkill('cdr');
+  }
 
   const synergies = HD.activeSynergies(hero.augments);
   if (synergies.length) {
@@ -197,16 +254,16 @@ function refreshAugmentOverlay(el: Elements, game: Game): void {
   }
   el.augOverlay.style.display = 'flex';
   el.augSub.textContent =
-    `영웅 Lv${game.hero.level} — 하나를 고르세요 · 지금 몹 체력 ×${game.enemyHpMultiplier.toFixed(2)}`;
+    `영웅 Lv${game.hero.level} — 하나를 고르세요`;
+  const left = HD.AUGMENT_REROLL_MAX - game.rerollsUsed;
+  el.reroll.textContent =
+    left > 0 ? `리롤 ${game.rerollCost}가스 · ${left}회 남음 (보유 ${Math.floor(game.gas)})` : '리롤 소진';
+  el.reroll.disabled = !game.canReroll;
   el.augCards.innerHTML = game.augmentChoices
     .map((card, i) => {
       const kindColor = HD.AUGMENT_KIND_COLOR[card.augment.kind];
       const kindLabel = HD.AUGMENT_KIND_LABEL[card.augment.kind];
       const rarity = HD.RARITIES[card.rarity];
-      const cost =
-        rarity.enemyHpMult > 1
-          ? `<div class="cost">몹 체력 +${Math.round((rarity.enemyHpMult - 1) * 100)}%</div>`
-          : '<div class="cost safe">대가 없음</div>';
       return `<button class="augcard" data-index="${i}" style="border-color:${rarity.color}">
         <div class="k">
           <span style="color:${kindColor}">${kindLabel}</span>
@@ -214,7 +271,6 @@ function refreshAugmentOverlay(el: Elements, game: Game): void {
         </div>
         <div class="n">${card.augment.name}</div>
         <div class="d">${card.augment.description}</div>
-        ${cost}
       </button>`;
     })
     .join('');
@@ -238,11 +294,11 @@ export function refresh(el: Elements, game: Game): void {
     button.classList.toggle('top', open && level === game.maxBossLevel);
   });
 
-  el.probe.textContent = `프로브 ${B.PROBE_MINERAL} (${game.probes}/${B.PROBE_MAX})`;
-  el.probe.disabled = game.probes >= B.PROBE_MAX || game.mineral < B.PROBE_MINERAL;
+  el.probe.textContent = `프로브 ${game.probeCost} (${game.probes}/${B.PROBE_MAX})`;
+  el.probe.disabled = game.probes >= B.PROBE_MAX || game.mineral < game.probeCost;
 
-  el.spawn.textContent = `유닛 생성 ${B.SPAWN_UNIT_MINERAL}`;
-  el.spawn.disabled = game.mineral < B.SPAWN_UNIT_MINERAL;
+  el.spawn.textContent = `유닛 생성 ${game.spawnCost}`;
+  el.spawn.disabled = game.mineral < game.spawnCost;
 
   el.sell.disabled = !game.selected?.tower;
 

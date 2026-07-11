@@ -33,6 +33,23 @@ export interface Enemy extends EnemySpec {
   dead?: boolean;
   /** 마지막으로 때린 게 영웅인가 — 막타 경험치 보너스 판정 */
   lastHitByHero?: boolean;
+  /** 스킬 감속 디버프 남은 시간 */
+  slowTimer?: number;
+  /** 감속 중일 때의 이동속도 배수 */
+  slowFactor?: number;
+  /** 이번 프레임에 영웅/허수아비에게 붙잡혀 있는가 — 탱킹 기여 집계용 */
+  held?: boolean;
+}
+
+/** 영웅이 세운 미끼. 몹을 붙잡아 시간을 번다. */
+export interface Decoy {
+  /** 경로 위 위치 */
+  distance: number;
+  hp: number;
+  maxHp: number;
+  life: number;
+  /** 주변 몹을 강제로 끌어당기는가 */
+  taunts: boolean;
 }
 
 export interface Shot {

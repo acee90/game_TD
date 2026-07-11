@@ -386,9 +386,13 @@ describe('적이 영웅을 때린다', () => {
     expect(hero.hp).toBeLessThan(full);
   });
 
-  test('보스는 잡몹보다 훨씬 아프고, 레벨이 높을수록 더 아프다', () => {
-    expect(H.bossDamage(1, 10)).toBeGreaterThan(H.enemyDamage(10));
-    expect(H.bossDamage(6, 10)).toBeGreaterThan(H.bossDamage(1, 10));
+  test('보스 접촉 피해 — Lv3까지는 무해하게 지나가고, Lv4부터 잡몹보다 훨씬 아프다', () => {
+    // 저레벨 보스는 소득원이다. 위협은 누출 라이프(2+L)만으로 충분하다 (플레이테스트 2026-07-11)
+    for (let lv = 1; lv <= H.BOSS_HARMLESS_MAX_LEVEL; lv++) {
+      expect(H.bossDamage(lv, 10)).toBe(0);
+    }
+    expect(H.bossDamage(4, 10)).toBeGreaterThan(H.enemyDamage(10));
+    expect(H.bossDamage(6, 10)).toBeGreaterThan(H.bossDamage(4, 10));
   });
 
   test('몹 공격력은 선형이다 — 영웅 체력도 선형이라 나란히 간다', () => {
@@ -423,17 +427,25 @@ describe('적이 영웅을 때린다', () => {
 
 describe('빌드 정체성 — 탱커는 버티고 원거리는 때린다', () => {
   const aug = (id: string) => AUGMENTS.find((a) => a.id === id)!;
-  const build = (ids: string[]) => computeStats(30, ids.map((id) => H.makeCard(aug(id), 'silver')));
+  const build = (ids: string[]) =>
+    computeStats(30, ids.map((id) => H.makeCard(aug(id), 'silver')));
 
   const TANK = ['bulwark', 'bulwark', 'plating'];
   const RANGED = ['might', 'might', 'might'];
 
   /** 시뮬레이션에서 관측된 라운드별 전형적 영웅 레벨 */
-  const typicalLevel = (round: number) => Math.min(60, Math.round(1 + round * 0.95));
+  const typicalLevel = (round: number) => Math.min(60, Math.round(1 + round * 0.7));
+  const curvePoints = (level: number): number => {
+    let sum = 0;
+    for (let l = 2; l <= level; l++) sum += H.levelStatPoints(l);
+    return sum;
+  };
 
   /** 몹 10기가 붙었을 때 버티는 시간 (그 라운드의 전형적 레벨 기준) */
   const blockSeconds = (ids: string[], round: number): number => {
-    const s = computeStats(typicalLevel(round), ids.map((id) => H.makeCard(aug(id), 'silver')));
+    const level = typicalLevel(round);
+    const s = computeStats(level, ids.map((id) => H.makeCard(aug(id), 'silver')),
+      { str: curvePoints(level), agi: 0, int: 0 });
     const effectiveHp = s.maxHp / (1 - s.damageReduction);
     return effectiveHp / (10 * H.enemyDamage(round));
   };
@@ -463,9 +475,9 @@ describe('빌드 정체성 — 탱커는 버티고 원거리는 때린다', () =
   });
 
   test('탱커 증강이 막는 시간을 압도적으로 늘린다', () => {
-    // 원거리(완력×3)도 스탯 특화로 체력이 조금 붙지만 탱커에 비하면 미미하다
+    // 원거리(완력×3)도 스탯 특화(체력 +30%)로 체력이 붙지만 탱커에 비하면 미미하다
     expect(blockSeconds(TANK, 30)).toBeGreaterThan(blockSeconds([], 30) * 2);
-    expect(blockSeconds(RANGED, 30)).toBeLessThan(blockSeconds([], 30) * 1.3);
+    expect(blockSeconds(RANGED, 30)).toBeLessThanOrEqual(blockSeconds([], 30) * 1.35);
     expect(blockSeconds(TANK, 30)).toBeGreaterThan(blockSeconds(RANGED, 30) * 2);
   });
 });
@@ -497,7 +509,7 @@ describe('탐욕 증강 — 처치당 미네랄', () => {
   });
 });
 
-describe('등급 — 세지는 대신 몹이 강해진다', () => {
+describe('등급 — 뽑기 운, 대가 없음', () => {
   test('등급이 높을수록 효과가 크다', () => {
     const might = augment('might');
     const silver = H.makeCard(might, 'silver');
@@ -509,31 +521,11 @@ describe('등급 — 세지는 대신 몹이 강해진다', () => {
     expect(platinum.effect.damageMult!).toBeGreaterThan(gold.effect.damageMult!);
   });
 
-  test('실버는 대가가 없고, 위 등급은 몹 체력을 올린다', () => {
-    expect(H.RARITIES.silver.enemyHpMult).toBe(1);
-    expect(H.RARITIES.gold.enemyHpMult).toBeGreaterThan(1);
-    expect(H.RARITIES.platinum.enemyHpMult).toBeGreaterThan(H.RARITIES.gold.enemyHpMult);
-  });
-
-  test('높은 등급을 고르면 몹 체력 배수가 누적된다', () => {
-    const game = new Game();
-    expect(game.enemyHpMultiplier).toBe(1);
-
-    game.augmentChoices = [H.makeCard(augment('might'), 'platinum')];
-    game.chooseAugment(0);
-    expect(game.enemyHpMultiplier).toBeCloseTo(H.RARITIES.platinum.enemyHpMult, 5);
-
-    game.augmentChoices = [H.makeCard(augment('rapid'), 'gold')];
-    game.chooseAugment(0);
-    expect(game.enemyHpMultiplier).toBeCloseTo(
-      H.RARITIES.platinum.enemyHpMult * H.RARITIES.gold.enemyHpMult, 5);
-  });
-
-  test('실버만 고르면 몹이 강해지지 않는다', () => {
-    const game = new Game();
-    game.augmentChoices = [H.makeCard(augment('might'), 'silver')];
-    game.chooseAugment(0);
-    expect(game.enemyHpMultiplier).toBe(1);
+  test('어떤 등급을 골라도 몹은 강해지지 않는다 — 대가 메커니즘은 삭제됐다', () => {
+    // GA 검증에서 대가(몹 체력 영구 +)가 구조적 함정으로 판명됐다.
+    // 보너스는 약한 축(영웅)에, 비용은 강한 축(타워)에 얹혀 합리적
+    // 플레이어는 절대 도박하지 않았다. 등급은 순수 뽑기 운으로 남긴다.
+    expect('enemyHpMult' in H.RARITIES.platinum).toBe(false);
   });
 
   test('피해 감소는 등급으로도 60%를 넘지 못한다', () => {

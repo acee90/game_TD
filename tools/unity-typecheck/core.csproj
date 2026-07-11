@@ -1,0 +1,18 @@
+<!--
+  Core는 UnityEngine 의존이 없으므로 스텁 없이 그대로 컴파일된다.
+  이것이 Core/를 헤드리스로 시뮬레이션할 수 있는 이유다.
+
+    cd tools/unity-typecheck && dotnet build core.csproj
+-->
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>netstandard2.1</TargetFramework>
+    <LangVersion>9.0</LangVersion>
+    <Nullable>disable</Nullable>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <AssemblyName>core-check</AssemblyName>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="../../unity/Assets/Scripts/Core/*.cs" />
+  </ItemGroup>
+</Project>

@@ -1,2 +1,0 @@
-[      74ms] [ERROR] Failed to load resource: the server responded with a status of 404 (Not Found) @ http://localhost:5180/favicon.ico:0
-[  590633ms] The requested module '/src/game/economy.ts?t=1783575904900' does not provide an export named 'repeatKillProgress'

@@ -1,3 +1,5 @@
+import type { SkillId, SkillModPatch } from './skills';
+
 // ───────── 영웅 · 제단 · 증강 ─────────
 // 원본 갓타디에는 없는 신규 설계다. 근거 표기 대상이 아니다.
 //
@@ -8,31 +10,49 @@
 /** 제단은 게임 시작과 함께 주어진다. 십자 중앙 타일을 차지한다. (core/map.ts SLOT_POS[0]) */
 export const ALTAR_SLOT = 0;
 
-// ── 파워 커브 ──
-// 초반에는 타워가 주력이고 영웅은 거들 뿐이다. 영웅 1레벨 DPS는 Lv1 타워 한 기 수준이다.
-//
-// **레벨 성장은 선형이다.** 후반 역전은 레벨이 아니라 **증강 시너지**가 만든다.
-// 레벨을 지수로 두면 아무 증강이나 골라도 저절로 세져서, 증강 선택이 결과를 못 바꾼다.
-// 선형으로 두면 증강 없는 영웅은 끝까지 GOD 타워 아래에 머물고, 계열을 몰아 특화·대특화를
-// 터뜨린 영웅만 넘어선다. 그 격차가 곧 빌드의 값어치다.
+// ── 파워 커브 (2026-07-11 2안 개편) ──
+// 영웅 파워 = 스탯(레벨업 택1이 적립, XP는 골드 구매+킬) × 증강 배수(선택).
+// 두 축뿐이다 — 레벨 배수는 폐지됐다. 초반 영웅은 Lv1 타워 몇 기 수준에서 시작한다.
 
-export const HERO_BASE_HP = 200;
-export const HERO_BASE_DAMAGE = 9;
-export const HERO_BASE_RANGE = 95;
+export const HERO_BASE_RANGE = 130;
 export const HERO_ATTACK_INTERVAL = 0.8;
 export const HERO_SPEED = 88;
 /** 이 거리 안이면 도착으로 본다 (경로 위 거리 기준) */
 export const HERO_ARRIVE_EPSILON = 2;
 export const HERO_RADIUS = 11;
 
-/**
- * 레벨당 성장 — 곱셈이 아니라 덧셈이다.
- *
- * 기준: 30레벨 영웅은 증강이 없으면 GOD 타워 한 기의 절반쯤이고, 공격 계열 3개를 몰아
- * 특화를 터뜨리면 GOD 타워의 2배를 넘는다. tests/hero-curve.test.ts가 이 관계를 지킨다.
- */
-export const HERO_DAMAGE_PER_LEVEL = 18;
-export const HERO_HP_PER_LEVEL = 90;
+// ───────── 스탯 — 레벨업마다 고른다 (2026-07-11 2안 개편) ─────────
+// 힘: 기본 공격력과 체력.  민첩: 공격 속도.  지능: 스킬 피해.
+//
+// 이전에는 골드로 스탯을 직접 사고 XP는 킬에서 공짜로 왔다 — 레벨 배수(×2.4/레벨)가
+// 골드 없이 올라 영웅 파워커브가 과속했다(명세 §12 0.5, Lv17 DPS 985).
+// 이제 골드 → XP → 레벨업 → 힘/민/지 택1(focus) 한 축이다. 레벨 배수는 폐지.
+// 파워는 전부 골드 비용을 가지므로 income-curve.csv에서 타워와 같은 저울에 오른다.
+export type StatId = 'str' | 'agi' | 'int';
+export const STAT_IDS: readonly StatId[] = ['str', 'agi', 'int'];
+export const STAT_LABEL: Record<StatId, string> = { str: '힘', agi: '민첩', int: '지능' };
+
+export const HERO_BASE_STR = 2;
+export const HERO_BASE_AGI = 8;
+export const HERO_BASE_INT = 8;
+
+/** 힘 1당 공격력 — 레벨 배수 폐지의 보상으로 1 → 6 재척도 [프로토] */
+export const DMG_PER_STR = 6;
+/** 힘 1당 최대 체력 — 같은 이유로 18 → 70 [프로토] */
+export const HP_PER_STR = 70;
+/** 민첩 1당 공격 속도 +4% */
+export const AS_PER_AGI = 0.04;
+/** 공격 간격 하한 — 민첩을 아무리 골라도 이 밑으로는 안 내려간다 */
+export const MIN_ATTACK_INTERVAL = 0.25;
+/** 지능 1당 스킬 피해 +3.5% */
+export const SKILL_PER_INT = 0.035;
+
+/** 레벨업이 focus 스탯에 주는 포인트 — 후반 레벨일수록 굵게 */
+export const levelStatPoints = (level: number): number => 2 + Math.floor(level / 10);
+
+/** XP 골드 구매 (TFT식) — 1골드 = 1XP, 버튼 한 번에 20 */
+export const XP_BUY_GOLD = 20;
+export const XP_BUY_AMOUNT = 20;
 
 /**
  * 다음 레벨까지 필요한 경험치. **지수**다.
@@ -50,11 +70,10 @@ export const xpToNext = (level: number): number =>
   Math.round(XP_BASE_COST * Math.pow(XP_COST_GROWTH, level));
 
 /**
- * 경험치. 타워가 잡아도 들어오지만, 영웅이 막타를 치면 더 많이 들어온다.
- * 배수를 크게 두면 영웅을 최전선에 던지는 게 항상 정답이 되고 판마다 편차가 커진다.
- * 2배 정도면 "영웅을 굴리면 조금 빨리 큰다" 수준에서 멈춘다.
+ * 킬 XP는 부축이다 (0.65 → 0.3, 2026-07-11 2안 개편) — 주 연료는 골드 구매(XP_BUY_GOLD).
+ * 레벨 속도 목표: R45(성장 정지)에 Lv 25~30, 라운드당 ~0.6레벨.
  */
-export const XP_PER_MOB = 1;
+export const XP_PER_MOB = 0.3;
 export const HERO_LASTHIT_XP_MULT = 2;
 export const xpPerBoss = (level: number): number => 8 * level;
 
@@ -62,7 +81,7 @@ export const xpPerBoss = (level: number): number => 8 * level;
 export const HERO_RESPAWN_SECONDS = 12;
 
 /** 이 거리 안에 영웅이 보이면 몹이 멈춰서 영웅부터 친다 */
-export const HERO_AGGRO_RANGE = 62;
+export const HERO_AGGRO_RANGE = 110;
 /** 이만큼 붙으면 실제로 때린다 */
 export const ENEMY_TOUCH_RANGE = 22;
 export const ENEMY_ATTACK_INTERVAL = 1;
@@ -79,9 +98,16 @@ export const ENEMY_DAMAGE_PER_ROUND = 1.6;
 export const enemyDamage = (round: number): number =>
   ENEMY_DAMAGE_BASE + ENEMY_DAMAGE_PER_ROUND * round;
 
-/** 보스는 같은 라운드 잡몹 여러 기 몫으로 때린다 */
+/**
+ * 보스 접촉 피해.
+ *
+ * **Lv3까지는 영웅·허수아비를 공격하지 않고 그냥 지나간다** (플레이테스트 2026-07-11:
+ * 저레벨 보스는 "소환하면 얻는 소득"이고, 위협은 못 잡았을 때의 누출 라이프(2+L)만으로
+ * 충분하다). Lv4부터는 잡몹 여러 기 몫으로 때린다 — 고레벨 소환의 대가.
+ */
+export const BOSS_HARMLESS_MAX_LEVEL = 3;
 export const bossDamage = (level: number, round: number): number =>
-  enemyDamage(round) * (1.5 + 0.5 * level);
+  level <= BOSS_HARMLESS_MAX_LEVEL ? 0 : enemyDamage(round) * (1.5 + 0.5 * level);
 
 /**
  * 증강을 받는 영웅 레벨.
@@ -93,8 +119,8 @@ export const bossDamage = (level: number, round: number): number =>
  * **앞의 네 개는 80% 이상의 판이 받고**(핵심 빌드가 완성된다), 뒤의 두 개는 오래 버틴
  * 판만 받는 보상이다. 소진 후에는 AUGMENT_TAIL_EVERY 레벨마다 계속 준다.
  */
-export const AUGMENT_LEVELS: readonly number[] = [9, 16, 24, 32, 41, 51];
-export const AUGMENT_TAIL_EVERY = 12;
+export const AUGMENT_LEVELS: readonly number[] = [9, 16, 24, 30, 35, 42];
+export const AUGMENT_TAIL_EVERY = 8;
 export const AUGMENT_CHOICES = 3;
 
 /** 이 레벨에 도달하면 증강을 받는가 */
@@ -158,11 +184,17 @@ export interface Augment {
   /** 같은 증강을 몇 번까지 쌓을 수 있나 */
   readonly maxStacks: number;
   readonly effect: AugmentEffect;
+  /** 이 증강을 고르면 액티브 스킬을 얻는다 (스킬이 없을 때만 등장) */
+  readonly grantsSkill?: SkillId;
+  /** 스킬을 개조한다 */
+  readonly skillMod?: SkillModPatch;
+  /** 이 스킬을 든 영웅에게만 등장한다 */
+  readonly requiresSkill?: SkillId | 'any';
 }
 
 // ───────── 등급 ─────────
 // 증강 카드마다 등급이 무작위로 붙는다. 등급이 높으면 효과가 커지는 대신
-// **몹이 영구히 강해진다.** 지금 세지느냐, 나중을 지키느냐 — 매 선택이 도박이 된다.
+// 등급은 뽑기 운이다 — 대가는 없다. 높은 등급이 뜬 순간이 그 판의 도파민이다.
 
 export type Rarity = 'silver' | 'gold' | 'platinum';
 
@@ -171,16 +203,14 @@ export interface RarityDef {
   readonly color: string;
   /** 증강 효과의 배수. 1보다 큰 부분만 증폭한다(예: 1.3배 → 1.6배). */
   readonly power: number;
-  /** 이 등급을 고르면 몹 체력이 영구히 이만큼 곱해진다 */
-  readonly enemyHpMult: number;
   /** 뽑기 가중치 */
   readonly weight: number;
 }
 
 export const RARITIES: Record<Rarity, RarityDef> = {
-  silver: { label: '실버', color: '#9aa2c0', power: 1, enemyHpMult: 1, weight: 55 },
-  gold: { label: '골드', color: '#ffd23f', power: 1.7, enemyHpMult: 1.07, weight: 33 },
-  platinum: { label: '플래티넘', color: '#7ce7ff', power: 2.6, enemyHpMult: 1.16, weight: 12 },
+  silver: { label: '실버', color: '#9aa2c0', power: 1, weight: 55 },
+  gold: { label: '골드', color: '#ffd23f', power: 2, weight: 33 },
+  platinum: { label: '플래티넘', color: '#7ce7ff', power: 3.5, weight: 12 },
 };
 
 export const RARITY_ORDER: readonly Rarity[] = ['silver', 'gold', 'platinum'];
@@ -277,10 +307,63 @@ export const AUGMENTS: readonly Augment[] = [
     effect: { respawnCut: 4 } },
   { id: 'warlord', kind: 'utility', name: '전쟁군주', description: '모든 타워 공격력 +12%', maxStacks: 3,
     effect: { towerDamageMult: 1.12 } },
+
+  // ── 액티브 스킬 획득 (영웅은 하나만 든다)
+  { id: 'skill_whirlwind', kind: 'tank', name: '소용돌이', maxStacks: 1,
+    description: '[스킬] 주변 적 전체에 공격력 3배 · 쿨 8초',
+    effect: {}, grantsSkill: 'whirlwind' },
+  { id: 'skill_volley', kind: 'ranged', name: '일제 사격', maxStacks: 1,
+    description: '[스킬] 사거리 안 4명에게 각각 공격력 2배 · 쿨 7초',
+    effect: {}, grantsSkill: 'volley' },
+  { id: 'skill_meteor', kind: 'mage', name: '유성', maxStacks: 1,
+    description: '[스킬] 적이 가장 많은 곳에 공격력 6배 광역 · 쿨 13초',
+    effect: {}, grantsSkill: 'meteor' },
+  { id: 'skill_decoy', kind: 'utility', name: '허수아비', maxStacks: 1,
+    description: '[스킬] 앞쪽에 미끼를 세워 몹을 붙잡는다 · 쿨 18초',
+    effect: {}, grantsSkill: 'decoy' },
+
+  // ── 스킬 공용 강화 (스킬을 든 뒤에만 등장)
+  { id: 'skill_cdr', kind: 'utility', name: '냉각', maxStacks: 3,
+    description: '스킬 쿨타임 20% 감소',
+    effect: {}, skillMod: { cooldownMult: 0.8 }, requiresSkill: 'any' },
+  { id: 'skill_amp', kind: 'stat', name: '증폭', maxStacks: 3,
+    description: '스킬 피해 +45%',
+    effect: {}, skillMod: { damageMult: 1.45 }, requiresSkill: 'any' },
+
+  // ── 스킬 개조 (그 스킬을 든 뒤에만 등장) — 질적 시너지
+  { id: 'explosive_arrow', kind: 'ranged', name: '폭발 화살', maxStacks: 2,
+    description: '일제 사격의 화살마다 반경 32의 폭발',
+    effect: {}, skillMod: { explosiveRadius: 32 }, requiresSkill: 'volley' },
+  { id: 'multishot', kind: 'ranged', name: '연사', maxStacks: 3,
+    description: '일제 사격의 화살 +2발',
+    effect: {}, skillMod: { extraTargets: 2 }, requiresSkill: 'volley' },
+  { id: 'cyclone', kind: 'tank', name: '회오리', maxStacks: 2,
+    description: '소용돌이 반경 +25, 맞은 적을 2초간 40% 감속',
+    effect: {}, skillMod: { radiusAdd: 25, slowFactor: 0.6, slowSeconds: 2 }, requiresSkill: 'whirlwind' },
+  { id: 'cataclysm', kind: 'mage', name: '대재앙', maxStacks: 2,
+    description: '유성 반경 +35, 스킬 피해 +30%',
+    effect: {}, skillMod: { radiusAdd: 35, damageMult: 1.3 }, requiresSkill: 'meteor' },
+  { id: 'taunt_dummy', kind: 'utility', name: '도발 인형', maxStacks: 1,
+    description: '허수아비가 주변 몹을 강제로 끌어당기고 체력 2배',
+    effect: {}, skillMod: { decoyHpMult: 2, decoyTaunts: true }, requiresSkill: 'decoy' },
 ];
 
 /** 광역 증강은 '충격파'를 먼저 잡아야 의미가 있다 */
 export const requiresSplash = (augment: Augment): boolean => augment.id === 'novabig';
+
+/**
+ * 지금 든 스킬(없으면 null)로 이 증강을 뽑을 수 있는가.
+ *
+ * - 스킬 획득 증강은 스킬이 없을 때만 나온다 — 영웅은 스킬을 하나만 든다.
+ * - 개조 증강은 그 스킬을 든 뒤에만 나온다. '폭발 화살'은 일제 사격을 쥔 다음에야 의미가 있다.
+ *   이게 수치가 아니라 **관계**로 맺어지는 시너지다.
+ */
+export function skillGateAllows(augment: Augment, currentSkill: SkillId | null): boolean {
+  if (augment.grantsSkill) return currentSkill === null;
+  if (!augment.requiresSkill) return true;
+  if (currentSkill === null) return false;
+  return augment.requiresSkill === 'any' || augment.requiresSkill === currentSkill;
+}
 
 // ───────── 특화 시너지 ─────────
 // 증강 하나하나는 곱연산이라 이미 복리로 붙는다. 여기에 "같은 계열을 모으면 더 준다"를
@@ -290,6 +373,22 @@ export const requiresSplash = (augment: Augment): boolean => augment.id === 'nov
 // 5를 한 계열에 몰면 대특화가 터진다. 그게 도박의 이유가 된다.
 
 /** 같은 계열 증강이 이만큼 모이면 특화가 발동한다 */
+/**
+ * 적응형 뽑기 가중치 — 이미 든 계열일수록 더 잘 뜬다.
+ * weight = 1 + ADAPTIVE_KIND_WEIGHT × (그 계열 보유 수).
+ * 타입 선택 없이도 드래프트가 방향을 만든다: 첫 증강에 특화를 시작해도 되고,
+ * 범용을 집은 뒤 2번째부터 몰아도 된다. 강제가 아니라 관성이다.
+ */
+export const ADAPTIVE_KIND_WEIGHT = 0.9;
+
+// ───────── 증강 리롤 (가스) ─────────
+// 마음에 안 드는 선택지 3장을 가스로 다시 뽑는다. 한 선택당 최대 2회 —
+// 무제한이면 플래티넘이 뜰 때까지 굴리는 단순 노동이 된다.
+export const AUGMENT_REROLL_MAX = 2;
+export const AUGMENT_REROLL_BASE_GAS = 12;
+/** n번째 리롤(0부터)의 가스 값 — 같은 선택 안에서 두 번째가 더 비싸다 */
+export const augmentRerollCost = (used: number): number => AUGMENT_REROLL_BASE_GAS * (used + 1);
+
 export const SYNERGY_THRESHOLD = 3;
 /** 이만큼 모이면 대특화 */
 export const MASTERY_THRESHOLD = 5;
@@ -303,27 +402,28 @@ export interface SynergyBonus {
 /** 계열별 특화(3개) / 대특화(5개) 보너스 */
 export const SYNERGIES: Record<AugmentKind, { readonly specialist: SynergyBonus; readonly master: SynergyBonus }> = {
   tank: {
-    specialist: { name: '불굴', description: '최대 체력 +30%', effect: { hpMult: 1.3 } },
-    master: { name: '불멸', description: '받는 피해 25% 추가 감소, 초당 체력 12 회복',
-      effect: { damageReduction: 0.25, regen: 12 } },
+    specialist: { name: '불굴', description: '최대 체력 +50%, 공격력 +25%',
+      effect: { hpMult: 1.5, damageMult: 1.25 } },
+    master: { name: '불멸', description: '받는 피해 30% 추가 감소, 초당 체력 20 회복, 공격력 +60%',
+      effect: { damageReduction: 0.3, regen: 20, damageMult: 1.6 } },
   },
   ranged: {
-    specialist: { name: '저격 태세', description: '공격력 +30%, 사거리 +15%',
-      effect: { damageMult: 1.3, rangeMult: 1.15 } },
-    master: { name: '일점사', description: '공격력 +60%, 공격 속도 +25%',
-      effect: { damageMult: 1.6, attackSpeedMult: 1.25 } },
+    specialist: { name: '저격 태세', description: '공격력 +50%, 사거리 +20%',
+      effect: { damageMult: 1.5, rangeMult: 1.2 } },
+    master: { name: '일점사', description: '공격력 +100%, 공격 속도 +30%',
+      effect: { damageMult: 2, attackSpeedMult: 1.3 } },
   },
   mage: {
-    specialist: { name: '연쇄 폭발', description: '광역 반경 +30, 공격력 +20%',
-      effect: { splashRadius: 30, damageMult: 1.2 } },
-    master: { name: '대마법', description: '광역 반경 +60, 공격력 +60%',
-      effect: { splashRadius: 60, damageMult: 1.6 } },
+    specialist: { name: '연쇄 폭발', description: '광역 반경 +30, 공격력 +40%',
+      effect: { splashRadius: 30, damageMult: 1.4 } },
+    master: { name: '대마법', description: '광역 반경 +70, 공격력 +120%',
+      effect: { splashRadius: 70, damageMult: 2.2 } },
   },
   stat: {
-    specialist: { name: '완숙', description: '공격력 +20%, 최대 체력 +20%',
-      effect: { damageMult: 1.2, hpMult: 1.2 } },
-    master: { name: '초월', description: '공격력 +50%, 최대 체력 +50%, 이동 속도 +20%',
-      effect: { damageMult: 1.5, hpMult: 1.5, moveSpeedMult: 1.2 } },
+    specialist: { name: '완숙', description: '공격력 +40%, 최대 체력 +30%',
+      effect: { damageMult: 1.4, hpMult: 1.3 } },
+    master: { name: '초월', description: '공격력 +90%, 최대 체력 +60%, 이동 속도 +20%',
+      effect: { damageMult: 1.9, hpMult: 1.6, moveSpeedMult: 1.2 } },
   },
   utility: {
     specialist: { name: '지휘', description: '모든 타워 공격력 +15%', effect: { towerDamageMult: 1.15 } },

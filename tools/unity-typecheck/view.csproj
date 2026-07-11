@@ -1,0 +1,24 @@
+<!--
+  Unity 에디터 없이 View 레이어를 타입체크한다.
+  UnityStubs.cs가 View가 실제로 쓰는 UnityEngine API 표면만 흉내낸다 —
+  런타임 동작이 아니라 문법·타입만 검증한다.
+
+    cd tools/unity-typecheck && dotnet build view.csproj
+
+  Core는 UnityEngine 의존이 없으므로 core.csproj로 따로 빌드된다.
+  스텁에 없는 API를 쓰면 여기서 먼저 걸린다 — 스텁을 보강하면 된다.
+-->
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>netstandard2.1</TargetFramework>
+    <LangVersion>9.0</LangVersion>
+    <Nullable>disable</Nullable>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <AssemblyName>view-check</AssemblyName>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="../../unity/Assets/Scripts/Core/*.cs" />
+    <Compile Include="../../unity/Assets/Scripts/View/*.cs" />
+    <Compile Include="UnityStubs.cs" />
+  </ItemGroup>
+</Project>

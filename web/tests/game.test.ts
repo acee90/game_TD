@@ -100,6 +100,7 @@ describe('라운드 진행 — 고정 간격', () => {
 
     for (let round = 0; round < 60; round++) {
       for (let step = 0; step < 100; step++) {
+        if (game.paused) game.chooseAugment(0); // 증강 일시정지에 갇히지 않게
         game.update(0.3);
         expect(game.enemies.every((e) => e.kind !== 'boss')).toBe(true);
       }
@@ -142,35 +143,37 @@ describe('라운드 진행 — 고정 간격', () => {
     expect(B.posInCycle(6)).toBe(0);
   });
 
-  test('사이클 안에서는 같은 몹이 수만 늘어난다', () => {
+  test('사이클 안에서는 몹 수가 늘고, 사이클이 넘어가면 수가 리셋되며 개당 체력이 뛴다', () => {
     for (let r = 1; r <= 4; r++) {
-      expect(B.enemyHP(r)).toBe(B.enemyHP(r + 1)); // 같은 몹
       expect(B.enemyCount(r + 1) - B.enemyCount(r)).toBe(B.ENEMY_COUNT_STEP);
     }
     expect(B.enemyCount(1)).toBe(B.ENEMY_BASE_COUNT);
     expect(B.enemyCount(5)).toBe(B.ENEMY_BASE_COUNT + 4 * B.ENEMY_COUNT_STEP);
-  });
-
-  test('사이클이 넘어가면 새 몹이 나오고 수는 처음으로 돌아간다', () => {
-    expect(B.enemyHP(6)).toBeGreaterThan(B.enemyHP(5));
+    // 사이클 경계: 수는 처음으로, 개당 체력은 크게 점프 — "새 몹은 적지만 굵다"
     expect(B.enemyCount(6)).toBe(B.ENEMY_BASE_COUNT);
+    expect(B.enemyHP(6)).toBeGreaterThan(B.enemyHP(5) * 1.5);
   });
 
-  test('웨이브 총 체력은 사이클 안에서 선형이고, 사이클마다 기울기가 꺾인다', () => {
+  test('웨이브 총 체력 = 목표 clear × 기대 유효 DPS (재화→전투력 모델)', () => {
     const waveHp = (r: number) => B.enemyHP(r) * B.enemyCount(r);
-    const slopeOf = (cycle: number) => {
-      const first = cycle * B.CYCLE_ROUNDS + 1;
-      return (waveHp(first + 1) - waveHp(first)) / 1;
-    };
 
-    // 사이클 안: 증가분이 일정하다 (선형)
-    for (let r = 1; r <= 3; r++) {
-      expect(waveHp(r + 1) - waveHp(r)).toBeCloseTo(waveHp(r + 2) - waveHp(r + 1), 5);
+    // 정의가 곧 법칙이다 — 반올림 오차 안에서 일치
+    for (const r of [1, 7, 13, 25, 40, 55, 60]) {
+      const target = B.expectedBoardDps(r) * B.targetClearSeconds(r);
+      expect(waveHp(r)).toBeGreaterThan(target * 0.97);
+      expect(waveHp(r)).toBeLessThan(target * 1.03);
     }
 
-    // 사이클 간: 기울기가 커진다 (각도가 선다)
-    for (let c = 0; c < 4; c++) {
-      expect(slopeOf(c + 1)).toBeGreaterThan(slopeOf(c));
+    // 목표 clear: R1부터 긴장(18초), R44까지 선형, 이후 지수 벽 (4차 보정 — balance.ts 주석)
+    expect(B.targetClearSeconds(1)).toBeCloseTo(18, 1);
+    expect(B.targetClearSeconds(44)).toBeGreaterThan(35);
+    // 벽은 지수다 — 선형이면 보드 성장(지수)이 결국 이긴다
+    const wallGrowth = B.targetClearSeconds(55) / B.targetClearSeconds(54);
+    expect(wallGrowth).toBeGreaterThan(1.15);
+
+    // 총 체력은 단조 증가 — 사이클 경계 포함
+    for (let r = 1; r < 60; r++) {
+      expect(waveHp(r + 1)).toBeGreaterThanOrEqual(waveHp(r));
     }
   });
 
@@ -357,10 +360,14 @@ describe('보스 소환 — 상시 액션, 쿨타임만, 순차 해금', () => {
     expect(game.canSummonBossLevel(3)).toBe(false);
   });
 
-  test('보스 처치 보상은 원본 표를 따른다', () => {
-    expect(B.BOSS_KILL_MINERAL).toEqual([5, 8, 13, 20, 29, 39]);
+  test('보스 처치 보상 — 리스크에 맞춰 상위 레벨이 가파르다 [프로토]', () => {
+    // 원본 표는 [5, 8, 13, 20, 29, 39] (trigger #601~#606). 보스 HP를 레벨당 ×2.5로
+    // 세우면서 보상도 리스크를 따라가게 대체했다 — 레벨당 증가율이 줄지 않아야 한다.
+    expect(B.BOSS_KILL_MINERAL).toEqual([5, 10, 18, 32, 55, 90]);
     expect(bossKillMineral(1)).toBe(5);
-    expect(bossKillMineral(6)).toBe(39);
+    for (let lv = 1; lv < 6; lv++) {
+      expect(bossKillMineral(lv + 1) / bossKillMineral(lv)).toBeGreaterThanOrEqual(1.6);
+    }
   });
 
   test('보스가 돌파하면 다음 레벨이 열리지 않는다', () => {

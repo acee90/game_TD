@@ -5,6 +5,8 @@
 import { ALTAR_PATH_DISTANCE, PATH_LENGTH, nearestPathDistance, pathPos } from '../core/map';
 import * as H from '../data/hero';
 import type { AugmentCard, AugmentEffect } from '../data/hero';
+import * as K from '../data/skills';
+import { foldMods, resolveSkill, type ResolvedSkill, type SkillId, type SkillModPatch } from '../data/skills';
 
 export interface HeroStats {
   readonly maxHp: number;
@@ -19,14 +21,34 @@ export interface HeroStats {
   readonly mineralPerKill: number;
   readonly respawnSeconds: number;
   readonly towerDamageMult: number;
+  /** 스킬 피해 배수 — 지능이 키운다 */
+  readonly skillPower: number;
 }
 
+/** 골드로 산 스탯 포인트 */
+export interface BoughtStats {
+  readonly str: number;
+  readonly agi: number;
+  readonly int: number;
+}
+
+export const NO_STATS: BoughtStats = { str: 0, agi: 0, int: 0 };
+
 /** 증강 카드를 접어서 최종 스탯을 만든다. 순수 함수 — 테스트하기 쉽다. */
-export function computeStats(level: number, cards: readonly AugmentCard[]): HeroStats {
-  let maxHp = H.HERO_BASE_HP + H.HERO_HP_PER_LEVEL * (level - 1);
-  let damage = H.HERO_BASE_DAMAGE + H.HERO_DAMAGE_PER_LEVEL * (level - 1);
+export function computeStats(
+  _level: number,
+  cards: readonly AugmentCard[],
+  bought: BoughtStats = NO_STATS,
+): HeroStats {
+  // 파워 = 스탯(레벨업 택1 적립) × 증강 배수 — 레벨 배수는 폐지 (2안 개편)
+  const str = H.HERO_BASE_STR + bought.str;
+  const agi = H.HERO_BASE_AGI + bought.agi;
+  const int = H.HERO_BASE_INT + bought.int;
+
+  let maxHp = H.HP_PER_STR * str;
+  let damage = H.DMG_PER_STR * str;
   let range = H.HERO_BASE_RANGE;
-  let attackSpeed = 1;
+  let attackSpeed = 1 + H.AS_PER_AGI * agi;
   let moveSpeed = H.HERO_SPEED;
   let regen = 0;
   let splashRadius = 0;
@@ -60,7 +82,7 @@ export function computeStats(level: number, cards: readonly AugmentCard[]): Hero
     maxHp: Math.round(maxHp),
     damage: Math.round(damage),
     range,
-    attackInterval: H.HERO_ATTACK_INTERVAL / attackSpeed,
+    attackInterval: Math.max(H.MIN_ATTACK_INTERVAL, H.HERO_ATTACK_INTERVAL / attackSpeed),
     moveSpeed,
     regen,
     damageReduction: 1 - damageTaken,
@@ -68,6 +90,7 @@ export function computeStats(level: number, cards: readonly AugmentCard[]): Hero
     mineralPerKill,
     respawnSeconds: Math.max(3, H.HERO_RESPAWN_SECONDS - respawnCut),
     towerDamageMult,
+    skillPower: 1 + H.SKILL_PER_INT * int,
   };
 }
 
@@ -87,6 +110,22 @@ export class Hero {
   alive = true;
   respawnTimer = 0;
   attackCooldown = 0;
+  /** 액티브 스킬 재사용 대기 */
+  skillCooldown = 0;
+  /** 레벨업이 focus 스탯에 적립한 포인트 (2안 개편 — 골드 구매 아님) */
+  bought: BoughtStats = NO_STATS;
+
+  /** 레벨업 포인트가 들어갈 스탯 — 기본값은 마지막 선택 반복 (비차단 UI) */
+  focus: H.StatId = 'str';
+
+  /** 가스로 산 스킬 개조 횟수 */
+  gasSkillDamage = 0;
+  gasSkillCdr = 0;
+
+  /** bought가 곧 포인트다 (환산 없음) */
+  get points(): BoughtStats {
+    return this.bought;
+  }
 
   readonly augments: AugmentCard[] = [];
   /** 아직 고르지 않은 증강 선택 횟수 */
@@ -107,7 +146,15 @@ export class Hero {
   }
 
   get stats(): HeroStats {
-    return computeStats(this.level, this.augments);
+    return computeStats(this.level, this.augments, this.points);
+  }
+
+  /** 레벨업 보상 — focus 스탯에 포인트 적립. 체력이 늘면 증가분을 채워준다. */
+  grantStatPoints(points: number): void {
+    const before = this.stats.maxHp;
+    this.bought = { ...this.bought, [this.focus]: this.bought[this.focus] + points };
+    const after = this.stats.maxHp;
+    if (after > before) this.hp += after - before;
   }
 
   get xpNeeded(): number {
@@ -121,6 +168,30 @@ export class Hero {
 
   get hasSplash(): boolean {
     return this.stats.splashRadius > 0;
+  }
+
+  /** 들고 있는 액티브 스킬. 스킬 증강을 안 골랐으면 null. */
+  get skillId(): SkillId | null {
+    return this.augments.find((c) => c.augment.grantsSkill)?.augment.grantsSkill ?? null;
+  }
+
+  /** 개조가 반영된 스킬 수치 — 증강 개조와 가스 개조가 함께 접힌다 */
+  get skill(): ResolvedSkill | null {
+    const id = this.skillId;
+    if (!id) return null;
+    const patches = this.augments
+      .map((c) => c.augment.skillMod)
+      .filter((m): m is NonNullable<typeof m> => m !== undefined);
+    const gas: SkillModPatch[] = [];
+    if (this.gasSkillDamage > 0)
+      gas.push({ damageMult: Math.pow(K.GAS_SKILL_DAMAGE_MULT, this.gasSkillDamage) });
+    if (this.gasSkillCdr > 0)
+      gas.push({ cooldownMult: Math.pow(K.GAS_SKILL_CDR_MULT, this.gasSkillCdr) });
+    return resolveSkill(id, foldMods([...patches, ...gas]));
+  }
+
+  get skillReady(): boolean {
+    return this.alive && this.skillId !== null && this.skillCooldown <= 0;
   }
 
   /** 클릭 좌표를 경로에 투영해서 목적지로 삼는다 */
@@ -142,6 +213,8 @@ export class Hero {
       this.xp -= this.xpNeeded;
       this.level++;
       gained++;
+      // 레벨업 = focus 스탯 포인트 적립 (2안 — 스탯 골드 구매 폐지)
+      this.grantStatPoints(H.levelStatPoints(this.level));
       if (H.grantsAugment(this.level)) this.pendingAugmentPicks++;
     }
     if (gained > 0) this.hp = this.stats.maxHp; // 레벨업 시 완전 회복
@@ -173,6 +246,7 @@ export class Hero {
     }
 
     this.attackCooldown -= dt;
+    if (this.skillCooldown > 0) this.skillCooldown = Math.max(0, this.skillCooldown - dt);
 
     const { moveSpeed, regen, maxHp } = this.stats;
     if (regen > 0) this.hp = Math.min(maxHp, this.hp + regen * dt);
@@ -186,6 +260,7 @@ export class Hero {
 
   private respawn(): void {
     this.alive = true;
+    this.skillCooldown = 0;
     this.hp = this.stats.maxHp;
     this.distance = this.altarDistance;
     this.targetDistance = this.altarDistance;
@@ -193,21 +268,44 @@ export class Hero {
   }
 }
 
+/** 이 영웅에게 뜰 수 있는 증강인가 — 타입 제한은 없다, 스킬은 하나만 */
+export function augmentAllowed(hero: Hero, augment: H.Augment): boolean {
+  if (hero.stacksOf(augment.id) >= augment.maxStacks) return false;
+  if (H.requiresSplash(augment) && !hero.hasSplash) return false;
+  if (!H.skillGateAllows(augment, hero.skillId)) return false;
+  return true;
+}
+
+/** 가중치를 따라 하나를 뽑아 인덱스를 돌려준다 */
+function weightedIndex(weights: readonly number[], rand: () => number): number {
+  const total = weights.reduce((sum, w) => sum + w, 0);
+  let roll = rand() * total;
+  for (let i = 0; i < weights.length; i++) {
+    roll -= weights[i];
+    if (roll < 0) return i;
+  }
+  return weights.length - 1;
+}
+
 /**
  * 증강 카드 3장을 뽑는다. 카드마다 등급이 따로 굴려진다.
- * 최대 스택에 도달한 것과 선행 조건을 못 채운 것은 제외한다.
+ *
+ * 가중치는 적응형이다 — 이미 든 계열일수록 더 잘 뜬다(ADAPTIVE_KIND_WEIGHT).
+ * 그래서 특화는 강제가 아니라 드래프트의 관성으로 만들어진다.
+ * 스킬 개조 증강은 이미 그 스킬을 든 영웅에게만 뜨므로 보유 스킬 계열만큼 기운다.
  */
 export function rollAugmentChoices(hero: Hero, rand: () => number): AugmentCard[] {
-  const pool = H.AUGMENTS.filter((augment) => {
-    if (hero.stacksOf(augment.id) >= augment.maxStacks) return false;
-    if (H.requiresSplash(augment) && !hero.hasSplash) return false;
-    return true;
-  });
+  const remaining = H.AUGMENTS.filter((augment) => augmentAllowed(hero, augment));
+  const heldByKind = new Map<H.AugmentKind, number>();
+  for (const c of hero.augments) {
+    heldByKind.set(c.augment.kind, (heldByKind.get(c.augment.kind) ?? 0) + 1);
+  }
+  const weightOf = (augment: H.Augment): number =>
+    1 + H.ADAPTIVE_KIND_WEIGHT * (heldByKind.get(augment.kind) ?? 0);
 
   const cards: AugmentCard[] = [];
-  const remaining = [...pool];
   while (cards.length < H.AUGMENT_CHOICES && remaining.length > 0) {
-    const index = Math.min(remaining.length - 1, Math.floor(rand() * remaining.length));
+    const index = weightedIndex(remaining.map(weightOf), rand);
     cards.push(H.makeCard(remaining[index], H.rollRarity(rand)));
     remaining.splice(index, 1);
   }
