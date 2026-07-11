@@ -502,6 +502,10 @@ namespace GodTD.View
             glow.color = color;
             glow.range = 7f;
             glow.intensity = 1.6f;
+
+            bool isIn = at.X < MapData.CENTER.X;
+            MakeWorldLabel(cube.transform, isIn ? "입구" : "출구", color, 0.055f,
+                new Vector3(0f, 1.6f, 0f));
         }
 
         LineRenderer MakeRing(string name, Material mat, float width)
@@ -593,6 +597,11 @@ namespace GodTD.View
                     isGod ? Color.Lerp(raceColor, GOLD, 0.3f) : raceColor)
                 : LitMat(raceColor);
             Paint(body, mat);
+
+            // 티어 라벨 — 웹의 render.ts:93 복원. GOD은 골드 'G'
+            MakeWorldLabel(body.transform, isGod ? "G" : (tower.Tier + 1).ToString(),
+                isGod ? GOLD : Color.white, isGod ? 0.10f : 0.07f,
+                new Vector3(0f, 0.75f, 0f));
 
             if (isGod)
             {
@@ -826,6 +835,25 @@ namespace GodTD.View
         static void Paint(GameObject go, Material mat)
         {
             go.GetComponent<MeshRenderer>().sharedMaterial = mat;
+        }
+
+        /// <summary>인월드 라벨 — 웹 렌더러에 있던 티어·문 표기 복원 (감사: 가독성 회귀)</summary>
+        TextMesh MakeWorldLabel(Transform parent, string text, Color color, float size, Vector3 localPos)
+        {
+            var go = new GameObject("Label");
+            go.transform.SetParent(parent, false);
+            go.transform.localPosition = localPos;
+            go.transform.rotation = Quaternion.Euler(CAM_PITCH, CAM_YAW, 0f); // 카메라 정면
+            var tm = go.AddComponent<TextMesh>();
+            tm.text = text;
+            tm.font = GameViewFx.UiFont();
+            tm.fontSize = 42;
+            tm.characterSize = size;
+            tm.anchor = TextAnchor.MiddleCenter;
+            tm.color = color;
+            var mr = go.GetComponent<MeshRenderer>();
+            if (mr != null && tm.font != null) mr.sharedMaterial = tm.font.material;
+            return tm;
         }
     }
 }
