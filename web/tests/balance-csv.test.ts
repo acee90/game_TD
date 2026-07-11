@@ -18,22 +18,25 @@ const read = (name: string): string[] => {
 };
 
 describe('밸런스 CSV — 코드와 일치해야 한다', () => {
-  test('수입 곡선 시트 — 저점 공식과 몬스터 압력이 코드와 같다', () => {
+  test('수입 곡선 시트 — 저점(Lv1 보스)·고점(최고 보스) 공식이 코드와 같다', () => {
     const rows = read('income-curve.csv').slice(1);
     expect(rows).toHaveLength(60);
-    // R1 저점 = 시작 미네랄 + 웨이브 보상 (마일스톤 아직 0)
+    // R1: 소환 1회. 저점 = 시작 + 웨이브 + Lv1 보상, 고점도 첫 소환은 Lv1이라 같다
     const r1 = rows[0].split(',').map(Number);
-    expect(r1[5]).toBe(B.START_MINERAL + B.waveReward(1));
+    expect(r1[7]).toBe(B.START_MINERAL + B.waveReward(1) + B.BOSS_KILL_MINERAL[0]);
+    expect(r1[8]).toBe(r1[7]);
+    // 고점은 사다리가 오른 뒤 저점보다 확실히 크다
+    const r20 = rows[19].split(',').map(Number);
+    expect(r20[8]).toBeGreaterThan(r20[7]);
     // 몬스터 압력 열은 코드 함수 그대로
     for (const idx of [0, 16, 44]) {
       const c = rows[idx].split(',').map(Number);
       const r = c[0];
-      expect(c[8]).toBe(B.enemyHP(r));
-      expect(c[10]).toBe(B.enemyHP(r) * B.enemyCount(r));
-      expect(c[12]).toBe(Math.round(B.expectedBoardDps(r)));
+      expect(c[9]).toBe(B.enemyHP(r));
+      expect(c[11]).toBe(B.enemyHP(r) * B.enemyCount(r));
+      expect(c[13]).toBe(Math.round(B.expectedBoardDps(r)));
     }
   });
-
   test('증강이 전부 들어있다', () => {
     const rows = read('augments.csv');
     expect(rows).toHaveLength(H.AUGMENTS.length + 1); // 헤더 포함

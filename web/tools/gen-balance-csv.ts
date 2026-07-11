@@ -219,11 +219,12 @@ write(
 
 // ── 라운드별 수입 저점·고점 — 영웅/타워/몬스터 밸런스의 공통 기준
 //
-// 저점(cumLow):  시작 미네랄 + 웨이브 보상 누적 + 킬 마일스톤. 보스를 아예 안 부른 판.
-//   (누출은 킬 대신 +5를 주므로 대략 중립 — 저점에 포함하지 않는다.)
-// 고점(cumHigh): 저점 + 보스를 쿨타임(45초)마다 최고 해금 레벨로 부르고 전부 잡는 판.
+// 웨이브 보상·킬 마일스톤은 사실상 결정론이라, 수입 격차는 **보스 레벨 선택**에서 나온다.
+// 저점: 쿨타임(45초)마다 부르되 **Lv1만** — 항상 성공하는 안전 운영 (+5씩).
+// 고점: 쿨타임마다 **항상 최고 해금 레벨**을 부르고 전부 잡는 상한 —
 //   k번째 소환 = Lv min(k, 6). 소환은 t=0부터 가능하므로 floor(t/45)+1회.
-// 제외: 증강 mineralPerKill(빌드 의존), 누출 보너스.
+// 제외: 증강 mineralPerKill(빌드 의존), 누출 보너스(킬 마일스톤과 대략 상쇄).
+// 주의: 수입의 결정 축이 보스 하나뿐이다 — 원작의 미션류(빙고) 같은 두 번째 축은 백로그.
 const incomeRows: (string | number)[][] = [];
 {
   let waveCum = 0;
@@ -233,7 +234,7 @@ const incomeRows: (string | number)[][] = [];
     for (const [need, reward] of B.KILL_MILESTONES) if (k >= need) sum += reward;
     return sum;
   };
-  const bossCum = (summons: number): number => {
+  const bossHighCum = (summons: number): number => {
     let sum = 0;
     for (let k = 1; k <= summons; k++) sum += B.BOSS_KILL_MINERAL[Math.min(k, 6) - 1];
     return sum;
@@ -243,17 +244,19 @@ const incomeRows: (string | number)[][] = [];
     kills += B.enemyCount(r);
     const elapsed = B.OPENING_SECONDS + r * B.ROUND_SECONDS;
     const summons = Math.floor(elapsed / B.BOSS_COOLDOWN_SECONDS) + 1;
-    const cumLow = B.START_MINERAL + waveCum + milestoneCum(kills);
-    const bossHigh = bossCum(summons);
+    const base = B.START_MINERAL + waveCum + milestoneCum(kills);
+    const bossLow = summons * B.BOSS_KILL_MINERAL[0];
+    const bossHigh = bossHighCum(summons);
     incomeRows.push([
       r,
       B.waveReward(r),
       B.enemyCount(r),
       kills,
       milestoneCum(kills),
-      cumLow,
+      bossLow,
       bossHigh,
-      cumLow + bossHigh,
+      base + bossLow,
+      base + bossHigh,
       B.enemyHP(r),
       B.enemyArmor(r),
       B.enemyHP(r) * B.enemyCount(r),
@@ -267,7 +270,7 @@ write(
   toCsv(
     [
       'round', 'waveReward', 'mobs', 'cumKills', 'milestoneCum',
-      'cumIncomeLow', 'bossIncomeHigh', 'cumIncomeHigh',
+      'bossLowCum', 'bossHighCum', 'cumIncomeLow', 'cumIncomeHigh',
       'enemyHp', 'enemyArmor', 'waveTotalHp', 'targetClearSec', 'expectedBoardDps',
     ],
     incomeRows,
