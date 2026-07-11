@@ -175,6 +175,8 @@ namespace UnityEngine
         public Material(Shader shader) { }
         public Color color { get; set; }
         public void SetFloat(string name, float value) { }
+        public void SetInt(string name, int value) { }
+        public Texture mainTexture { get; set; }
         public void SetColor(string name, Color value) { }
         public void EnableKeyword(string keyword) { }
     }
@@ -479,6 +481,7 @@ namespace UnityEngine
 namespace UnityEngine.Rendering
 {
     public enum AmbientMode { Skybox, Trilight, Flat, Custom }
+    public enum BlendMode { Zero, One, SrcAlpha, OneMinusSrcAlpha, DstColor, SrcColor }
 }
 
 

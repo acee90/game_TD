@@ -169,7 +169,7 @@ namespace GodTD.View
             main.startSpeed = 0f;
             main.startSize = 0.2f;
             main.startLifetime = 0.5f;
-            main.gravityModifier = 0.75f;
+            main.gravityModifier = 0.25f; // 가산 스파크는 떠오르듯 — 파편 중력감 제거
             main.maxParticles = 2000;
             var emission = burstPs.emission;
             emission.enabled = false; // Emit()로만 뿜는다
@@ -177,7 +177,7 @@ namespace GodTD.View
             shape.enabled = false;
             // 스크립트로 만든 파티클 시스템은 머티리얼이 비어 마젠타가 된다 — 언리트로 채운다
             var psr = go.GetComponent<ParticleSystemRenderer>();
-            if (psr != null) psr.sharedMaterial = UnlitMat(Color.white);
+            if (psr != null) psr.sharedMaterial = AdditiveSparkMat();
             burstPs.Play();
         }
 
@@ -540,6 +540,41 @@ namespace GodTD.View
             mat = new Material(spriteShader) { color = color };
             unlitMats[color] = mat;
             return mat;
+        }
+
+        // ── 가산 블렌드 스파크 — 파티클이 '파편'이 아니라 '에너지'로 읽히게 ──
+        Material additiveMat;
+
+        /// <summary>Sprites/Default를 SrcAlpha/One으로 강제 + 원형 페이드 텍스처</summary>
+        Material AdditiveSparkMat()
+        {
+            if (additiveMat != null) return additiveMat;
+            additiveMat = new Material(spriteShader) { color = Color.white };
+            additiveMat.SetInt("_SrcBlend", (int)UnityEngine.Rendering.BlendMode.SrcAlpha);
+            additiveMat.SetInt("_DstBlend", (int)UnityEngine.Rendering.BlendMode.One);
+            additiveMat.mainTexture = SparkTexture();
+            return additiveMat;
+        }
+
+        static Texture2D sparkTex;
+
+        /// <summary>중심에서 가장자리로 사라지는 원형 그라데이션 — 코드 생성, 에셋 0</summary>
+        static Texture2D SparkTexture()
+        {
+            if (sparkTex != null) return sparkTex;
+            const int SIZE = 32;
+            sparkTex = new Texture2D(SIZE, SIZE, TextureFormat.RGBA32, false);
+            sparkTex.wrapMode = TextureWrapMode.Clamp;
+            float c = (SIZE - 1) / 2f;
+            for (int y = 0; y < SIZE; y++)
+            for (int x = 0; x < SIZE; x++)
+            {
+                float d = Mathf.Sqrt((x - c) * (x - c) + (y - c) * (y - c)) / c;
+                float a = Mathf.Clamp01(1f - d);
+                sparkTex.SetPixel(x, y, new Color(1f, 1f, 1f, a * a));
+            }
+            sparkTex.Apply();
+            return sparkTex;
         }
     }
 }
