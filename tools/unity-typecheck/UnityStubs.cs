@@ -19,6 +19,8 @@ namespace UnityEngine
     {
         public float x, y;
         public Vector2(float x, float y) { this.x = x; this.y = y; }
+        public static Vector2 zero => new Vector2(0, 0);
+        public static Vector2 one => new Vector2(1, 1);
     }
 
     public struct Vector3
@@ -63,6 +65,7 @@ namespace UnityEngine
     public static class ColorUtility
     {
         public static bool TryParseHtmlString(string html, out Color color) { color = default; return true; }
+        public static string ToHtmlStringRGB(Color color) => "FFFFFF";
     }
 
     public struct Rect
@@ -96,6 +99,7 @@ namespace UnityEngine
         public static float Exp(float f) => (float)Math.Exp(f);
         public static float Pow(float f, float p) => (float)Math.Pow(f, p);
         public static float Abs(float f) => Math.Abs(f);
+        public static float Sqrt(float f) => (float)Math.Sqrt(f);
         public static float Clamp(float v, float min, float max) => v < min ? min : v > max ? max : v;
         public static float Clamp01(float f) => f < 0 ? 0 : f > 1 ? 1 : f;
         public static float Lerp(float a, float b, float t) => a + (b - a) * Clamp01(t);
@@ -151,10 +155,12 @@ namespace UnityEngine
     {
         public GameObject() { }
         public GameObject(string name) { }
+        public GameObject(string name, params Type[] components) { }
         public Transform transform => null;
         public string tag { get; set; }
         public T AddComponent<T>() where T : Component, new() => new T();
         public T GetComponent<T>() => default;
+        public bool activeSelf => true;
         public void SetActive(bool value) { }
         public static GameObject CreatePrimitive(PrimitiveType type) => new GameObject();
     }
@@ -329,6 +335,7 @@ namespace UnityEngine
     public static class Time
     {
         public static float deltaTime => 0.016f;
+        public static float unscaledDeltaTime => 0.016f;
     }
 
     public static class Screen
@@ -339,9 +346,29 @@ namespace UnityEngine
 
     public class Texture : Object { }
 
+    public enum TextureFormat { RGBA32 }
+    public enum TextureWrapMode { Repeat, Clamp }
+
     public class Texture2D : Texture
     {
+        public Texture2D(int width, int height, TextureFormat format, bool mipChain) { }
         public static Texture2D whiteTexture => null;
+        public TextureWrapMode wrapMode { get; set; }
+        public void SetPixel(int x, int y, Color color) { }
+        public void Apply() { }
+    }
+
+    public enum SpriteMeshType { FullRect, Tight }
+
+    public class Sprite : Object
+    {
+        public static Sprite Create(Texture2D texture, Rect rect, Vector2 pivot, float pixelsPerUnit,
+            uint extrude, SpriteMeshType meshType, Vector4 border) => null;
+    }
+
+    public struct Vector4
+    {
+        public Vector4(float x, float y, float z, float w) { }
     }
 
     public enum TextAnchor { UpperLeft, MiddleCenter }
@@ -366,6 +393,26 @@ namespace UnityEngine
     public static class Resources
     {
         public static T GetBuiltinResource<T>(string path) where T : Object => null;
+        public static T Load<T>(string path) where T : Object => null;
+    }
+
+    public class RectTransform : Transform
+    {
+        public Vector2 anchorMin { get; set; }
+        public Vector2 anchorMax { get; set; }
+        public Vector2 offsetMin { get; set; }
+        public Vector2 offsetMax { get; set; }
+        public Vector2 sizeDelta { get; set; }
+        public Vector2 pivot { get; set; }
+        public Vector2 anchoredPosition { get; set; }
+    }
+
+    public enum RenderMode { ScreenSpaceOverlay, ScreenSpaceCamera, WorldSpace }
+
+    public class Canvas : Behaviour
+    {
+        public RenderMode renderMode { get; set; }
+        public int sortingOrder { get; set; }
     }
 
     public class RectOffset
@@ -429,4 +476,78 @@ namespace UnityEngine
 namespace UnityEngine.Rendering
 {
     public enum AmbientMode { Skybox, Trilight, Flat, Custom }
+}
+
+
+namespace UnityEngine.EventSystems
+{
+    public class EventSystem : UnityEngine.MonoBehaviour
+    {
+        public static EventSystem current => null;
+    }
+
+    public class StandaloneInputModule : UnityEngine.MonoBehaviour { }
+
+    public class PointerEventData
+    {
+        public UnityEngine.Vector2 position;
+    }
+
+    public interface IPointerEnterHandler { void OnPointerEnter(PointerEventData eventData); }
+    public interface IPointerExitHandler { void OnPointerExit(PointerEventData eventData); }
+    public interface IPointerDownHandler { void OnPointerDown(PointerEventData eventData); }
+    public interface IPointerUpHandler { void OnPointerUp(PointerEventData eventData); }
+    public interface IPointerClickHandler { void OnPointerClick(PointerEventData eventData); }
+}
+
+namespace UnityEngine.UI
+{
+    public class Graphic : UnityEngine.MonoBehaviour
+    {
+        public UnityEngine.Color color { get; set; }
+        public bool raycastTarget { get; set; }
+        public UnityEngine.RectTransform rectTransform => null;
+    }
+
+    public class Image : Graphic
+    {
+        public enum Type { Simple, Sliced, Tiled, Filled }
+        public UnityEngine.Sprite sprite { get; set; }
+        public Type type { get; set; }
+    }
+
+    public class GraphicRaycaster : UnityEngine.MonoBehaviour { }
+}
+
+namespace TMPro
+{
+    public enum TextAlignmentOptions
+    {
+        Left, Center, Right, Top, Bottom, TopLeft, TopRight, BottomLeft, BottomRight, Midline,
+    }
+
+    [System.Flags]
+    public enum FontStyles { Normal = 0, Bold = 1, Italic = 2 }
+
+    public class TMP_FontAsset : UnityEngine.Object
+    {
+        public static TMP_FontAsset CreateFontAsset(UnityEngine.Font font) => null;
+    }
+
+    public static class TMP_Settings
+    {
+        public static TMP_FontAsset defaultFontAsset => null;
+    }
+
+    public class TextMeshProUGUI : UnityEngine.MonoBehaviour
+    {
+        public string text { get; set; }
+        public TMP_FontAsset font { get; set; }
+        public float fontSize { get; set; }
+        public UnityEngine.Color color { get; set; }
+        public TextAlignmentOptions alignment { get; set; }
+        public FontStyles fontStyle { get; set; }
+        public bool richText { get; set; }
+        public bool raycastTarget { get; set; }
+    }
 }

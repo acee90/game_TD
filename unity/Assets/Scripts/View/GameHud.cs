@@ -1,482 +1,491 @@
-// 원본: web/src/ui/ui.ts + web/index.html의 패널 구성 — 프레젠테이션 패스
-// ───────── OnGUI 즉시모드 HUD ─────────
-// 자원/라운드/점수 · 버튼(유닛 생성, 보스 Lv1~6, 프로브, 종족 업그레이드, 영웅 강화, 판매)
-// · 영웅 패널 · 증강 선택 오버레이 · 게임오버.
-// 반투명 패널 + 계열색 액센트 라인으로 정돈 (UI Toolkit 전환은 다음 단계).
-// 월드 위 HP바·플로팅 텍스트는 GameViewFx(월드 스페이스)가 맡는다.
+// 원본: web/src/ui/ui.ts의 정보 구성 — uGUI + TMP 재구현 (2026-07-12, HUD 재설계 §3)
+// ───────── 서비스 룩 HUD ─────────
+// 상단 얇은 자원 바 + 하단 커맨드 바(선택 정보 | 상세 | 3×3 커맨드 카드).
+// 보드 위 오버레이 픽셀 0 (HUD 재설계 §1). 스탯·증강·게임오버는 전면 오버레이 카드.
+// 프리팹 없음 — UiTheme(토큰·스프라이트)·UiKit(원자)로 코드 조립. 폰트만 커밋 에셋.
 
+using System.Collections.Generic;
 using GodTD.Core;
+using TMPro;
 using UnityEngine;
+using UnityEngine.EventSystems;
+using UnityEngine.UI;
 
 namespace GodTD.View
 {
     public sealed class GameHud : MonoBehaviour
     {
         GameView view;
+        Canvas canvas;
+        RectTransform root;
 
-        // HUD 판 영역 — 월드 클릭과 겹치지 않게 GameView가 조회한다
-        Rect topBar;
-        Rect bottomConsole;
-        Rect rightPanel;
-        Rect heroPanel;
-        Rect messageBar;
+        // ── 상단 바 ──
+        RectTransform topBar;
+        TextMeshProUGUI topLeft;    // 라운드 · 타이머 · 다음 웨이브
+        TextMeshProUGUI topCenter;  // 자원
+        TextMeshProUGUI topRight;   // 라이프 · 킬 · 점수
 
-        GUIStyle label;
-        GUIStyle small;
-        GUIStyle title;
-        GUIStyle card;
-        GUIStyle commandLabel;
-        GUIStyle tiny;
-        bool stylesReady;
+        // ── 하단 바 ──
+        RectTransform bottomBar;
+        TextMeshProUGUI selTitle;    // 좌: 선택 대상
+        TextMeshProUGUI selBody;
+        (Image bg, Image fill) selHpBar;
+        (Image bg, Image fill) selXpBar;
+        TextMeshProUGUI detailBody;  // 중: 상세
+        (Image bg, Image fill) skillBar;
+        TextMeshProUGUI cardTitle;   // 우: 커맨드 카드
+        readonly HudButton[] cardButtons = new HudButton[CommandCard.SLOTS];
 
-        static readonly Color PANEL_BG = new Color(0.025f, 0.035f, 0.045f, 0.97f);
-        static readonly Color FRAME = new Color(0.22f, 0.27f, 0.28f, 1f);
-        static readonly Color FRAME_LIGHT = new Color(0.42f, 0.48f, 0.46f, 1f);
-        static readonly Color INSET = new Color(0.018f, 0.026f, 0.032f, 1f);
-        static readonly Color ACCENT_GOLD = new Color(1f, 0.82f, 0.25f, 0.85f);
-        static readonly Color ACCENT_BLUE = new Color(0.31f, 0.64f, 1f, 0.85f);
-        static readonly Color ACCENT_HERO = new Color(0.69f, 0.55f, 1f, 0.85f);
-        static readonly Color ACCENT_DIM = new Color(0.35f, 0.4f, 0.6f, 0.6f);
+        // ── 오버레이 ──
+        Image overlayDim;
+        TextMeshProUGUI overlayTitle;
+        TextMeshProUGUI overlaySub;
+        readonly List<HudButton> overlayCards = new List<HudButton>();
+        HudButton overlayAction;     // 리롤 / 다시 시작
+
+        int builtW, builtH;
+        float displayMineral;        // 카운트업 주스
 
         void Awake()
         {
             view = GetComponent<GameView>();
             view.Hud = this;
+            BuildCanvas();
         }
 
-        public bool IsPointerOverHud(Vector2 mouseScreenPos)
-        {
-            var p = new Vector2(mouseScreenPos.x, Screen.height - mouseScreenPos.y);
-            return topBar.Contains(p) || bottomConsole.Contains(p);
-        }
+        // ───────── 조립 ─────────
 
-        void EnsureStyles()
+        void BuildCanvas()
         {
-            if (stylesReady) return;
-            stylesReady = true;
-            label = new GUIStyle(GUI.skin.label) { richText = true, fontSize = 14 };
-            small = new GUIStyle(GUI.skin.label) { richText = true, fontSize = 12, wordWrap = true };
-            title = new GUIStyle(GUI.skin.label)
+            if (Object.FindObjectOfType<EventSystem>() == null)
             {
-                richText = true, fontSize = 24, fontStyle = FontStyle.Bold,
-                alignment = TextAnchor.MiddleCenter,
-            };
-            card = new GUIStyle(GUI.skin.button)
-            {
-                richText = true, fontSize = 13, wordWrap = true,
-                alignment = TextAnchor.UpperLeft, padding = new RectOffset(12, 12, 10, 10),
-            };
-            commandLabel = new GUIStyle(GUI.skin.button)
-            {
-                richText = true, fontSize = 11, wordWrap = true,
-                alignment = TextAnchor.MiddleCenter, padding = new RectOffset(4, 4, 4, 4),
-            };
-            tiny = new GUIStyle(GUI.skin.label)
-            {
-                richText = true, fontSize = 10, wordWrap = true,
-                alignment = TextAnchor.MiddleCenter,
-            };
+                new GameObject("EventSystem", typeof(EventSystem), typeof(StandaloneInputModule));
+            }
+
+            var go = new GameObject("HudCanvas", typeof(Canvas), typeof(GraphicRaycaster));
+            canvas = go.GetComponent<Canvas>();
+            canvas.renderMode = RenderMode.ScreenSpaceOverlay;
+            canvas.sortingOrder = 100;
+            root = go.GetComponent<RectTransform>();
+
+            BuildTopBar();
+            BuildBottomBar();
+            BuildOverlay();
+            ApplyLayout();
         }
 
-        void Fill(Rect rect, Color color)
+        static float CellSize() => Mathf.Clamp(Screen.height * 0.052f, 40f, 60f);
+        static float BottomHeight() => CellSize() * 3f + 20f;
+        const float TOP_H = 34f;
+
+        void BuildTopBar()
         {
-            GUI.color = color;
-            GUI.DrawTexture(rect, Texture2D.whiteTexture);
-            GUI.color = Color.white;
+            var panel = UiKit.Panel("TopBar", root, UiTheme.PanelBg, 0);
+            topBar = panel.rectTransform;
+
+            topLeft = UiKit.Text("Left", topBar, UiTheme.FontSmall, UiTheme.TextMain,
+                TextAlignmentOptions.Left);
+            UiKit.Rect(topLeft.gameObject, topBar, new Vector2(0, 0), new Vector2(0.34f, 1),
+                new Vector2(UiTheme.Pad, 0), Vector2.zero);
+
+            topCenter = UiKit.Text("Center", topBar, UiTheme.FontSmall, UiTheme.TextMain,
+                TextAlignmentOptions.Center);
+            UiKit.Rect(topCenter.gameObject, topBar, new Vector2(0.34f, 0), new Vector2(0.66f, 1),
+                Vector2.zero, Vector2.zero);
+
+            topRight = UiKit.Text("Right", topBar, UiTheme.FontSmall, UiTheme.TextMain,
+                TextAlignmentOptions.Right);
+            UiKit.Rect(topRight.gameObject, topBar, new Vector2(0.66f, 0), new Vector2(1, 1),
+                Vector2.zero, new Vector2(-UiTheme.Pad, 0));
         }
 
-        void Panel(Rect rect, Color accent)
+        void BuildBottomBar()
         {
-            Fill(rect, FRAME);
-            Fill(new Rect(rect.x + 2, rect.y + 2, rect.width - 4, rect.height - 4), PANEL_BG);
-            Fill(new Rect(rect.x + 4, rect.y + 4, rect.width - 8, 2), FRAME_LIGHT);
-            Fill(new Rect(rect.x + 4, rect.y + 6, rect.width - 8, 2), accent);
-        }
+            var panel = UiKit.Panel("BottomBar", root, UiTheme.PanelBg, 0);
+            bottomBar = panel.rectTransform;
 
-        void Inset(Rect rect, Color accent)
-        {
-            Fill(rect, new Color(0.005f, 0.008f, 0.01f, 1f));
-            Fill(new Rect(rect.x + 2, rect.y + 2, rect.width - 4, rect.height - 4), INSET);
-            Fill(new Rect(rect.x + 2, rect.y + 2, 2, rect.height - 4), accent);
-        }
+            // 좌 22%: 선택 대상
+            var sel = UiKit.Panel("Selection", bottomBar, UiTheme.Hex("#0A101F", 0.6f), UiTheme.RadiusPanel, 1);
+            UiKit.Rect(sel.gameObject, bottomBar, new Vector2(0, 0), new Vector2(0.22f, 1),
+                new Vector2(UiTheme.Pad, UiTheme.Pad), new Vector2(-UiTheme.Gap / 2f, -UiTheme.Pad));
+            sel.raycastTarget = false;
 
-        void OnGUI()
-        {
-            EnsureStyles();
-            var game = view.Game;
+            selTitle = UiKit.Text("Title", sel.transform, UiTheme.FontLabel, UiTheme.TextMain,
+                TextAlignmentOptions.TopLeft, FontStyles.Bold);
+            UiKit.Rect(selTitle.gameObject, sel.transform, new Vector2(0, 0.72f), Vector2.one,
+                new Vector2(UiTheme.Pad, 0), new Vector2(-UiTheme.Pad, -6f));
 
-            DrawRtsTopBar(game);
-            DrawRtsConsole(game);
+            selHpBar = UiKit.Bar("Hp", sel.transform, UiTheme.Hex("#70DC8C"));
+            UiKit.Rect(selHpBar.bg.gameObject, sel.transform, new Vector2(0, 0.60f), new Vector2(1, 0.68f),
+                new Vector2(UiTheme.Pad, 0), new Vector2(-UiTheme.Pad, 0));
+            selXpBar = UiKit.Bar("Xp", sel.transform, UiTheme.Gold);
+            UiKit.Rect(selXpBar.bg.gameObject, sel.transform, new Vector2(0, 0.48f), new Vector2(1, 0.56f),
+                new Vector2(UiTheme.Pad, 0), new Vector2(-UiTheme.Pad, 0));
 
-            if (game.PendingStatPoints > 0) DrawStatOverlay(game);
-            else if (game.AugmentChoices.Count > 0) DrawAugmentOverlay(game);
-            if (game.Over) DrawGameOver(game);
-        }
+            selBody = UiKit.Text("Body", sel.transform, UiTheme.FontCaption, UiTheme.TextDim,
+                TextAlignmentOptions.TopLeft);
+            UiKit.Rect(selBody.gameObject, sel.transform, Vector2.zero, new Vector2(1, 0.46f),
+                new Vector2(UiTheme.Pad, 6f), new Vector2(-UiTheme.Pad, 0));
 
-        // ───────── 상단 자원 바 ─────────
-        void DrawTopBar(Game game)
-        {
-            topBar = new Rect(12, 12, 350, 156);
-            Panel(topBar, ACCENT_GOLD);
-            GUILayout.BeginArea(new Rect(topBar.x + 10, topBar.y + 8, topBar.width - 20, topBar.height - 16));
+            // 중 48%: 상세
+            var det = UiKit.Panel("Details", bottomBar, UiTheme.Hex("#0A101F", 0.6f), UiTheme.RadiusPanel, 1);
+            UiKit.Rect(det.gameObject, bottomBar, new Vector2(0.22f, 0), new Vector2(0.70f, 1),
+                new Vector2(UiTheme.Gap / 2f, UiTheme.Pad), new Vector2(-UiTheme.Gap / 2f, -UiTheme.Pad));
+            det.raycastTarget = false;
 
-            GUILayout.Label(
-                $"<b>R{Mathf.Max(1, game.Round)}</b> · 다음 {Mathf.CeilToInt(Mathf.Max(0, game.RoundTimer))}s" +
-                $" · <color=#8fd6ff>미네랄 {game.Mineral}</color>" +
-                $" · <color=#6fdc8c>가스 {game.Gas}</color>", label);
-            GUILayout.Label(
-                $"라이프 <color=#ff5a3c>{game.Lives}</color> · 킬 {game.Kills}" +
-                $" · 점수 <color=#ffd23f>{game.ScoreValue:N0}</color>", label);
+            detailBody = UiKit.Text("Body", det.transform, UiTheme.FontSmall, UiTheme.TextDim,
+                TextAlignmentOptions.TopLeft);
+            UiKit.Rect(detailBody.gameObject, det.transform, new Vector2(0, 0.2f), Vector2.one,
+                new Vector2(UiTheme.Pad, 4f), new Vector2(-UiTheme.Pad, -8f));
 
-            // 보상 현황 — 원본 §8.2의 세 소득 계열
-            GUILayout.Label($"웨이브 클리어 → +{Balance.WaveReward(Mathf.Max(1, game.Round))}", small);
-            var milestone = Economy.NextMilestone(game.Kills);
-            GUILayout.Label(milestone.HasValue
-                ? $"킬 마일스톤 {game.Kills}/{milestone.Value.kills} → +{milestone.Value.reward}"
-                : "킬 마일스톤 전부 달성", small);
+            skillBar = UiKit.Bar("Skill", det.transform, UiTheme.Hex("#7CE7FF"));
+            UiKit.Rect(skillBar.bg.gameObject, det.transform, new Vector2(0, 0.06f), new Vector2(1, 0.16f),
+                new Vector2(UiTheme.Pad, 0), new Vector2(-UiTheme.Pad, 0));
 
-            string bossState = game.BossCooldown > 0f
-                ? $"보스 쿨타임 {Mathf.CeilToInt(game.BossCooldown)}s"
-                : $"보스 소환 가능 Lv1~Lv{game.MaxBossLevel}";
-            var live = game.LiveBossLevels;
-            if (live.Count > 0) bossState = $"교전 중 Lv{string.Join(" Lv", live)} · " + bossState;
-            GUILayout.Label(bossState, small);
+            // 우 30%: 커맨드 카드 3×3
+            var card = UiKit.Panel("Card", bottomBar, UiTheme.Hex("#0A101F", 0.6f), UiTheme.RadiusPanel, 1);
+            UiKit.Rect(card.gameObject, bottomBar, new Vector2(0.70f, 0), Vector2.one,
+                new Vector2(UiTheme.Gap / 2f, UiTheme.Pad), new Vector2(-UiTheme.Pad, -UiTheme.Pad));
+            card.raycastTarget = false;
 
-            GUILayout.Label(
-                $"영웅딜 {game.HeroDamageDealt:N0} · 타워딜 {game.TowerDamageDealt:N0}" +
-                $" · 탱킹기여 {game.TankAssistDamage:N0}", small);
+            cardTitle = UiKit.Text("Title", card.transform, UiTheme.FontCaption, UiTheme.TextFaint,
+                TextAlignmentOptions.TopRight);
+            UiKit.Rect(cardTitle.gameObject, card.transform, new Vector2(0, 0.9f), Vector2.one,
+                new Vector2(6f, 0), new Vector2(-8f, -2f));
 
-            GUILayout.EndArea();
-        }
-
-        // ───────── 우측 버튼 패널 ─────────
-        void DrawRightPanel(Game game)
-        {
-            rightPanel = new Rect(Screen.width - 240, 12, 228, 486);
-            Panel(rightPanel, ACCENT_BLUE);
-            GUILayout.BeginArea(new Rect(rightPanel.x + 10, rightPanel.y + 10,
-                rightPanel.width - 20, rightPanel.height - 20));
-
-            // H1: 커맨드 카드(3×3, QWE/ASD/ZXC)가 실제 명령 경로다. 이 패널은 H2에서
-            // 하단 커맨드 바로 대체된다 — 지금은 카드를 그대로 세로로 펼쳐 보여준다.
-            GUILayout.Label($"<b>{CommandCard.PageTitle(view.Selection, view.Page)}</b>", small);
-
-            var cmds = CommandCard.Build(game, view.Selection, view.Page);
             for (int i = 0; i < CommandCard.SLOTS; i++)
             {
-                var cmd = cmds[i];
-                if (cmd.IsEmpty) continue;
-                GUI.enabled = cmd.Enabled;
-                GUI.backgroundColor = cmd.Accent;
-                string text = $"[{CommandCard.HOTKEY_LABELS[i]}] {cmd.Label}";
-                if (cmd.Detail != null) text += $"\n<size=10>{cmd.Detail}</size>";
-                if (GUILayout.Button(text, card)) view.InvokeCommand(cmd);
+                int captured = i;
+                var btn = UiKit.Button($"Cmd{i}", card.transform, () => InvokeCard(captured));
+                int col = i % 3, row = i / 3;
+                float x0 = 0.03f + col * 0.3166f, x1 = x0 + 0.30f;
+                float y1 = 0.90f - row * 0.2933f, y0 = y1 - 0.28f;
+                UiKit.Rect(btn.gameObject, card.transform,
+                    new Vector2(x0, y0), new Vector2(x1, y1), Vector2.zero, Vector2.zero);
+                cardButtons[i] = btn;
             }
-            GUI.enabled = true;
-            GUI.backgroundColor = Color.white;
-
-            if (view.Page != CardPage.Root)
-                GUILayout.Label("<size=11>Esc — 뒤로</size>", small);
-
-            GUILayout.EndArea();
         }
 
-        // ───────── 영웅 패널 ─────────
-        void DrawHeroPanel(Game game)
+        void BuildOverlay()
         {
-            // 스킬이 있으면 가스 개조 버튼 줄만큼 패널이 커진다
-            float height = game.Hero.Skill != null ? 208f : 176f;
-            heroPanel = new Rect(12, Screen.height - 40 - height, 410, height);
-            Panel(heroPanel, ACCENT_HERO);
-            GUILayout.BeginArea(new Rect(heroPanel.x + 10, heroPanel.y + 8,
-                heroPanel.width - 20, heroPanel.height - 16));
+            overlayDim = UiKit.Panel("Overlay", root, new Color(0.02f, 0.03f, 0.07f, 0.86f), 0);
+            UiKit.Rect(overlayDim.gameObject, root, Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
+            overlayDim.raycastTarget = true; // 아래 클릭 차단
 
-            var hero = game.Hero;
-            var stats = hero.Stats;
-            GUILayout.Label($"<b>영웅 Lv{hero.Level}</b>", label);
+            overlayTitle = UiKit.Text("Title", overlayDim.transform, UiTheme.FontTitle, UiTheme.Gold,
+                TextAlignmentOptions.Center, FontStyles.Bold);
+            UiKit.Rect(overlayTitle.gameObject, overlayDim.transform,
+                new Vector2(0, 0.68f), new Vector2(1, 0.80f), Vector2.zero, Vector2.zero);
 
-            string hpText = hero.Alive
-                ? $"HP {Mathf.CeilToInt(hero.Hp)}/{stats.MaxHp:0}"
-                : $"부활 {Mathf.CeilToInt(hero.RespawnTimer)}s";
-            GUILayout.Label($"{hpText} · XP {Mathf.FloorToInt(hero.Xp)}/{hero.XpNeeded}", small);
-            Bar(hero.Alive ? hero.Hp / stats.MaxHp : 0f, new Color(0.44f, 0.86f, 0.55f));
-            Bar(hero.Xp / (float)hero.XpNeeded, new Color(1f, 0.82f, 0.25f));
+            overlaySub = UiKit.Text("Sub", overlayDim.transform, UiTheme.FontSmall, UiTheme.TextDim,
+                TextAlignmentOptions.Center);
+            UiKit.Rect(overlaySub.gameObject, overlayDim.transform,
+                new Vector2(0, 0.62f), new Vector2(1, 0.68f), Vector2.zero, Vector2.zero);
 
-            float dps = stats.Damage / stats.AttackInterval;
-            string statLine = $"공격력 {stats.Damage:0} · DPS {dps:0} · 사거리 {stats.Range:0}";
-            if (stats.SplashRadius > 0f) statLine += $" · 광역 {stats.SplashRadius:0}";
-            if (stats.DamageReduction > 0f) statLine += $" · 피해감소 {stats.DamageReduction * 100f:0}%";
-            if (stats.Regen > 0f) statLine += $" · 재생 {stats.Regen:0}/s";
-            GUILayout.Label(statLine, small);
-
-            // 증강 목록 + 발동한 시너지
-            var augs = new System.Text.StringBuilder();
-            foreach (var c in hero.AugmentCards)
-                augs.Append($"<color={Augments.RARITIES[c.Rarity].Color}>[{c.Augment.Name}]</color> ");
-            foreach (var s in Augments.ActiveSynergies(hero.AugmentCards))
-                augs.Append($"<color=#ffd23f>★{s.Name}</color> ");
-            if (augs.Length > 0) GUILayout.Label(augs.ToString(), small);
-
-            var skill = hero.Skill;
-            if (skill != null)
+            for (int i = 0; i < 3; i++)
             {
-                string state = game.CanUseSkill
-                    ? game.ShouldAutoCastSkill ? "시전!" : "대기 중"
-                    : $"{Mathf.Max(0f, hero.SkillCooldown):0.0}s";
-                string extra = skill.DamageMult > 0f
-                    ? $" · 피해 {Mathf.RoundToInt(stats.Damage * skill.DamageMult)}"
-                    : "";
-                if (skill.Targets > 0) extra += $" · {skill.Targets}발";
-                // 스킬은 자동 시전이라 버튼이 아니다 — 쿨타임 게이지로만 보여준다
-                GUILayout.Label($"스킬 {skill.Def.Name}{extra} · {state} (자동 시전)", small);
-                Bar(1f - Mathf.Max(0f, hero.SkillCooldown) / skill.Cooldown, new Color(0.49f, 0.91f, 1f));
+                int captured = i;
+                var btn = UiKit.Button($"Card{i}", overlayDim.transform, () => ClickOverlayCard(captured), 12f);
+                float x0 = 0.5f + (captured - 1.5f) * 0.19f + 0.01f;
+                UiKit.Rect(btn.gameObject, overlayDim.transform,
+                    new Vector2(x0, 0.33f), new Vector2(x0 + 0.17f, 0.60f), Vector2.zero, Vector2.zero);
+                btn.Label.alignment = TextAlignmentOptions.Top;
+                btn.Label.fontSize = UiTheme.FontLabel;
+                btn.Detail.alignment = TextAlignmentOptions.Center;
+                btn.Detail.fontSize = UiTheme.FontCaption;
+                overlayCards.Add(btn);
             }
 
-            // 스탯 구매·스킬 개조는 영웅을 선택하면 커맨드 카드에 뜬다
-            if (!view.Selection.IsHero)
-                GUILayout.Label("<size=11>영웅을 클릭하면 강화·개조 명령이 열립니다</size>", small);
+            overlayAction = UiKit.Button("Action", overlayDim.transform, ClickOverlayAction, 10f);
+            UiKit.Rect(overlayAction.gameObject, overlayDim.transform,
+                new Vector2(0.40f, 0.24f), new Vector2(0.60f, 0.30f), Vector2.zero, Vector2.zero);
 
-            GUILayout.EndArea();
+            overlayDim.gameObject.SetActive(false);
         }
 
-        void Bar(float ratio, Color color)
+        void ApplyLayout()
         {
-            var rect = GUILayoutUtility.GetRect(200f, 6f);
-            GUI.color = new Color(0.05f, 0.06f, 0.1f);
-            GUI.DrawTexture(rect, Texture2D.whiteTexture);
-            GUI.color = color;
-            rect.width *= Mathf.Clamp01(ratio);
-            GUI.DrawTexture(rect, Texture2D.whiteTexture);
-            GUI.color = Color.white;
+            builtW = Screen.width;
+            builtH = Screen.height;
+            float bottom = BottomHeight();
+
+            UiKit.Rect(topBar.gameObject, root, new Vector2(0, 1), Vector2.one,
+                new Vector2(0, -TOP_H), Vector2.zero);
+            UiKit.Rect(bottomBar.gameObject, root, Vector2.zero, new Vector2(1, 0),
+                Vector2.zero, new Vector2(0, bottom));
         }
 
-        // ───────── 메시지 + 선택 정보 ─────────
-        void DrawMessage(Game game)
-        {
-            messageBar = new Rect(434, Screen.height - 108, Mathf.Max(240f, Screen.width - 690), 96);
-            Panel(messageBar, ACCENT_DIM);
-            GUILayout.BeginArea(new Rect(messageBar.x + 10, messageBar.y + 8,
-                messageBar.width - 20, messageBar.height - 16));
+        // ───────── GameView 연동 ─────────
 
-            var tower = game.Selected?.Tower;
-            if (tower != null)
-            {
-                float dmg = Combat.Damage(tower, game.Upgrades);
-                float interval = Combat.AttackInterval(tower);
-                GUILayout.Label(
-                    $"<color={Units.RACE_COLOR[(int)tower.Def.Race]}><b>{tower.Def.Name}</b></color>" +
-                    $" {Units.TIER_LABEL[tower.Tier]} 【 {Units.TagLabel(tower.Def)} 】 — " +
-                    $"공격력 {dmg:0} · 간격 {interval:0.00}s · DPS {dmg / interval:0} · 사거리 {Combat.Range(tower):0}",
-                    small);
-            }
-            else
-            {
-                GUILayout.Label("<b>좌클릭</b> 선택 (영웅·타워·타일) · <b>우클릭</b> 영웅 이동 · <b>Esc</b> 선택 해제 · 휠 = 줌\n" +
-                    "명령은 <b>QWE / ASD / ZXC</b> — 고른 대상에 따라 바뀝니다. 같은 유닛 2기가 모이면 자동 조합됩니다.", small);
-            }
-            GUILayout.Label(game.Message, small);
-            GUILayout.EndArea();
+        /// <summary>보드 클릭과 HUD 클릭을 가른다 — 상·하단 바와 오버레이 영역</summary>
+        public bool IsPointerOverHud(Vector2 mouseScreenPos)
+        {
+            if (overlayDim != null && overlayDim.gameObject.activeSelf) return true;
+            return mouseScreenPos.y >= Screen.height - TOP_H || mouseScreenPos.y <= BottomHeight();
         }
 
-        // ───────── RTS 상단 작전 바 + 하단 통합 콘솔 ─────────
-        void DrawRtsTopBar(Game game)
+        void InvokeCard(int index)
         {
-            float width = Mathf.Min(780f, Screen.width - 24f);
-            topBar = new Rect((Screen.width - width) * 0.5f, 10, width, 48);
-            Panel(topBar, ACCENT_GOLD);
-            float cell = width / 6f;
-            TopCell(0, cell, "ROUND", $"<b>{Mathf.Max(1, game.Round)}</b>  <size=11>{Mathf.CeilToInt(Mathf.Max(0, game.RoundTimer))}s</size>");
-            TopCell(1, cell, "MINERAL", $"<color=#8fd6ff><b>{game.Mineral}</b></color>");
-            TopCell(2, cell, "GAS", $"<color=#6fdc8c><b>{game.Gas}</b></color>");
-            TopCell(3, cell, "LIVES", $"<color=#ff6b55><b>{game.Lives}</b></color>");
-            TopCell(4, cell, "KILLS", $"<b>{game.Kills}</b>");
-            TopCell(5, cell, "SCORE", $"<color=#ffd23f><b>{game.ScoreValue:N0}</b></color>");
+            var cmds = CommandCard.Build(view.Game, view.Selection, view.Page);
+            view.InvokeCommand(cmds[index]);
         }
 
-        void TopCell(int index, float width, string caption, string value)
+        // ───────── 매 프레임 갱신 ─────────
+
+        void Update()
         {
-            float x = topBar.x + index * width;
-            if (index > 0) Fill(new Rect(x, topBar.y + 10, 1, topBar.height - 16), FRAME);
-            GUI.Label(new Rect(x + 6, topBar.y + 9, width - 12, 13), $"<color=#78878a>{caption}</color>", tiny);
-            GUI.Label(new Rect(x + 6, topBar.y + 21, width - 12, 22), value,
-                new GUIStyle(label) { alignment = TextAnchor.MiddleCenter });
+            var game = view.Game;
+            if (builtW != Screen.width || builtH != Screen.height) ApplyLayout();
+
+            RefreshTop(game);
+            RefreshSelection(game);
+            RefreshCard(game);
+            RefreshOverlay(game);
         }
 
-        void DrawRtsConsole(Game game)
+        void RefreshTop(Game game)
         {
-            float height = Mathf.Min(226f, Screen.height * 0.29f);
-            bottomConsole = new Rect(0, Screen.height - height, Screen.width, height);
-            Panel(bottomConsole, ACCENT_BLUE);
-            Fill(new Rect(0, bottomConsole.y + 10, Screen.width, 1), FRAME_LIGHT);
+            // 미네랄 카운트업 — 벌었을 때 숫자가 굴러 올라가는 주스
+            displayMineral = Mathf.Abs(displayMineral - game.Mineral) < 1.5f
+                ? game.Mineral
+                : Mathf.Lerp(displayMineral, game.Mineral, Time.unscaledDeltaTime * 9f);
 
-            float commandWidth = Mathf.Clamp(Screen.width * 0.27f, 280f, 370f);
-            Rect commands = new Rect(Screen.width - commandWidth - 10, bottomConsole.y + 18, commandWidth, height - 28);
-            Rect info = new Rect(10, bottomConsole.y + 18,
-                Mathf.Max(300f, commands.x - 20), height - 28);
+            var waveType = Balance.WaveTypeOf(Mathf.Max(1, game.Round) + 1);
+            string notice = waveType.Id == Balance.WaveTypeId.Normal
+                ? ""
+                : $" · <color=#FF5A3C>다음: {waveType.Label}!</color>";
+            topLeft.text =
+                $"<b>R{Mathf.Max(1, game.Round)}</b>" +
+                $" <color=#5A6480>다음 {Mathf.CeilToInt(Mathf.Max(0, game.RoundTimer))}s</color>{notice}";
 
-            DrawSelectionPanel(game, info);
-            DrawCommandGrid(game, commands);
+            topCenter.text =
+                $"<color=#8FD6FF>◆ {Mathf.RoundToInt(displayMineral)}</color>   " +
+                $"<color=#6FDC8C>● {game.Gas}</color>   " +
+                $"<color=#B08CFF>프로브 {game.Probes}</color>";
+
+            topRight.text =
+                $"<color=#FF5A3C>♥ {game.Lives}</color>  " +
+                $"<color=#5A6480>킬 {game.Kills}</color>  " +
+                $"<color=#FFD23F>{game.ScoreValue:N0}</color>";
         }
 
-        void DrawSelectionPanel(Game game, Rect rect)
+        void RefreshSelection(Game game)
         {
-            Inset(rect, ACCENT_HERO);
-            GUI.Label(new Rect(rect.x + 12, rect.y + 7, rect.width - 24, 18),
-                $"<color=#879698>{CommandCard.PageTitle(view.Selection, view.Page).ToUpper()}</color>", tiny);
-            string heading;
-            string body;
-            var tower = game.Selected?.Tower;
-            if (tower != null)
-            {
-                float damage = Combat.Damage(tower, game.Upgrades);
-                float interval = Combat.AttackInterval(tower);
-                heading = $"<color={Units.RACE_COLOR[(int)tower.Def.Race]}><b>{tower.Def.Name}</b></color>  {Units.TIER_LABEL[tower.Tier]}";
-                body = $"공격 {damage:0}   DPS {damage / interval:0}\n속도 {interval:0.00}s   사거리 {Combat.Range(tower):0}\n【 {Units.TagLabel(tower.Def)} 】";
-            }
-            else if (view.Selection.IsHero)
+            var sel = view.Selection;
+            bool hpVisible = false, xpVisible = false;
+
+            if (sel.IsHero)
             {
                 var hero = game.Hero;
                 var stats = hero.Stats;
-                heading = $"<color=#c5a9ff><b>영웅  LV {hero.Level}</b></color>";
-                body = hero.Alive
-                    ? $"HP {Mathf.CeilToInt(hero.Hp)} / {stats.MaxHp:0}   XP {Mathf.FloorToInt(hero.Xp)} / {hero.XpNeeded}\n공격 {stats.Damage:0}   DPS {stats.Damage / stats.AttackInterval:0}   사거리 {stats.Range:0}"
-                    : $"전투 불능   부활 {Mathf.CeilToInt(hero.RespawnTimer)}초";
+                selTitle.text = $"영웅 <color=#B08CFF>Lv{hero.Level}</color>";
+                hpVisible = xpVisible = true;
+                UiKit.SetBar(selHpBar.fill, hero.Alive ? hero.Hp / stats.MaxHp : 0f);
+                UiKit.SetBar(selXpBar.fill, hero.Xp / Mathf.Max(1f, hero.XpNeeded));
+                selBody.text = hero.Alive
+                    ? $"HP {Mathf.CeilToInt(hero.Hp)}/{stats.MaxHp:0} · XP {Mathf.FloorToInt(hero.Xp)}/{hero.XpNeeded}"
+                    : $"부활 {Mathf.CeilToInt(hero.RespawnTimer)}s";
             }
-            else if (view.Selection.IsEnemy && view.Selection.Enemy != null)
+            else if (sel.IsTower && sel.Slot?.Tower != null)
             {
-                var enemy = view.Selection.Enemy;
-                string kind = enemy.Kind == EnemyKind.Boss ? $"보스  LV {enemy.BossLevel}" : "일반 유닛";
-                string state = enemy.Held ? "저지됨" : enemy.SlowTimer > 0f ? $"감속 {enemy.SlowFactor * 100f:0}%" : "이동 중";
-                heading = enemy.Kind == EnemyKind.Boss
-                    ? $"<color=#ff6b55><b>{enemy.Name}</b></color>  {kind}"
-                    : $"<color=#b9c2c9><b>{enemy.Name}</b></color>  {kind}";
-                body = $"HP {Mathf.CeilToInt(enemy.Hp)} / {enemy.MaxHp:0}   방어 {enemy.Armor:0}\n이동속도 {enemy.Speed:0.0}   경로 {enemy.Distance:0}\n상태  {state}";
+                var tower = sel.Slot.Tower;
+                selTitle.text =
+                    $"<color={Units.RACE_COLOR[(int)tower.Def.Race]}>{tower.Def.Name}</color> " +
+                    $"<size=11><color=#8A93AD>{Units.TIER_LABEL[tower.Tier]}</color></size>";
+                selBody.text = $"【 {Units.TagLabel(tower.Def)} 】";
+            }
+            else if (sel.IsEmptyTile)
+            {
+                selTitle.text = "빈 타일";
+                selBody.text = $"유닛 생성 {game.SpawnCost} 미네랄";
             }
             else
             {
-                heading = view.Selection.IsEmptyTile ? "<b>빈 타일</b>" : "<b>작전 지휘</b>";
-                body = "좌클릭  선택\n우클릭  영웅 이동\nQWE / ASD / ZXC  명령";
+                selTitle.text = "<color=#8A93AD>전체</color>";
+                selBody.text = "좌클릭 선택 · 우클릭 영웅 이동";
             }
-            GUI.Label(new Rect(rect.x + 14, rect.y + 30, rect.width - 28, 26), heading, label);
-            GUI.Label(new Rect(rect.x + 14, rect.y + 58, rect.width - 28, rect.height - 96), body, small);
-            Fill(new Rect(rect.x + 12, rect.y + rect.height - 35, rect.width - 24, 1), FRAME);
-            GUI.Label(new Rect(rect.x + 14, rect.y + rect.height - 31, rect.width - 28, 25), game.Message, tiny);
+
+            selHpBar.bg.gameObject.SetActive(hpVisible);
+            selXpBar.bg.gameObject.SetActive(xpVisible);
+            RefreshDetails(game);
         }
 
-        void DrawCommandGrid(Game game, Rect rect)
+        void RefreshDetails(Game game)
         {
-            Inset(rect, ACCENT_BLUE);
-            GUI.Label(new Rect(rect.x + 8, rect.y + 5, rect.width - 16, 18),
-                $"<b>COMMAND</b>  <color=#728084>{CommandCard.PageTitle(view.Selection, view.Page)}</color>", tiny);
-            float gap = 5f;
-            float cellWidth = (rect.width - 20 - gap * 2) / 3f;
-            float cellHeight = (rect.height - 34 - gap * 2) / 3f;
-            var commands = CommandCard.Build(game, view.Selection, view.Page);
+            var sel = view.Selection;
+            bool skillVisible = false;
+
+            if (sel.IsHero)
+            {
+                var hero = game.Hero;
+                var stats = hero.Stats;
+                float dps = stats.Damage / stats.AttackInterval;
+                string line1 =
+                    $"공격력 <color=#E8ECF6>{stats.Damage:0}</color> · DPS <color=#E8ECF6>{dps:0}</color>" +
+                    $" · 사거리 {stats.Range:0}" +
+                    $" · 힘 {hero.Bought.Str} 민첩 {hero.Bought.Agi} 지능 {hero.Bought.Int}";
+
+                var augs = new System.Text.StringBuilder();
+                foreach (var c in hero.AugmentCards)
+                    augs.Append($"<color={Augments.RARITIES[c.Rarity].Color}>[{c.Augment.Name}]</color> ");
+                foreach (var s in Augments.ActiveSynergies(hero.AugmentCards))
+                    augs.Append($"<color=#FFD23F>★{s.Name}</color> ");
+
+                var skill = hero.Skill;
+                string line3 = "";
+                if (skill != null)
+                {
+                    skillVisible = true;
+                    UiKit.SetBar(skillBar.fill,
+                        1f - Mathf.Max(0f, hero.SkillCooldown) / Mathf.Max(0.01f, skill.Cooldown));
+                    line3 = $"\n스킬 <color=#7CE7FF>{skill.Def.Name}</color> — 자동 시전";
+                }
+                detailBody.text = line1 + "\n" + augs + line3;
+            }
+            else if (sel.IsTower && sel.Slot?.Tower != null)
+            {
+                var tower = sel.Slot.Tower;
+                float dmg = Combat.Damage(tower, game.Upgrades);
+                float interval = Combat.AttackInterval(tower);
+                detailBody.text =
+                    $"공격력 <color=#E8ECF6>{dmg:0}</color> · 간격 {interval:0.00}s" +
+                    $" · DPS <color=#E8ECF6>{dmg / interval:0}</color> · 사거리 {Combat.Range(tower):0}" +
+                    $"\n<color=#5A6480>{game.Message}</color>";
+            }
+            else
+            {
+                detailBody.text =
+                    $"웨이브 클리어 → <color=#8FD6FF>+{Balance.WaveReward(Mathf.Max(1, game.Round))}</color>" +
+                    $" · 영웅딜 {game.HeroDamageDealt:N0} · 타워딜 {game.TowerDamageDealt:N0}" +
+                    $"\n<color=#5A6480>{game.Message}</color>";
+            }
+
+            skillBar.bg.gameObject.SetActive(skillVisible);
+        }
+
+        void RefreshCard(Game game)
+        {
+            cardTitle.text = CommandCard.PageTitle(view.Selection, view.Page) +
+                (view.Page != CardPage.Root ? " · Esc 뒤로" : "");
+            var cmds = CommandCard.Build(game, view.Selection, view.Page);
             for (int i = 0; i < CommandCard.SLOTS; i++)
             {
-                int col = i % 3;
-                int row = i / 3;
-                Rect cell = new Rect(rect.x + 10 + col * (cellWidth + gap), rect.y + 25 + row * (cellHeight + gap), cellWidth, cellHeight);
-                var command = commands[i];
-                Fill(cell, command.IsEmpty ? GameView.Hex("#11191d") : (command.Enabled ? command.Accent : FRAME));
-                Rect inner = new Rect(cell.x + 2, cell.y + 2, cell.width - 4, cell.height - 4);
-                Fill(inner, command.IsEmpty ? GameView.Hex("#0b1114") : GameView.Hex("#182226"));
-                GUI.Label(new Rect(cell.x + 4, cell.y + 3, 18, 15),
-                    $"<color=#e1c878><b>{CommandCard.HOTKEY_LABELS[i]}</b></color>", tiny);
-                if (command.IsEmpty) continue;
-                string text = $"<b>{command.Label}</b>";
-                if (command.Detail != null) text += $"\n<size=9><color=#92a0a3>{command.Detail}</color></size>";
-                GUI.enabled = command.Enabled;
-                GUI.backgroundColor = new Color(0f, 0f, 0f, 0f);
-                if (GUI.Button(inner, text, commandLabel)) view.InvokeCommand(command);
+                var btn = cardButtons[i];
+                var cmd = cmds[i];
+                bool active = !cmd.IsEmpty;
+                btn.gameObject.SetActive(active);
+                if (!active) continue;
+
+                string hex = ColorUtility.ToHtmlStringRGB(cmd.Accent);
+                btn.Label.text =
+                    $"<size=9><color=#{hex}>{CommandCard.HOTKEY_LABELS[i]}</color></size>  {cmd.Label}";
+                btn.Detail.text = cmd.Detail ?? "";
+                btn.Interactable = cmd.Enabled;
             }
-            GUI.enabled = true;
-            GUI.backgroundColor = Color.white;
         }
 
-        // ───────── 오버레이 공통 카드 배치 ─────────
-        Rect OverlayCardRect(int index, int count)
+        // ───────── 오버레이 (스탯 / 증강 / 게임오버) ─────────
+
+        enum OverlayMode { None, Stat, Augment, GameOver }
+        OverlayMode overlayMode;
+
+        void RefreshOverlay(Game game)
         {
-            float w = 240f, h = 190f, gap = 16f;
-            float totalW = count * w + (count - 1) * gap;
-            float x = (Screen.width - totalW) / 2f + index * (w + gap);
-            float y = (Screen.height - h) / 2f;
-            return new Rect(x, y, w, h);
+            OverlayMode mode =
+                game.Over ? OverlayMode.GameOver
+                : game.PendingStatPoints > 0 ? OverlayMode.Stat
+                : game.AugmentChoices.Count > 0 ? OverlayMode.Augment
+                : OverlayMode.None;
+
+            overlayMode = mode;
+            overlayDim.gameObject.SetActive(mode != OverlayMode.None);
+            if (mode == OverlayMode.None) return;
+
+            switch (mode)
+            {
+                case OverlayMode.Stat: RefreshStatOverlay(game); break;
+                case OverlayMode.Augment: RefreshAugmentOverlay(game); break;
+                case OverlayMode.GameOver: RefreshGameOver(game); break;
+            }
         }
 
-        void DimScreen()
+        void RefreshStatOverlay(Game game)
         {
-            GUI.color = new Color(0f, 0f, 0f, 0.72f);
-            GUI.DrawTexture(new Rect(0, 0, Screen.width, Screen.height), Texture2D.whiteTexture);
-            GUI.color = Color.white;
-        }
-
-        // ───────── 레벨업 스탯 선택 오버레이 — 증강과 같은 일시정지 카드 ─────────
-        void DrawStatOverlay(Game game)
-        {
-            DimScreen();
             int points = game.PendingStatPoints;
             int queued = game.Hero.PendingStatPoints.Count;
-            string tail = queued > 1 ? $" (대기 {queued}회)" : "";
-            GUI.Label(new Rect(0, Screen.height / 2f - 160, Screen.width, 30),
-                $"<color=#ffd23f>레벨 업!</color> — 스탯 하나에 +{points}포인트{tail}", title);
+            overlayTitle.text = "레벨 업!";
+            overlaySub.text = $"스탯 하나에 +{points}포인트" + (queued > 1 ? $"  (대기 {queued}회)" : "");
 
-            for (int i = 0; i < HeroData.STAT_IDS.Length; i++)
+            string[] desc =
+            {
+                $"공격력 +{HeroData.DMG_PER_STR} · 체력 +{HeroData.HP_PER_STR}",
+                $"공격 속도 +{HeroData.AS_PER_AGI * 100f:0}%",
+                $"스킬 피해 +{HeroData.SKILL_PER_INT * 100f:0.#}%",
+            };
+            for (int i = 0; i < 3; i++)
             {
                 var stat = HeroData.STAT_IDS[i];
-                string last = game.Hero.Focus == stat ? " <color=#ffd23f>(직전 선택)</color>" : "";
-                string text = $"<b>{HeroData.StatLabel(stat)} +{points}</b>{last}\n\n" +
-                    $"보유 {game.Hero.Bought.Of(stat)}pt";
-                if (GUI.Button(OverlayCardRect(i, HeroData.STAT_IDS.Length), text, card))
-                    game.ChooseStat(stat);
+                var btn = overlayCards[i];
+                btn.gameObject.SetActive(true);
+                string last = game.Hero.Focus == stat ? " <color=#FFD23F>●</color>" : "";
+                btn.Label.text = $"{HeroData.StatLabel(stat)} +{points}{last}";
+                btn.Detail.text = $"{desc[i]}\n보유 {game.Hero.Bought.Of(stat)}pt";
+                btn.Interactable = true;
             }
+            overlayAction.gameObject.SetActive(false);
         }
 
-        // ───────── 증강 선택 오버레이 ─────────
-        void DrawAugmentOverlay(Game game)
+        void RefreshAugmentOverlay(Game game)
         {
-            DimScreen();
-            GUI.Label(new Rect(0, Screen.height / 2f - 160, Screen.width, 30),
-                $"<color=#ffd23f>증강 선택</color> — 영웅 Lv{game.Hero.Level}, 하나를 고르세요", title);
+            overlayTitle.text = "증강 선택";
+            overlaySub.text = $"영웅 Lv{game.Hero.Level} — 하나를 고르세요";
 
-            for (int i = 0; i < game.AugmentChoices.Count; i++)
+            for (int i = 0; i < 3; i++)
             {
+                var btn = overlayCards[i];
+                bool active = i < game.AugmentChoices.Count;
+                btn.gameObject.SetActive(active);
+                if (!active) continue;
                 var choice = game.AugmentChoices[i];
                 var rarity = Augments.RARITIES[choice.Rarity];
-                string text =
-                    $"<color={Augments.KindColor(choice.Augment.Kind)}>{Augments.KindLabel(choice.Augment.Kind)}</color>" +
-                    $"  <color={rarity.Color}><b>{rarity.Label}</b></color>\n\n" +
-                    $"<b>{choice.Augment.Name}</b>\n\n{choice.Augment.Description}";
-                GUI.backgroundColor = GameView.Hex(rarity.Color);
-                if (GUI.Button(OverlayCardRect(i, game.AugmentChoices.Count), text, card))
-                    game.ChooseAugment(i);
+                btn.Label.text =
+                    $"<color={Augments.KindColor(choice.Augment.Kind)}><size=10>{Augments.KindLabel(choice.Augment.Kind)}</size></color>" +
+                    $"  <color={rarity.Color}>{rarity.Label}</color>\n<b>{choice.Augment.Name}</b>";
+                btn.Detail.text = choice.Augment.Description;
+                btn.Interactable = true;
             }
-            GUI.backgroundColor = Color.white;
 
-            // 증강 리롤 (가스) — 선택지 3장을 다시 뽑는다
             int left = Augments.AUGMENT_REROLL_MAX - game.RerollsUsed;
-            string rerollText = left > 0
-                ? $"리롤 {game.RerollCost}가스 · {left}회 남음 (보유 {game.Gas})"
-                : "리롤 소진";
-            GUI.enabled = game.CanReroll;
-            if (GUI.Button(new Rect(Screen.width / 2f - 140, Screen.height / 2f + 115, 280, 34), rerollText))
-                game.RerollAugments();
-            GUI.enabled = true;
+            overlayAction.gameObject.SetActive(true);
+            overlayAction.Label.text = left > 0 ? $"리롤 — {game.RerollCost} 가스 ({left}회)" : "리롤 소진";
+            overlayAction.Detail.text = "";
+            overlayAction.Interactable = game.CanReroll;
         }
 
-        // ───────── 게임오버 ─────────
-        void DrawGameOver(Game game)
+        void RefreshGameOver(Game game)
         {
-            DimScreen();
-            float cx = Screen.width / 2f;
-            float cy = Screen.height / 2f;
-            GUI.Label(new Rect(0, cy - 90, Screen.width, 40),
-                $"<color=#ffd23f>{game.ScoreValue:N0}점</color>", title);
-            GUI.Label(new Rect(0, cy - 44, Screen.width, 30),
-                $"{game.Round}라운드 · {game.Kills}킬 · 보스 Lv{game.BossCleared} · 영웅 Lv{game.Hero.Level}",
-                new GUIStyle(label) { alignment = TextAnchor.MiddleCenter });
-            if (GUI.Button(new Rect(cx - 80, cy + 10, 160, 40), "다시 시작"))
-                view.Restart();
+            overlayTitle.text = $"{game.ScoreValue:N0}점";
+            overlaySub.text =
+                $"{game.Round}라운드 · {game.Kills}킬 · 보스 Lv{game.BossCleared} · 영웅 Lv{game.Hero.Level}";
+            foreach (var c in overlayCards) c.gameObject.SetActive(false);
+            overlayAction.gameObject.SetActive(true);
+            overlayAction.Label.text = "다시 시작";
+            overlayAction.Detail.text = "";
+            overlayAction.Interactable = true;
+        }
+
+        void ClickOverlayCard(int index)
+        {
+            var game = view.Game;
+            if (overlayMode == OverlayMode.Stat) game.ChooseStat(HeroData.STAT_IDS[index]);
+            else if (overlayMode == OverlayMode.Augment) game.ChooseAugment(index);
+        }
+
+        void ClickOverlayAction()
+        {
+            var game = view.Game;
+            if (overlayMode == OverlayMode.Augment) game.RerollAugments();
+            else if (overlayMode == OverlayMode.GameOver) view.Restart();
         }
     }
 }
