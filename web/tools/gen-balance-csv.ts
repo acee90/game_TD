@@ -8,6 +8,7 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import * as B from '../src/data/balance';
 import * as H from '../src/data/hero';
 import * as K from '../src/data/skills';
 import { computeStats } from '../src/game/hero';
@@ -212,6 +213,64 @@ write(
       ['MASTERY_THRESHOLD', H.MASTERY_THRESHOLD, '같은 계열 N개 → 대특화'],
       ['AUGMENT_CHOICES', H.AUGMENT_CHOICES, '한 번에 보여주는 카드 수'],
     ],
+  ),
+);
+
+
+// ── 라운드별 수입 저점·고점 — 영웅/타워/몬스터 밸런스의 공통 기준
+//
+// 저점(cumLow):  시작 미네랄 + 웨이브 보상 누적 + 킬 마일스톤. 보스를 아예 안 부른 판.
+//   (누출은 킬 대신 +5를 주므로 대략 중립 — 저점에 포함하지 않는다.)
+// 고점(cumHigh): 저점 + 보스를 쿨타임(45초)마다 최고 해금 레벨로 부르고 전부 잡는 판.
+//   k번째 소환 = Lv min(k, 6). 소환은 t=0부터 가능하므로 floor(t/45)+1회.
+// 제외: 증강 mineralPerKill(빌드 의존), 누출 보너스.
+const incomeRows: (string | number)[][] = [];
+{
+  let waveCum = 0;
+  let kills = 0;
+  const milestoneCum = (k: number): number => {
+    let sum = 0;
+    for (const [need, reward] of B.KILL_MILESTONES) if (k >= need) sum += reward;
+    return sum;
+  };
+  const bossCum = (summons: number): number => {
+    let sum = 0;
+    for (let k = 1; k <= summons; k++) sum += B.BOSS_KILL_MINERAL[Math.min(k, 6) - 1];
+    return sum;
+  };
+  for (let r = 1; r <= 60; r++) {
+    waveCum += B.waveReward(r);
+    kills += B.enemyCount(r);
+    const elapsed = B.OPENING_SECONDS + r * B.ROUND_SECONDS;
+    const summons = Math.floor(elapsed / B.BOSS_COOLDOWN_SECONDS) + 1;
+    const cumLow = B.START_MINERAL + waveCum + milestoneCum(kills);
+    const bossHigh = bossCum(summons);
+    incomeRows.push([
+      r,
+      B.waveReward(r),
+      B.enemyCount(r),
+      kills,
+      milestoneCum(kills),
+      cumLow,
+      bossHigh,
+      cumLow + bossHigh,
+      B.enemyHP(r),
+      B.enemyArmor(r),
+      B.enemyHP(r) * B.enemyCount(r),
+      Math.round(B.targetClearSeconds(r) * 10) / 10,
+      Math.round(B.expectedBoardDps(r)),
+    ]);
+  }
+}
+write(
+  'income-curve.csv',
+  toCsv(
+    [
+      'round', 'waveReward', 'mobs', 'cumKills', 'milestoneCum',
+      'cumIncomeLow', 'bossIncomeHigh', 'cumIncomeHigh',
+      'enemyHp', 'enemyArmor', 'waveTotalHp', 'targetClearSec', 'expectedBoardDps',
+    ],
+    incomeRows,
   ),
 );
 
