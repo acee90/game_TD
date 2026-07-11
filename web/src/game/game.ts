@@ -551,6 +551,7 @@ export class Game {
     const hp = B.enemyHP(this.round);
     const armor = B.enemyArmor(this.round);
 
+    const waveType = B.waveTypeOf(this.round);
     for (let i = 0; i < B.enemyCount(this.round); i++) {
       this.spawnQueue.push({
         kind: 'mob',
@@ -559,9 +560,14 @@ export class Game {
         armor,
         speed: B.ENEMY_SPEED,
         radius: 9,
+        contactDamageMult: waveType.contactDamageMult,
+        typeColor: waveType.id === 'normal' ? undefined : waveType.color,
       });
     }
-    this.message = `Round Start — ${this.round}라운드`;
+    this.message =
+      waveType.id === 'normal'
+        ? `Round Start — ${this.round}라운드`
+        : `Round Start — ${this.round}라운드 · ${waveType.label} 웨이브! (접촉 피해 ×${waveType.contactDamageMult})`;
   }
 
   /** 모든 적은 북측 왼쪽 문 하나에서 나온다 */
@@ -770,7 +776,7 @@ export class Game {
         incoming +=
           enemy.kind === 'boss'
             ? H.bossDamage(enemy.bossLevel ?? 1, this.round)
-            : H.enemyDamage(this.round);
+            : H.enemyDamage(this.round) * (enemy.contactDamageMult ?? 1);
       }
       decoy.hp -= incoming;
       this.decoyHitTimer = H.ENEMY_ATTACK_INTERVAL;
@@ -860,7 +866,7 @@ export class Game {
         incoming +=
           enemy.kind === 'boss'
             ? H.bossDamage(enemy.bossLevel ?? 1, this.round)
-            : H.enemyDamage(this.round);
+            : H.enemyDamage(this.round) * (enemy.contactDamageMult ?? 1);
       }
       if (incoming > 0) {
         hero.takeDamage(incoming);

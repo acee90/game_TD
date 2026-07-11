@@ -16,6 +16,7 @@ namespace GodTD.View
 
         // HUD 판 영역 — 월드 클릭과 겹치지 않게 GameView가 조회한다
         Rect topBar;
+        Rect bottomConsole;
         Rect rightPanel;
         Rect heroPanel;
         Rect messageBar;
@@ -24,9 +25,14 @@ namespace GodTD.View
         GUIStyle small;
         GUIStyle title;
         GUIStyle card;
+        GUIStyle commandLabel;
+        GUIStyle tiny;
         bool stylesReady;
 
-        static readonly Color PANEL_BG = new Color(0.03f, 0.045f, 0.09f, 0.74f);
+        static readonly Color PANEL_BG = new Color(0.025f, 0.035f, 0.045f, 0.97f);
+        static readonly Color FRAME = new Color(0.22f, 0.27f, 0.28f, 1f);
+        static readonly Color FRAME_LIGHT = new Color(0.42f, 0.48f, 0.46f, 1f);
+        static readonly Color INSET = new Color(0.018f, 0.026f, 0.032f, 1f);
         static readonly Color ACCENT_GOLD = new Color(1f, 0.82f, 0.25f, 0.85f);
         static readonly Color ACCENT_BLUE = new Color(0.31f, 0.64f, 1f, 0.85f);
         static readonly Color ACCENT_HERO = new Color(0.69f, 0.55f, 1f, 0.85f);
@@ -41,8 +47,7 @@ namespace GodTD.View
         public bool IsPointerOverHud(Vector2 mouseScreenPos)
         {
             var p = new Vector2(mouseScreenPos.x, Screen.height - mouseScreenPos.y);
-            return topBar.Contains(p) || rightPanel.Contains(p) ||
-                   heroPanel.Contains(p) || messageBar.Contains(p);
+            return topBar.Contains(p) || bottomConsole.Contains(p);
         }
 
         void EnsureStyles()
@@ -61,16 +66,38 @@ namespace GodTD.View
                 richText = true, fontSize = 13, wordWrap = true,
                 alignment = TextAnchor.UpperLeft, padding = new RectOffset(12, 12, 10, 10),
             };
+            commandLabel = new GUIStyle(GUI.skin.button)
+            {
+                richText = true, fontSize = 11, wordWrap = true,
+                alignment = TextAnchor.MiddleCenter, padding = new RectOffset(4, 4, 4, 4),
+            };
+            tiny = new GUIStyle(GUI.skin.label)
+            {
+                richText = true, fontSize = 10, wordWrap = true,
+                alignment = TextAnchor.MiddleCenter,
+            };
         }
 
-        /// <summary>반투명 패널 + 상단 액센트 라인</summary>
+        void Fill(Rect rect, Color color)
+        {
+            GUI.color = color;
+            GUI.DrawTexture(rect, Texture2D.whiteTexture);
+            GUI.color = Color.white;
+        }
+
         void Panel(Rect rect, Color accent)
         {
-            GUI.color = PANEL_BG;
-            GUI.DrawTexture(rect, Texture2D.whiteTexture);
-            GUI.color = accent;
-            GUI.DrawTexture(new Rect(rect.x, rect.y, rect.width, 2f), Texture2D.whiteTexture);
-            GUI.color = Color.white;
+            Fill(rect, FRAME);
+            Fill(new Rect(rect.x + 2, rect.y + 2, rect.width - 4, rect.height - 4), PANEL_BG);
+            Fill(new Rect(rect.x + 4, rect.y + 4, rect.width - 8, 2), FRAME_LIGHT);
+            Fill(new Rect(rect.x + 4, rect.y + 6, rect.width - 8, 2), accent);
+        }
+
+        void Inset(Rect rect, Color accent)
+        {
+            Fill(rect, new Color(0.005f, 0.008f, 0.01f, 1f));
+            Fill(new Rect(rect.x + 2, rect.y + 2, rect.width - 4, rect.height - 4), INSET);
+            Fill(new Rect(rect.x + 2, rect.y + 2, 2, rect.height - 4), accent);
         }
 
         void OnGUI()
@@ -78,10 +105,8 @@ namespace GodTD.View
             EnsureStyles();
             var game = view.Game;
 
-            DrawTopBar(game);
-            DrawRightPanel(game);
-            DrawHeroPanel(game);
-            DrawMessage(game);
+            DrawRtsTopBar(game);
+            DrawRtsConsole(game);
 
             if (game.PendingStatPoints > 0) DrawStatOverlay(game);
             else if (game.AugmentChoices.Count > 0) DrawAugmentOverlay(game);
@@ -251,6 +276,122 @@ namespace GodTD.View
             }
             GUILayout.Label(game.Message, small);
             GUILayout.EndArea();
+        }
+
+        // ───────── RTS 상단 작전 바 + 하단 통합 콘솔 ─────────
+        void DrawRtsTopBar(Game game)
+        {
+            float width = Mathf.Min(780f, Screen.width - 24f);
+            topBar = new Rect((Screen.width - width) * 0.5f, 10, width, 48);
+            Panel(topBar, ACCENT_GOLD);
+            float cell = width / 6f;
+            TopCell(0, cell, "ROUND", $"<b>{Mathf.Max(1, game.Round)}</b>  <size=11>{Mathf.CeilToInt(Mathf.Max(0, game.RoundTimer))}s</size>");
+            TopCell(1, cell, "MINERAL", $"<color=#8fd6ff><b>{game.Mineral}</b></color>");
+            TopCell(2, cell, "GAS", $"<color=#6fdc8c><b>{game.Gas}</b></color>");
+            TopCell(3, cell, "LIVES", $"<color=#ff6b55><b>{game.Lives}</b></color>");
+            TopCell(4, cell, "KILLS", $"<b>{game.Kills}</b>");
+            TopCell(5, cell, "SCORE", $"<color=#ffd23f><b>{game.ScoreValue:N0}</b></color>");
+        }
+
+        void TopCell(int index, float width, string caption, string value)
+        {
+            float x = topBar.x + index * width;
+            if (index > 0) Fill(new Rect(x, topBar.y + 10, 1, topBar.height - 16), FRAME);
+            GUI.Label(new Rect(x + 6, topBar.y + 9, width - 12, 13), $"<color=#78878a>{caption}</color>", tiny);
+            GUI.Label(new Rect(x + 6, topBar.y + 21, width - 12, 22), value,
+                new GUIStyle(label) { alignment = TextAnchor.MiddleCenter });
+        }
+
+        void DrawRtsConsole(Game game)
+        {
+            float height = Mathf.Min(226f, Screen.height * 0.29f);
+            bottomConsole = new Rect(0, Screen.height - height, Screen.width, height);
+            Panel(bottomConsole, ACCENT_BLUE);
+            Fill(new Rect(0, bottomConsole.y + 10, Screen.width, 1), FRAME_LIGHT);
+
+            float commandWidth = Mathf.Clamp(Screen.width * 0.27f, 280f, 370f);
+            Rect commands = new Rect(Screen.width - commandWidth - 10, bottomConsole.y + 18, commandWidth, height - 28);
+            Rect info = new Rect(10, bottomConsole.y + 18,
+                Mathf.Max(300f, commands.x - 20), height - 28);
+
+            DrawSelectionPanel(game, info);
+            DrawCommandGrid(game, commands);
+        }
+
+        void DrawSelectionPanel(Game game, Rect rect)
+        {
+            Inset(rect, ACCENT_HERO);
+            GUI.Label(new Rect(rect.x + 12, rect.y + 7, rect.width - 24, 18),
+                $"<color=#879698>{CommandCard.PageTitle(view.Selection, view.Page).ToUpper()}</color>", tiny);
+            string heading;
+            string body;
+            var tower = game.Selected?.Tower;
+            if (tower != null)
+            {
+                float damage = Combat.Damage(tower, game.Upgrades);
+                float interval = Combat.AttackInterval(tower);
+                heading = $"<color={Units.RACE_COLOR[(int)tower.Def.Race]}><b>{tower.Def.Name}</b></color>  {Units.TIER_LABEL[tower.Tier]}";
+                body = $"공격 {damage:0}   DPS {damage / interval:0}\n속도 {interval:0.00}s   사거리 {Combat.Range(tower):0}\n【 {Units.TagLabel(tower.Def)} 】";
+            }
+            else if (view.Selection.IsHero)
+            {
+                var hero = game.Hero;
+                var stats = hero.Stats;
+                heading = $"<color=#c5a9ff><b>영웅  LV {hero.Level}</b></color>";
+                body = hero.Alive
+                    ? $"HP {Mathf.CeilToInt(hero.Hp)} / {stats.MaxHp:0}   XP {Mathf.FloorToInt(hero.Xp)} / {hero.XpNeeded}\n공격 {stats.Damage:0}   DPS {stats.Damage / stats.AttackInterval:0}   사거리 {stats.Range:0}"
+                    : $"전투 불능   부활 {Mathf.CeilToInt(hero.RespawnTimer)}초";
+            }
+            else if (view.Selection.IsEnemy && view.Selection.Enemy != null)
+            {
+                var enemy = view.Selection.Enemy;
+                string kind = enemy.Kind == EnemyKind.Boss ? $"보스  LV {enemy.BossLevel}" : "일반 유닛";
+                string state = enemy.Held ? "저지됨" : enemy.SlowTimer > 0f ? $"감속 {enemy.SlowFactor * 100f:0}%" : "이동 중";
+                heading = enemy.Kind == EnemyKind.Boss
+                    ? $"<color=#ff6b55><b>{enemy.Name}</b></color>  {kind}"
+                    : $"<color=#b9c2c9><b>{enemy.Name}</b></color>  {kind}";
+                body = $"HP {Mathf.CeilToInt(enemy.Hp)} / {enemy.MaxHp:0}   방어 {enemy.Armor:0}\n이동속도 {enemy.Speed:0.0}   경로 {enemy.Distance:0}\n상태  {state}";
+            }
+            else
+            {
+                heading = view.Selection.IsEmptyTile ? "<b>빈 타일</b>" : "<b>작전 지휘</b>";
+                body = "좌클릭  선택\n우클릭  영웅 이동\nQWE / ASD / ZXC  명령";
+            }
+            GUI.Label(new Rect(rect.x + 14, rect.y + 30, rect.width - 28, 26), heading, label);
+            GUI.Label(new Rect(rect.x + 14, rect.y + 58, rect.width - 28, rect.height - 96), body, small);
+            Fill(new Rect(rect.x + 12, rect.y + rect.height - 35, rect.width - 24, 1), FRAME);
+            GUI.Label(new Rect(rect.x + 14, rect.y + rect.height - 31, rect.width - 28, 25), game.Message, tiny);
+        }
+
+        void DrawCommandGrid(Game game, Rect rect)
+        {
+            Inset(rect, ACCENT_BLUE);
+            GUI.Label(new Rect(rect.x + 8, rect.y + 5, rect.width - 16, 18),
+                $"<b>COMMAND</b>  <color=#728084>{CommandCard.PageTitle(view.Selection, view.Page)}</color>", tiny);
+            float gap = 5f;
+            float cellWidth = (rect.width - 20 - gap * 2) / 3f;
+            float cellHeight = (rect.height - 34 - gap * 2) / 3f;
+            var commands = CommandCard.Build(game, view.Selection, view.Page);
+            for (int i = 0; i < CommandCard.SLOTS; i++)
+            {
+                int col = i % 3;
+                int row = i / 3;
+                Rect cell = new Rect(rect.x + 10 + col * (cellWidth + gap), rect.y + 25 + row * (cellHeight + gap), cellWidth, cellHeight);
+                var command = commands[i];
+                Fill(cell, command.IsEmpty ? GameView.Hex("#11191d") : (command.Enabled ? command.Accent : FRAME));
+                Rect inner = new Rect(cell.x + 2, cell.y + 2, cell.width - 4, cell.height - 4);
+                Fill(inner, command.IsEmpty ? GameView.Hex("#0b1114") : GameView.Hex("#182226"));
+                GUI.Label(new Rect(cell.x + 4, cell.y + 3, 18, 15),
+                    $"<color=#e1c878><b>{CommandCard.HOTKEY_LABELS[i]}</b></color>", tiny);
+                if (command.IsEmpty) continue;
+                string text = $"<b>{command.Label}</b>";
+                if (command.Detail != null) text += $"\n<size=9><color=#92a0a3>{command.Detail}</color></size>";
+                GUI.enabled = command.Enabled;
+                GUI.backgroundColor = new Color(0f, 0f, 0f, 0f);
+                if (GUI.Button(inner, text, commandLabel)) view.InvokeCommand(command);
+            }
+            GUI.enabled = true;
+            GUI.backgroundColor = Color.white;
         }
 
         // ───────── 오버레이 공통 카드 배치 ─────────

@@ -24,6 +24,10 @@ export interface EnemySpec {
   readonly radius: number;
   /** 보스일 때만 채워진다 */
   readonly bossLevel?: number;
+  /** 웨이브 타입의 접촉 공격력 배수 (기본 1). 사냥꾼 = 6 */
+  readonly contactDamageMult?: number;
+  /** 웨이브 타입 렌더색 (없으면 기본 몹색) */
+  readonly typeColor?: string;
 }
 
 export interface Enemy extends EnemySpec {

@@ -26,6 +26,11 @@ namespace GodTD.View
     {
     }
 
+    public sealed class EnemyMarker : MonoBehaviour
+    {
+        public Enemy Enemy;
+    }
+
     public sealed class GameView : MonoBehaviour
     {
         /// <summary>웹 px → 월드 유닛</summary>
@@ -283,6 +288,13 @@ namespace GodTD.View
             if (hit.collider.GetComponentInParent<HeroMarker>() != null)
             {
                 SetSelection(Selection.Hero());
+                return;
+            }
+
+            var enemyMarker = hit.collider.GetComponentInParent<EnemyMarker>();
+            if (enemyMarker != null && enemyMarker.Enemy != null)
+            {
+                SetSelection(Selection.Of(enemyMarker.Enemy));
                 return;
             }
 
@@ -627,10 +639,14 @@ namespace GodTD.View
             bool boss = enemy.Kind == EnemyKind.Boss;
             var go = GameObject.CreatePrimitive(boss ? PrimitiveType.Capsule : PrimitiveType.Sphere);
             go.name = enemy.Name;
+            go.AddComponent<EnemyMarker>().Enemy = enemy;
             Destroy(go.GetComponent<Collider>());
             go.transform.SetParent(dynamicRoot, false);
             float d = enemy.Radius * 2f * SCALE; // 캡슐은 세로 2d — 보스가 우뚝 선다
-            var mat = boss ? GlowMat(BOSS, 1.3f) : LitMat(MOB);
+            var mobColor = enemy.Spec.TypeColor != null ? Hex(enemy.Spec.TypeColor) : MOB;
+            var mat = boss ? GlowMat(BOSS, 1.3f)
+                : enemy.Spec.TypeColor != null ? GlowMat(mobColor, 0.5f)   // 사냥꾼 — 붉은 발광
+                : LitMat(mobColor);
             Paint(go, mat);
 
             var pop = go.AddComponent<PopScale>();

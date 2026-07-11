@@ -154,6 +154,16 @@ describe('라운드 진행 — 고정 간격', () => {
     expect(B.enemyHP(6)).toBeGreaterThan(B.enemyHP(5) * 1.5);
   });
 
+  test('웨이브 타입 — R10부터 5의 배수는 사냥꾼(접촉 배수만 다르다)', () => {
+    expect(B.waveTypeOf(5).id).toBe('normal');   // R10 전에는 안 나온다
+    expect(B.waveTypeOf(9).id).toBe('normal');
+    expect(B.waveTypeOf(10).id).toBe('hunter');
+    expect(B.waveTypeOf(12).id).toBe('normal');
+    expect(B.waveTypeOf(45).id).toBe('hunter');
+    // 총체력 예산은 그대로 — 위협은 접촉 공격력 배수로만
+    expect(B.WAVE_TYPES.hunter.contactDamageMult).toBeGreaterThan(3);
+  });
+
   test('웨이브 총 체력 = 목표 clear × 기대 유효 DPS (재화→전투력 모델)', () => {
     const waveHp = (r: number) => B.enemyHP(r) * B.enemyCount(r);
 

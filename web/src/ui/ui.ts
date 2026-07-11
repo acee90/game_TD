@@ -153,7 +153,10 @@ function selectionInfo(game: Game): string {
 function refreshMissions(el: Elements, game: Game): void {
   const remaining = Math.max(0, game.roundTimer);
   el.repeatBar.style.width = `${(1 - remaining / B.ROUND_SECONDS) * 100}%`;
-  el.repeatVal.textContent = `R${Math.max(1, game.round)} 클리어 → +${B.waveReward(Math.max(1, game.round))}`;
+  const nextType = B.waveTypeOf(Math.max(1, game.round) + 1);
+  const notice = nextType.id === 'normal' ? '' : ` · 다음: ${nextType.label}!`;
+  el.repeatVal.textContent =
+    `R${Math.max(1, game.round)} 클리어 → +${B.waveReward(Math.max(1, game.round))}${notice}`;
 
   const milestone = nextMilestone(game.kills);
   if (milestone) {

@@ -45,9 +45,17 @@ namespace GodTD.Core
         /// <summary>보스일 때만 의미가 있다 (몹이면 0)</summary>
         public readonly int BossLevel;
 
+        /// <summary>웨이브 타입의 접촉 공격력 배수 (기본 1). 사냥꾼 = 6 ← web</summary>
+        public readonly float ContactDamageMult;
+
+        /// <summary>웨이브 타입 렌더색 hex (null이면 기본 몹색)</summary>
+        public readonly string TypeColor;
+
         public EnemySpec(EnemyKind kind, string name, float maxHp, float armor, float speed,
-            float radius, int bossLevel = 0)
+            float radius, int bossLevel = 0, float contactDamageMult = 1f, string typeColor = null)
         {
+            ContactDamageMult = contactDamageMult;
+            TypeColor = typeColor;
             Kind = kind;
             Name = name;
             MaxHp = maxHp;

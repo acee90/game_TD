@@ -124,8 +124,8 @@ namespace GodTD.Core
         /// "몹 10기를 막을 수 있는 시간"이 라운드 내내 완만하게만 줄어들고, 그 시간을 늘리는 건
         /// 오직 탱커 증강이다 — 그래서 탱킹이 빌드 선택이 된다.
         /// </summary>
-        public const float ENEMY_DAMAGE_BASE = 3f; // 몹 밀도 상향 후 하향 ← web
-        public const float ENEMY_DAMAGE_PER_ROUND = 1.3f;
+        public const float ENEMY_DAMAGE_BASE = 1f; // 대폭 하향 — 영웅 위협은 사냥꾼 웨이브 전담 ← web
+        public const float ENEMY_DAMAGE_PER_ROUND = 0.6f;
         public static float EnemyDamage(int round) => ENEMY_DAMAGE_BASE + ENEMY_DAMAGE_PER_ROUND * round;
 
         /// <summary>보스는 같은 라운드 잡몹 여러 기 몫으로 때린다</summary>

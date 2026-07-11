@@ -385,10 +385,18 @@ namespace GodTD.Core
 
             for (int i = 0; i < Balance.EnemyCount(Round); i++)
             {
+                var waveType = Balance.WaveTypeOf(Round);
                 spawnQueue.Enqueue(new EnemySpec(EnemyKind.Mob, $"R{Round}", hp, armor,
-                    Balance.ENEMY_SPEED, radius: 9f));
+                    Balance.ENEMY_SPEED, radius: 9f,
+                    contactDamageMult: waveType.ContactDamageMult,
+                    typeColor: waveType.Id == Balance.WaveTypeId.Normal ? null : waveType.Color));
             }
-            Message = $"Round Start — {Round}라운드";
+            {
+                var waveType = Balance.WaveTypeOf(Round);
+                Message = waveType.Id == Balance.WaveTypeId.Normal
+                    ? $"Round Start — {Round}라운드"
+                    : $"Round Start — {Round}라운드 · {waveType.Label} 웨이브! (접촉 피해 ×{waveType.ContactDamageMult:0})";
+            }
         }
 
         /// <summary>모든 적은 북측 왼쪽 문 하나에서 나온다</summary>
@@ -623,7 +631,7 @@ namespace GodTD.Core
                         continue;
                     incoming += enemy.Kind == EnemyKind.Boss
                         ? HeroData.BossDamage(enemy.BossLevel == 0 ? 1 : enemy.BossLevel, Round)
-                        : HeroData.EnemyDamage(Round);
+                        : HeroData.EnemyDamage(Round) * enemy.Spec.ContactDamageMult;
                 }
                 decoy.Hp -= incoming;
                 decoyHitTimer = HeroData.ENEMY_ATTACK_INTERVAL;
@@ -730,7 +738,7 @@ namespace GodTD.Core
                     if (gap > HeroData.ENEMY_TOUCH_RANGE + enemy.Radius) continue;
                     incoming += enemy.Kind == EnemyKind.Boss
                         ? HeroData.BossDamage(enemy.BossLevel == 0 ? 1 : enemy.BossLevel, Round)
-                        : HeroData.EnemyDamage(Round);
+                        : HeroData.EnemyDamage(Round) * enemy.Spec.ContactDamageMult;
                 }
                 if (incoming > 0f)
                 {

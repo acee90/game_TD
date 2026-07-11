@@ -180,7 +180,28 @@ namespace GodTD.Core
         public const float SPAWN_INTERVAL = 0.18f;
 
         /// <summary>몹 2열 레인 — 경로 중심선에서 좌우로 비끼는 표시 오프셋(px). 판정은 1D. [프로토]</summary>
-        public const float MOB_LANE_OFFSET = 8f; // 36기 × 0.18 = 6.5초 스폰 창
+        public const float MOB_LANE_OFFSET = 8f;
+
+        // ── 웨이브 타입 (2026-07-12 골격 — 타입 2개) ← web/src/data/balance.ts ──
+        // 총체력 예산은 그대로, 접촉 공격력 배수만 다르다. 사냥꾼이 영웅 위협을 전담한다.
+        public enum WaveTypeId { Normal, Hunter }
+
+        public readonly struct WaveType
+        {
+            public readonly WaveTypeId Id;
+            public readonly string Label;
+            public readonly float ContactDamageMult;
+            public readonly string Color;
+            public WaveType(WaveTypeId id, string label, float mult, string color)
+            { Id = id; Label = label; ContactDamageMult = mult; Color = color; }
+        }
+
+        public static readonly WaveType WAVE_NORMAL = new WaveType(WaveTypeId.Normal, "일반", 1f, "#9aa2c0");
+        public static readonly WaveType WAVE_HUNTER = new WaveType(WaveTypeId.Hunter, "사냥꾼", 6f, "#ff5a3c");
+
+        /// <summary>R10부터 5의 배수 라운드는 사냥꾼 웨이브</summary>
+        public static WaveType WaveTypeOf(int round) =>
+            round >= 10 && round % 5 == 0 ? WAVE_HUNTER : WAVE_NORMAL; // 36기 × 0.18 = 6.5초 스폰 창
         public const float ENEMY_SPEED = 52f; // [프로토]
 
         // ───────── 전투 (전부 [프로토]) ─────────

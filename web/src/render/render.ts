@@ -95,7 +95,7 @@ function drawSlot(ctx: CanvasRenderingContext2D, slot: Slot, selected: boolean):
 }
 
 function drawEnemy(ctx: CanvasRenderingContext2D, x: number, y: number, e: Enemy): void {
-  const color = e.kind === 'boss' ? '#ff5a3c' : '#9aa2c0';
+  const color = e.kind === 'boss' ? '#ff5a3c' : (e.typeColor ?? '#9aa2c0');
   ctx.beginPath();
   ctx.arc(x, y, e.radius, 0, Math.PI * 2);
   ctx.fillStyle = color;

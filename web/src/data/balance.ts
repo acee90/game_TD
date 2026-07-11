@@ -223,6 +223,31 @@ export const ENEMY_SPEED = 52; // [프로토]
 /** 몹 2열 레인 — 경로 중심선에서 좌우로 비끼는 표시 오프셋(px). 판정은 1D 그대로. [프로토] */
 export const MOB_LANE_OFFSET = 8;
 
+// ───────── 웨이브 타입 (2026-07-12 골격 — 타입 2개로 시작) ─────────
+// 5R 사이클에 질적 정체성을 준다. 총체력 예산(enemyHP 모델)은 건드리지 않고
+// **접촉 공격력 배수만** 다르다 — 밸런스 모델과 정합. 이후 돌격·중장갑·비행은 행 추가.
+export type WaveTypeId = 'normal' | 'hunter';
+
+export interface WaveType {
+  readonly id: WaveTypeId;
+  readonly label: string;
+  /** 영웅·허수아비 접촉 공격력 배수 */
+  readonly contactDamageMult: number;
+  /** 렌더 구분색 (웹 캔버스·Unity 공용 hex) */
+  readonly color: string;
+}
+
+export const WAVE_TYPES: Record<WaveTypeId, WaveType> = {
+  normal: { id: 'normal', label: '일반', contactDamageMult: 1, color: '#9aa2c0' },
+  // 사냥꾼: 영웅 위협 전담. 기본 공격력을 1+0.6r로 낮춘 만큼 여기에 위임 —
+  // ×6이면 R10 접촉 42/기, R30 접촉 114/기. 탱킹 빌드가 시험대에 오른다. [프로토]
+  hunter: { id: 'hunter', label: '사냥꾼', contactDamageMult: 6, color: '#ff5a3c' },
+};
+
+/** R10부터 5의 배수 라운드는 사냥꾼 웨이브 */
+export const waveTypeOf = (round: number): WaveType =>
+  round >= 10 && round % 5 === 0 ? WAVE_TYPES.hunter : WAVE_TYPES.normal;
+
 // ───────── 전투 (전부 [프로토]) ─────────
 // 원본은 무기슬롯→유닛 바인딩 정보가 없어 실제 공격력을 읽을 수 없다(§11.3).
 // 태그 3종의 전투 의미도 원본이 정의하지 않는다. 아래는 태그 이름에서 유도한 설계다.

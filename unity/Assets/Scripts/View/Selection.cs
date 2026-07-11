@@ -18,6 +18,8 @@ namespace GodTD.View
         Tower,
         /// <summary>타워가 없는 타일. 제단도 여기 속하지만 유닛을 놓을 수 없다.</summary>
         EmptyTile,
+        /// <summary>일반 몹과 보스. 정보 열람만 가능하고 명령은 없다.</summary>
+        Enemy,
     }
 
     public readonly struct Selection
@@ -25,15 +27,18 @@ namespace GodTD.View
         public readonly SelectionKind Kind;
         /// <summary>Tower · EmptyTile일 때만 non-null</summary>
         public readonly Slot Slot;
+        public readonly Enemy Enemy;
 
-        Selection(SelectionKind kind, Slot slot)
+        Selection(SelectionKind kind, Slot slot, Enemy enemy = null)
         {
             Kind = kind;
             Slot = slot;
+            Enemy = enemy;
         }
 
         public static readonly Selection None = new Selection(SelectionKind.None, null);
         public static Selection Hero() => new Selection(SelectionKind.Hero, null);
+        public static Selection Of(Enemy enemy) => new Selection(SelectionKind.Enemy, null, enemy);
 
         /// <summary>슬롯의 타워 유무를 보고 Tower / EmptyTile을 정한다</summary>
         public static Selection Of(Slot slot) =>
@@ -43,6 +48,7 @@ namespace GodTD.View
         public bool IsTower => Kind == SelectionKind.Tower;
         public bool IsEmptyTile => Kind == SelectionKind.EmptyTile;
         public bool IsNone => Kind == SelectionKind.None;
+        public bool IsEnemy => Kind == SelectionKind.Enemy;
 
         /// <summary>선택이 여전히 유효한가 — 타워가 조합·판매로 사라졌을 수 있다</summary>
         public bool StillValid(Game game)
@@ -52,6 +58,7 @@ namespace GodTD.View
                 case SelectionKind.Tower: return Slot != null && Slot.Tower != null;
                 case SelectionKind.EmptyTile: return Slot != null && Slot.Tower == null;
                 case SelectionKind.Hero: return true;
+                case SelectionKind.Enemy: return Enemy != null && !Enemy.Dead && game.Enemies.Contains(Enemy);
                 default: return true;
             }
         }

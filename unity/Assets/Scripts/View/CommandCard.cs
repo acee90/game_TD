@@ -87,6 +87,7 @@ namespace GodTD.View
                 case SelectionKind.Hero: FillHero(cmds, game); break;
                 case SelectionKind.Tower: FillTower(cmds, game, sel.Slot); break;
                 case SelectionKind.EmptyTile: FillEmptyTile(cmds, game, sel.Slot); break;
+                case SelectionKind.Enemy: break;
                 default: FillGlobal(cmds, game); break;
             }
             return cmds;
@@ -184,6 +185,7 @@ namespace GodTD.View
                 case SelectionKind.Hero: return "영웅";
                 case SelectionKind.Tower: return "타워";
                 case SelectionKind.EmptyTile: return "빈 타일";
+                case SelectionKind.Enemy: return sel.Enemy != null && sel.Enemy.Kind == EnemyKind.Boss ? "보스" : "적 유닛";
                 default: return "전체";
             }
         }
