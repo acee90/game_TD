@@ -83,7 +83,8 @@ namespace GodTD.View
             DrawHeroPanel(game);
             DrawMessage(game);
 
-            if (game.AugmentChoices.Count > 0) DrawAugmentOverlay(game);
+            if (game.PendingStatPoints > 0) DrawStatOverlay(game);
+            else if (game.AugmentChoices.Count > 0) DrawAugmentOverlay(game);
             if (game.Over) DrawGameOver(game);
         }
 
@@ -267,6 +268,27 @@ namespace GodTD.View
             GUI.color = new Color(0f, 0f, 0f, 0.72f);
             GUI.DrawTexture(new Rect(0, 0, Screen.width, Screen.height), Texture2D.whiteTexture);
             GUI.color = Color.white;
+        }
+
+        // ───────── 레벨업 스탯 선택 오버레이 — 증강과 같은 일시정지 카드 ─────────
+        void DrawStatOverlay(Game game)
+        {
+            DimScreen();
+            int points = game.PendingStatPoints;
+            int queued = game.Hero.PendingStatPoints.Count;
+            string tail = queued > 1 ? $" (대기 {queued}회)" : "";
+            GUI.Label(new Rect(0, Screen.height / 2f - 160, Screen.width, 30),
+                $"<color=#ffd23f>레벨 업!</color> — 스탯 하나에 +{points}포인트{tail}", title);
+
+            for (int i = 0; i < HeroData.STAT_IDS.Length; i++)
+            {
+                var stat = HeroData.STAT_IDS[i];
+                string last = game.Hero.Focus == stat ? " <color=#ffd23f>(직전 선택)</color>" : "";
+                string text = $"<b>{HeroData.StatLabel(stat)} +{points}</b>{last}\n\n" +
+                    $"보유 {game.Hero.Bought.Of(stat)}pt";
+                if (GUI.Button(OverlayCardRect(i, HeroData.STAT_IDS.Length), text, card))
+                    game.ChooseStat(stat);
+            }
         }
 
         // ───────── 증강 선택 오버레이 ─────────

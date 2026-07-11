@@ -168,6 +168,28 @@ namespace GodTD.Core
         public static float Hypot(float dx, float dy) => MathF.Sqrt(dx * dx + dy * dy);
 
         /// <summary>경로 위 거리 d의 좌표</summary>
+        /// <summary>경로 위 거리 d에서 진행 방향 수직으로 lateral(px) 비낀 좌표 — 레인 표시 전용</summary>
+        public static Pt PathPosOffset(float d, float lateral)
+        {
+            if (lateral == 0f) return PathPos(d);
+            float rest = Math.Max(0f, Math.Min(d, PATH_LENGTH));
+            for (int i = 0; i < SEGMENTS.Length; i++)
+            {
+                if (rest <= SEGMENTS[i])
+                {
+                    var a = WAYPOINTS[i];
+                    var b = WAYPOINTS[i + 1];
+                    float t = SEGMENTS[i] == 0f ? 0f : rest / SEGMENTS[i];
+                    float nx = -(b.Y - a.Y) / SEGMENTS[i];
+                    float ny = (b.X - a.X) / SEGMENTS[i];
+                    return new Pt(a.X + (b.X - a.X) * t + nx * lateral, a.Y + (b.Y - a.Y) * t + ny * lateral);
+                }
+                rest -= SEGMENTS[i];
+            }
+            var last = WAYPOINTS[WAYPOINTS.Length - 1];
+            return new Pt(last.X, last.Y);
+        }
+
         public static Pt PathPos(float d)
         {
             if (d <= 0f) return WAYPOINTS[0];

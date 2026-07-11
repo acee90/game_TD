@@ -62,6 +62,8 @@ namespace GodTD.Core
     {
         public readonly EnemySpec Spec;
         public float Hp;
+        /// <summary>2열 레인: -1/+1, 보스 0. 표시 전용 — 판정은 Distance 1D</summary>
+        public int Lane;
         /// <summary>입구에서 이동한 거리. PATH_LENGTH 도달 시 돌파</summary>
         public float Distance;
         public bool Dead;

@@ -110,8 +110,11 @@ namespace GodTD.Core
         /// <summary>bought가 곧 포인트다 (2안 — 환산 없음)</summary>
         public BoughtStats Points => Bought;
 
-        /// <summary>레벨업 포인트가 들어갈 스탯 — 기본값은 마지막 선택 반복 (비차단 UI)</summary>
+        /// <summary>마지막으로 고른 스탯 — 다음 선택 카드의 기본 강조</summary>
         public StatId Focus = StatId.Str;
+
+        /// <summary>아직 배분하지 않은 레벨업 포인트 큐 — 하나씩 증강처럼 일시정지 선택</summary>
+        public readonly List<int> PendingStatPoints = new List<int>();
 
         public readonly List<AugmentCard> AugmentCards = new List<AugmentCard>();
         /// <summary>아직 고르지 않은 증강 선택 횟수</summary>
@@ -132,11 +135,12 @@ namespace GodTD.Core
 
         public HeroStats Stats => ComputeStats(Level, AugmentCards, Points);
 
-        /// <summary>레벨업 보상 — focus 스탯에 포인트 적립. 체력이 늘면 증가분을 채워준다.</summary>
-        public void GrantStatPoints(int points)
+        /// <summary>레벨업 보상 배분 — 고른 스탯에 포인트 적립. 체력이 늘면 증가분을 채워준다.</summary>
+        public void GrantStatPoints(StatId stat, int points)
         {
+            Focus = stat;
             float before = Stats.MaxHp;
-            Bought = Bought.Plus(Focus, points);
+            Bought = Bought.Plus(stat, points);
             float after = Stats.MaxHp;
             if (after > before) Hp += after - before;
         }
@@ -209,8 +213,8 @@ namespace GodTD.Core
                 Xp -= XpNeeded;
                 Level++;
                 gained++;
-                // 레벨업 = focus 스탯 포인트 적립 (2안 — 스탯 골드 구매 폐지)
-                GrantStatPoints(HeroData.LevelStatPoints(Level));
+                // 레벨업 = 스탯 선택 대기 (증강처럼 일시정지 카드 — Game.ChooseStat이 배분)
+                PendingStatPoints.Add(HeroData.LevelStatPoints(Level));
                 if (HeroData.GrantsAugment(Level)) PendingAugmentPicks++;
             }
             if (gained > 0) Hp = Stats.MaxHp; // 레벨업 시 완전 회복

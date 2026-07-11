@@ -347,8 +347,8 @@ namespace GodTD.View
             Paint(board, LitMat(BOARD));
 
             // 경로 — 굵은 선 두 겹 (외곽선 + 안쪽)
-            MakePathLine("PathOuter", (24f + 4f) * SCALE, PATH_OUTER, 0.02f);
-            MakePathLine("PathInner", 24f * SCALE, PATH_INNER, 0.04f);
+            MakePathLine("PathOuter", (36f + 4f) * SCALE, PATH_OUTER, 0.02f);  // 2열 레인 수용
+            MakePathLine("PathInner", 36f * SCALE, PATH_INNER, 0.04f);
 
             // 십자 지형 — 살짝 도드라진 리트 플레이트
             foreach (var bar in MapData.CROSS_BARS)
@@ -576,7 +576,7 @@ namespace GodTD.View
                     body = BuildEnemyBody(enemy);
                     enemyBodies[enemy] = body;
                 }
-                var p = MapData.PathPos(enemy.Distance);
+                var p = MapData.PathPosOffset(enemy.Distance, enemy.Lane * Balance.MOB_LANE_OFFSET);
                 float h = enemy.Kind == EnemyKind.Boss ? enemy.Radius * 2f * SCALE : enemy.Radius * SCALE;
                 body.Go.transform.position = W(p.X, p.Y, 0.4f + h);
 

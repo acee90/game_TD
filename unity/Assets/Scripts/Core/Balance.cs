@@ -177,7 +177,10 @@ namespace GodTD.Core
         public static int EnemyCount(int round) => ENEMY_BASE_COUNT + ENEMY_COUNT_STEP * PosInCycle(round);
 
         /// <summary>웨이브 내 스폰 간격(초) [프로토]</summary>
-        public const float SPAWN_INTERVAL = 0.18f; // 36기 × 0.18 = 6.5초 스폰 창
+        public const float SPAWN_INTERVAL = 0.18f;
+
+        /// <summary>몹 2열 레인 — 경로 중심선에서 좌우로 비끼는 표시 오프셋(px). 판정은 1D. [프로토]</summary>
+        public const float MOB_LANE_OFFSET = 8f; // 36기 × 0.18 = 6.5초 스폰 창
         public const float ENEMY_SPEED = 52f; // [프로토]
 
         // ───────── 전투 (전부 [프로토]) ─────────
