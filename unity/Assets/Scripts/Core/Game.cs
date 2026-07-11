@@ -336,24 +336,26 @@ namespace GodTD.Core
 
         public int UpgradeCost(Race race) => Balance.UpgradeGasCost(Upgrades[race]);
 
-        // ── 골드 스탯 구매 ──
-        public int StatCost(StatId stat) => Hero.StatCostOf(stat);
-
-        public bool CanBuyStat(StatId stat) => !Over && Mineral >= StatCost(stat);
-
-        /// <summary>미네랄로 스탯 1포인트를 산다 — 힘(공격·체력) / 민첩(공속) / 지능(스킬)</summary>
-        public bool BuyStat(StatId stat)
+        // ── 영웅 성장 (2안): 골드 → XP → 레벨업 스탯 선택 ──
+        /// <summary>레벨업 포인트가 들어갈 스탯 선택 — 즉시, 무료 (비차단 UI)</summary>
+        public void SetStatFocus(StatId stat)
         {
-            int cost = StatCost(stat);
-            if (Mineral < cost)
+            Hero.Focus = stat;
+            Message = $"레벨업 포인트 → {HeroData.StatLabel(stat)}";
+        }
+
+        public bool CanBuyXp => !Over && Hero.Alive && Mineral >= HeroData.XP_BUY_GOLD;
+
+        /// <summary>골드로 XP 구매 (TFT식) — 영웅 성장의 주 연료</summary>
+        public bool BuyXp()
+        {
+            if (!CanBuyXp)
             {
-                Message = $"미네랄 부족 — {HeroData.StatLabel(stat)} {cost} 필요.";
+                Message = $"미네랄 부족 — XP 구매 {HeroData.XP_BUY_GOLD} 필요.";
                 return false;
             }
-            Mineral -= cost;
-            Hero.BuyStat(stat);
-            Message =
-                $"{HeroData.StatLabel(stat)} +1 ({Hero.Bought.Of(stat)}) · 다음 {StatCost(stat)}";
+            Mineral -= HeroData.XP_BUY_GOLD;
+            GrantXp(HeroData.XP_BUY_AMOUNT);
             return true;
         }
 

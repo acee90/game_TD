@@ -96,24 +96,30 @@ namespace GodTD.View
         static void FillHero(Command[] c, Game game)
         {
             var hero = game.Hero;
+            // Q/W/E = 레벨업 포인트가 들어갈 스탯 선택 (무료·즉시), A = XP 구매
             for (int i = 0; i < HeroData.STAT_IDS.Length; i++)
             {
                 var stat = HeroData.STAT_IDS[i];
                 var captured = stat;
+                string mark = hero.Focus == stat ? "● " : "";
                 c[i] = new Command(
-                    HeroData.StatLabel(stat),
-                    $"{hero.Bought.Of(stat)} · {game.StatCost(stat)} 미네랄",
-                    game.CanBuyStat(stat),
-                    () => game.BuyStat(captured),
+                    $"{mark}{HeroData.StatLabel(stat)}",
+                    $"{hero.Bought.Of(stat)}pt · 레벨업 시 적립",
+                    true,
+                    () => game.SetStatFocus(captured),
                     HERO);
             }
+            c[3] = new Command("XP 구매",
+                $"+{HeroData.XP_BUY_AMOUNT} · {HeroData.XP_BUY_GOLD} 미네랄",
+                game.CanBuyXp,
+                () => game.BuyXp(), HERO);
 
             if (hero.Skill == null) return;   // 스킬 증강을 아직 못 뽑았다
-            c[3] = new Command("스킬 피해",
+            c[4] = new Command("스킬 피해",
                 $"+8% · {game.GasSkillCost(GasSkillTrack.Damage)} 가스 ({hero.GasSkillDamage})",
                 game.CanBuyGasSkill(GasSkillTrack.Damage),
                 () => game.BuyGasSkill(GasSkillTrack.Damage), GAS);
-            c[4] = new Command("쿨타임",
+            c[5] = new Command("쿨타임",
                 $"-6% · {game.GasSkillCost(GasSkillTrack.Cdr)} 가스 ({hero.GasSkillCdr})",
                 game.CanBuyGasSkill(GasSkillTrack.Cdr),
                 () => game.BuyGasSkill(GasSkillTrack.Cdr), GAS);

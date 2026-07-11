@@ -56,14 +56,14 @@ namespace GodTD.Core
         // 대신 포인트가 쌓일수록 "전체 대비" 증가율은 줄어들므로(1/n) 비용은 완만한
         // 선형 증가로 충분하다 — 옛 배수형(×1.12, 비용 1.28^n)과 달리 많이 살 수 있다.
 
-        public const int HERO_BASE_STR = 7;
+        public const int HERO_BASE_STR = 2; // 2안: 레벨 배수 폐지 재척도 ← web
         public const int HERO_BASE_AGI = 8;
         public const int HERO_BASE_INT = 8;
 
-        /// <summary>힘 1당 공격력</summary>
-        public const float DMG_PER_STR = 1f;
-        /// <summary>힘 1당 최대 체력</summary>
-        public const float HP_PER_STR = 18f;
+        /// <summary>힘 1당 공격력 — 레벨 배수 폐지의 보상으로 1 → 6 재척도 [프로토]</summary>
+        public const float DMG_PER_STR = 6f;
+        /// <summary>힘 1당 최대 체력 — 같은 이유로 18 → 70 [프로토]</summary>
+        public const float HP_PER_STR = 70f;
         /// <summary>민첩 1당 공격 속도 +4%</summary>
         public const float AS_PER_AGI = 0.04f;
         /// <summary>공격 간격 하한 — 민첩을 아무리 사도 이 밑으로는 안 내려간다</summary>
@@ -71,41 +71,17 @@ namespace GodTD.Core
         /// <summary>지능 1당 스킬 피해 +3.5%</summary>
         public const float SKILL_PER_INT = 0.035f;
 
-        /// <summary>스탯 구매 비용 — 그 스탯을 n번 산 뒤의 다음 구매 가격</summary>
-        public const int STAT_BASE_COST = 25;
-        public const int STAT_COST_GROWTH = 14;
-        public static int StatCost(int bought) => STAT_BASE_COST + STAT_COST_GROWTH * bought;
-
         /// <summary>
-        /// n번째 구매(0부터)가 주는 포인트 — 살수록 한 번에 더 많이 준다.
-        /// 20번마다 +1: 1pt → 2pt → 3pt … 후반의 넘치는 골드가 점점 굵은 구매로
-        /// 환전되도록. 가격도 선형으로 오르므로 포인트당 값은 대체로 평평하다.
+        /// 2026-07-11 2안 개편 ← web/src/data/hero.ts:
+        /// 골드 → XP → 레벨업 → focus 스탯 택1 한 축. 레벨 배수(×2.4/레벨)와
+        /// 스탯 골드 구매는 폐지 — 파워커브 과속(Lv17 DPS 985)의 근본 제거.
         /// </summary>
-        public const int STAT_GRANT_EVERY = 20;
-        public static int StatGrant(int bought) => 1 + bought / STAT_GRANT_EVERY;
+        /// <summary>레벨업이 focus 스탯에 주는 포인트 — 후반 레벨일수록 굵게</summary>
+        public static int LevelStatPoints(int level) => 2 + level / 10;
 
-        /// <summary>n번 샀을 때의 누적 포인트</summary>
-        public static int StatPointsFor(int bought)
-        {
-            int points = 0;
-            for (int i = 0; i < bought; i++) points += StatGrant(i);
-            return points;
-        }
-
-        /// <summary>
-        /// 레벨 배수 — 스탯이 만든 공격력·체력에 곱해진다. 레벨에 선형.
-        /// Lv9에 ×6.6, Lv24에 ×17.1, Lv47에 ×33.2. 초반 가드(Lv9 &lt; GOD 1/4)와
-        /// "혼합 3증강 = GOD 1~1.5기" 앵커를 기본 스탯과 함께 정한다.
-        /// </summary>
-        public const float LEVEL_MULT_GROWTH = 2.4f;
-        public static float LevelMult(int level) => 1f + LEVEL_MULT_GROWTH * (level - 1);
-
-        /// <summary>
-        /// 체력의 레벨 배수는 공격력보다 완만하다. 같은 기울기를 쓰면 힘몰빵 탱커가
-        /// 후반에 부술 수 없는 벽이 되어 생존 라운드를 혼자 20라운드씩 벌었다.
-        /// </summary>
-        public const float HP_LEVEL_MULT_GROWTH = 2.4f;
-        public static float HpLevelMult(int level) => 1f + HP_LEVEL_MULT_GROWTH * (level - 1);
+        /// <summary>XP 골드 구매 (TFT식) — 1골드 = 1XP, 버튼 한 번에 20</summary>
+        public const int XP_BUY_GOLD = 20;
+        public const int XP_BUY_AMOUNT = 20;
 
         /// <summary>
         /// 다음 레벨까지 필요한 경험치. **지수**다.
@@ -128,7 +104,7 @@ namespace GodTD.Core
         /// 2배 정도면 "영웅을 굴리면 조금 빨리 큰다" 수준에서 멈춘다.
         /// </summary>
         // 1 → 0.65 (2026-07-11): 몹 수 ×1.6의 XP 인플레 상쇄 — 라운드당 XP 총량 보존 ← web
-        public const float XP_PER_MOB = 0.65f;
+        public const float XP_PER_MOB = 0.3f; // 킬 XP는 부축 — 주 연료는 골드 구매
         public const int HERO_LASTHIT_XP_MULT = 2;
         public static int XpPerBoss(int level) => 8 * level;
 

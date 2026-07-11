@@ -69,13 +69,13 @@ namespace GodTD.Core
         }
 
         /// <summary>해당 스탯 +1한 새 값 — 웹의 스프레드 갱신과 같은 불변 패턴</summary>
-        public BoughtStats Plus(StatId stat)
+        public BoughtStats Plus(StatId stat, int points = 1)
         {
             switch (stat)
             {
-                case StatId.Str: return new BoughtStats(Str + 1, Agi, Int);
-                case StatId.Agi: return new BoughtStats(Str, Agi + 1, Int);
-                default: return new BoughtStats(Str, Agi, Int + 1);
+                case StatId.Str: return new BoughtStats(Str + points, Agi, Int);
+                case StatId.Agi: return new BoughtStats(Str, Agi + points, Int);
+                default: return new BoughtStats(Str, Agi, Int + points);
             }
         }
     }
@@ -107,10 +107,11 @@ namespace GodTD.Core
         public int GasSkillCdr;
 
         /// <summary>구매 횟수를 포인트로 환산</summary>
-        public BoughtStats Points => new BoughtStats(
-            HeroData.StatPointsFor(Bought.Str),
-            HeroData.StatPointsFor(Bought.Agi),
-            HeroData.StatPointsFor(Bought.Int));
+        /// <summary>bought가 곧 포인트다 (2안 — 환산 없음)</summary>
+        public BoughtStats Points => Bought;
+
+        /// <summary>레벨업 포인트가 들어갈 스탯 — 기본값은 마지막 선택 반복 (비차단 UI)</summary>
+        public StatId Focus = StatId.Str;
 
         public readonly List<AugmentCard> AugmentCards = new List<AugmentCard>();
         /// <summary>아직 고르지 않은 증강 선택 횟수</summary>
@@ -131,14 +132,11 @@ namespace GodTD.Core
 
         public HeroStats Stats => ComputeStats(Level, AugmentCards, Points);
 
-        /// <summary>이 스탯의 다음 구매 가격</summary>
-        public int StatCostOf(StatId stat) => HeroData.StatCost(Bought.Of(stat));
-
-        /// <summary>스탯 구매 한 번. 체력이 늘면 증가분을 채워준다.</summary>
-        public void BuyStat(StatId stat)
+        /// <summary>레벨업 보상 — focus 스탯에 포인트 적립. 체력이 늘면 증가분을 채워준다.</summary>
+        public void GrantStatPoints(int points)
         {
             float before = Stats.MaxHp;
-            Bought = Bought.Plus(stat);
+            Bought = Bought.Plus(Focus, points);
             float after = Stats.MaxHp;
             if (after > before) Hp += after - before;
         }
@@ -211,6 +209,8 @@ namespace GodTD.Core
                 Xp -= XpNeeded;
                 Level++;
                 gained++;
+                // 레벨업 = focus 스탯 포인트 적립 (2안 — 스탯 골드 구매 폐지)
+                GrantStatPoints(HeroData.LevelStatPoints(Level));
                 if (HeroData.GrantsAugment(Level)) PendingAugmentPicks++;
             }
             if (gained > 0) Hp = Stats.MaxHp; // 레벨업 시 완전 회복
@@ -278,15 +278,13 @@ namespace GodTD.Core
             IReadOnlyList<AugmentCard> cards,
             BoughtStats bought = default)
         {
-            // 파워 = 스탯(골드) × 레벨 배수(경험치) × 증강 배수(선택)
+            // 파워 = 스탯(레벨업 택1 적립) × 증강 배수 — 레벨 배수는 폐지 (2안)
             int str = HeroData.HERO_BASE_STR + bought.Str;
             int agi = HeroData.HERO_BASE_AGI + bought.Agi;
             int intel = HeroData.HERO_BASE_INT + bought.Int;
-            float mult = HeroData.LevelMult(level);
 
-            // 체력은 공격력과 분리된 배수(HpLevelMult)를 쓴다
-            float maxHp = HeroData.HP_PER_STR * str * HeroData.HpLevelMult(level);
-            float damage = HeroData.DMG_PER_STR * str * mult;
+            float maxHp = HeroData.HP_PER_STR * str;
+            float damage = HeroData.DMG_PER_STR * str;
             float range = HeroData.HERO_BASE_RANGE;
             float attackSpeed = 1f + HeroData.AS_PER_AGI * agi;
             float moveSpeed = HeroData.HERO_SPEED;
