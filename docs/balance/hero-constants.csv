@@ -1,20 +1,19 @@
 key,value,note
 GOD_TOWER_DPS,1182,영웅 파워의 기준선 (업그레이드 없음)
-HERO_BASE_STR,7,기본 힘
+HERO_BASE_STR,2,기본 힘
 HERO_BASE_AGI,8,기본 민첩
 HERO_BASE_INT,8,기본 지능
-DMG_PER_STR,1,힘 1당 공격력
-HP_PER_STR,18,힘 1당 체력
+DMG_PER_STR,6,힘 1당 공격력
+HP_PER_STR,70,힘 1당 체력
 AS_PER_AGI,0.04,민첩 1당 공속
 SKILL_PER_INT,0.035,지능 1당 스킬 피해
-LEVEL_MULT_GROWTH,2.4,레벨 배수 — 스탯에 곱해진다
-STAT_BASE_COST,25,스탯 1포인트 시작 가격
-STAT_COST_GROWTH,14,살 때마다 +
+XP_BUY_GOLD,20,"XP 골드 구매 — 1골드=1XP, 버튼당 20 (2안)"
+levelStatPoints(1),2,레벨업당 focus 스탯 포인트 (2+floor(L/10))
 HERO_ATTACK_INTERVAL,0.8,초
 HERO_BASE_RANGE,130,
 XP_BASE_COST,14,
 XP_COST_GROWTH,1.06,지수 — 고레벨을 봉인한다
-XP_PER_MOB,0.65,
+XP_PER_MOB,0.3,
 HERO_LASTHIT_XP_MULT,2,영웅 막타 보너스
 SYNERGY_THRESHOLD,3,같은 계열 N개 → 특화
 MASTERY_THRESHOLD,5,같은 계열 N개 → 대특화

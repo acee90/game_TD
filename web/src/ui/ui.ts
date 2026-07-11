@@ -36,6 +36,7 @@ export interface Elements {
   readonly heroXp: HTMLElement;
   readonly heroStats: HTMLElement;
   readonly statButtons: Record<HD.StatId, HTMLButtonElement>;
+  readonly buyXp: HTMLButtonElement;
   readonly heroAugs: HTMLElement;
   readonly skill: HTMLElement;
   readonly skillCd: HTMLElement;
@@ -88,6 +89,7 @@ export function bindElements(): Elements {
       agi: $('statAgi') as HTMLButtonElement,
       int: $('statInt') as HTMLButtonElement,
     },
+    buyXp: $<HTMLButtonElement>('buyXp'),
     heroAugs: $('heroAugs'),
     skill: $('skill'),
     skillCd: $('skillCd'),
@@ -194,11 +196,15 @@ function refreshHero(el: Elements, game: Game): void {
   ].filter(Boolean);
   el.heroStats.textContent = parts.join(' · ');
 
+  // 레벨업 포인트가 들어갈 스탯 — 선택(focus)은 무료·즉시, ● 가 현재 선택
   for (const stat of HD.STAT_IDS) {
     const button = el.statButtons[stat];
-    button.textContent = `${HD.STAT_LABEL[stat]} ${hero.bought[stat]} · ${game.statCost(stat)}`;
-    button.disabled = !game.canBuyStat(stat);
+    const mark = hero.focus === stat ? '●' : '';
+    button.textContent = `${mark}${HD.STAT_LABEL[stat]} ${hero.bought[stat]}`;
+    button.disabled = false;
   }
+  el.buyXp.textContent = `XP +${HD.XP_BUY_AMOUNT} (${HD.XP_BUY_GOLD})`;
+  el.buyXp.disabled = !game.canBuyXp;
 
   el.heroAugs.innerHTML = hero.augments
     .map((card) => {

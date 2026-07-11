@@ -10,16 +10,9 @@ import type { SkillId, SkillModPatch } from './skills';
 /** 제단은 게임 시작과 함께 주어진다. 십자 중앙 타일을 차지한다. (core/map.ts SLOT_POS[0]) */
 export const ALTAR_SLOT = 0;
 
-// ── 파워 커브 ──
-// 초반에는 타워가 주력이고 영웅은 거들 뿐이다. 영웅 1레벨 DPS는 Lv1 타워 한 기 수준이다.
-//
-// ───────── 세 개의 곱연산 축 ─────────
-// 영웅 파워 = 스탯(골드) × 레벨 배수(경험치) × 증강 배수(선택).
-// 자원마다 축이 하나씩이다 — 골드는 스탯 포인트를 사고, 경험치는 그 스탯을
-// 배수로 키우고, 증강은 그 위에 또 곱해지거나 특수능력(스킬·광역·시너지)을 얹는다.
-//
-// 레벨 배수는 레벨에 **선형**(1 + g×(L-1))이다. 지수로 두면 아무 증강이나 골라도
-// 저절로 세져서 선택이 결과를 못 바꾼다. 후반 역전은 여전히 증강 시너지 몫이다.
+// ── 파워 커브 (2026-07-11 2안 개편) ──
+// 영웅 파워 = 스탯(레벨업 택1이 적립, XP는 골드 구매+킬) × 증강 배수(선택).
+// 두 축뿐이다 — 레벨 배수는 폐지됐다. 초반 영웅은 Lv1 타워 몇 기 수준에서 시작한다.
 
 export const HERO_BASE_RANGE = 130;
 export const HERO_ATTACK_INTERVAL = 0.8;
@@ -28,66 +21,38 @@ export const HERO_SPEED = 88;
 export const HERO_ARRIVE_EPSILON = 2;
 export const HERO_RADIUS = 11;
 
-// ───────── 스탯 — 골드로 산다 ─────────
+// ───────── 스탯 — 레벨업마다 고른다 (2026-07-11 2안 개편) ─────────
 // 힘: 기본 공격력과 체력.  민첩: 공격 속도.  지능: 스킬 피해.
 //
-// 포인트당 효과는 **선형**이지만 약해지지 않는다 — 레벨 배수와 증강 배수가
-// 그 위에 곱해지기 때문에, 같은 +1힘도 후반에 사면 절대값이 몇 배로 커진다.
-// 대신 포인트가 쌓일수록 "전체 대비" 증가율은 줄어들므로(1/n) 비용은 완만한
-// 선형 증가로 충분하다 — 옛 배수형(×1.12, 비용 1.28^n)과 달리 많이 살 수 있다.
+// 이전에는 골드로 스탯을 직접 사고 XP는 킬에서 공짜로 왔다 — 레벨 배수(×2.4/레벨)가
+// 골드 없이 올라 영웅 파워커브가 과속했다(명세 §12 0.5, Lv17 DPS 985).
+// 이제 골드 → XP → 레벨업 → 힘/민/지 택1(focus) 한 축이다. 레벨 배수는 폐지.
+// 파워는 전부 골드 비용을 가지므로 income-curve.csv에서 타워와 같은 저울에 오른다.
 export type StatId = 'str' | 'agi' | 'int';
 export const STAT_IDS: readonly StatId[] = ['str', 'agi', 'int'];
 export const STAT_LABEL: Record<StatId, string> = { str: '힘', agi: '민첩', int: '지능' };
 
-export const HERO_BASE_STR = 7;
+export const HERO_BASE_STR = 2;
 export const HERO_BASE_AGI = 8;
 export const HERO_BASE_INT = 8;
 
-/** 힘 1당 공격력 */
-export const DMG_PER_STR = 1;
-/** 힘 1당 최대 체력 */
-export const HP_PER_STR = 18;
+/** 힘 1당 공격력 — 레벨 배수 폐지의 보상으로 1 → 6 재척도 [프로토] */
+export const DMG_PER_STR = 6;
+/** 힘 1당 최대 체력 — 같은 이유로 18 → 70 [프로토] */
+export const HP_PER_STR = 70;
 /** 민첩 1당 공격 속도 +4% */
 export const AS_PER_AGI = 0.04;
-/** 공격 간격 하한 — 민첩을 아무리 사도 이 밑으로는 안 내려간다 */
+/** 공격 간격 하한 — 민첩을 아무리 골라도 이 밑으로는 안 내려간다 */
 export const MIN_ATTACK_INTERVAL = 0.25;
 /** 지능 1당 스킬 피해 +3.5% */
 export const SKILL_PER_INT = 0.035;
 
-/** 스탯 구매 비용 — 그 스탯을 n번 산 뒤의 다음 구매 가격 */
-export const STAT_BASE_COST = 25;
-export const STAT_COST_GROWTH = 14;
-export const statCost = (bought: number): number => STAT_BASE_COST + STAT_COST_GROWTH * bought;
+/** 레벨업이 focus 스탯에 주는 포인트 — 후반 레벨일수록 굵게 */
+export const levelStatPoints = (level: number): number => 2 + Math.floor(level / 10);
 
-/**
- * n번째 구매(0부터)가 주는 포인트 — 살수록 한 번에 더 많이 준다.
- * 20번마다 +1: 1pt → 2pt → 3pt … 후반의 넘치는 골드가 점점 굵은 구매로
- * 환전되도록. 가격도 선형으로 오르므로 포인트당 값은 대체로 평평하다.
- */
-export const STAT_GRANT_EVERY = 20;
-export const statGrant = (bought: number): number => 1 + Math.floor(bought / STAT_GRANT_EVERY);
-/** n번 샀을 때의 누적 포인트 */
-export function statPointsFor(bought: number): number {
-  let points = 0;
-  for (let i = 0; i < bought; i++) points += statGrant(i);
-  return points;
-}
-
-/**
- * 레벨 배수 — 스탯이 만든 공격력·체력에 곱해진다. 레벨에 선형.
- * Lv9에 ×6.6, Lv24에 ×17.1, Lv47에 ×33.2. 초반 가드(Lv9 < GOD 1/4)와
- * "혼합 3증강 = GOD 1~1.5기" 앵커를 기본 스탯과 함께 정한다 —
- * tests/hero-curve.test.ts가 지킨다.
- */
-export const LEVEL_MULT_GROWTH = 2.4;
-export const levelMult = (level: number): number => 1 + LEVEL_MULT_GROWTH * (level - 1);
-
-/**
- * 체력의 레벨 배수는 공격력보다 완만하다. 같은 기울기를 쓰면 힘몰빵 탱커가
- * 후반에 부술 수 없는 벽이 되어 생존 라운드를 혼자 20라운드씩 벌었다.
- */
-export const HP_LEVEL_MULT_GROWTH = 2.4;
-export const hpLevelMult = (level: number): number => 1 + HP_LEVEL_MULT_GROWTH * (level - 1);
+/** XP 골드 구매 (TFT식) — 1골드 = 1XP, 버튼 한 번에 20 */
+export const XP_BUY_GOLD = 20;
+export const XP_BUY_AMOUNT = 20;
 
 /**
  * 다음 레벨까지 필요한 경험치. **지수**다.
@@ -105,17 +70,10 @@ export const xpToNext = (level: number): number =>
   Math.round(XP_BASE_COST * Math.pow(XP_COST_GROWTH, level));
 
 /**
- * 경험치. 타워가 잡아도 들어오지만, 영웅이 막타를 치면 더 많이 들어온다.
- * 배수를 크게 두면 영웅을 최전선에 던지는 게 항상 정답이 되고 판마다 편차가 커진다.
- * 2배 정도면 "영웅을 굴리면 조금 빨리 큰다" 수준에서 멈춘다.
+ * 킬 XP는 부축이다 (0.65 → 0.3, 2026-07-11 2안 개편) — 주 연료는 골드 구매(XP_BUY_GOLD).
+ * 레벨 속도 목표: R45(성장 정지)에 Lv 25~30, 라운드당 ~0.6레벨.
  */
-/**
- * 2026-07-11: 1 → 0.65. 웨이브당 몹 수를 12~24 → 20~36으로 늘리면서(약 ×1.6)
- * **라운드당 XP 총량을 보존**하기 위해 킬당 XP를 반비례로 내렸다.
- * 안 그러면 영웅 레벨 곡선이 통째로 앞당겨져 30레벨 각성 창(R30~35)이 깨진다 —
- * tests/hero-curve.test.ts가 이 창을 지킨다.
- */
-export const XP_PER_MOB = 0.65;
+export const XP_PER_MOB = 0.3;
 export const HERO_LASTHIT_XP_MULT = 2;
 export const xpPerBoss = (level: number): number => 8 * level;
 

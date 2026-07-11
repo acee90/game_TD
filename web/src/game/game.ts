@@ -508,25 +508,24 @@ export class Game {
   }
 
   // ── 골드 스탯 구매 ──
-  statCost(stat: H.StatId): number {
-    return this.hero.statCost(stat);
+  /** 레벨업 포인트가 들어갈 스탯 선택 — 즉시, 무료 (비차단 UI) */
+  setStatFocus(stat: H.StatId): void {
+    this.hero.focus = stat;
+    this.message = `레벨업 포인트 → ${H.STAT_LABEL[stat]}`;
   }
 
-  canBuyStat(stat: H.StatId): boolean {
-    return !this.over && this.mineral >= this.statCost(stat);
+  get canBuyXp(): boolean {
+    return !this.over && this.hero.alive && this.mineral >= H.XP_BUY_GOLD;
   }
 
-  /** 미네랄로 스탯 1포인트를 산다 — 힘(공격·체력) / 민첩(공속) / 지능(스킬) */
-  buyStat(stat: H.StatId): boolean {
-    const cost = this.statCost(stat);
-    if (this.mineral < cost) {
-      this.message = `미네랄 부족 — ${H.STAT_LABEL[stat]} ${cost} 필요.`;
+  /** 골드로 XP 구매 (TFT식) — 영웅 성장의 주 연료 */
+  buyXp(): boolean {
+    if (!this.canBuyXp) {
+      this.message = `미네랄 부족 — XP 구매 ${H.XP_BUY_GOLD} 필요.`;
       return false;
     }
-    this.mineral -= cost;
-    this.hero.buyStat(stat);
-    this.message =
-      `${H.STAT_LABEL[stat]} +1 (${this.hero.bought[stat]}) · 다음 ${this.statCost(stat)}`;
+    this.mineral -= H.XP_BUY_GOLD;
+    this.grantXp(H.XP_BUY_AMOUNT);
     return true;
   }
 

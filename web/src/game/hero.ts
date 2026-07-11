@@ -36,18 +36,17 @@ export const NO_STATS: BoughtStats = { str: 0, agi: 0, int: 0 };
 
 /** 증강 카드를 접어서 최종 스탯을 만든다. 순수 함수 — 테스트하기 쉽다. */
 export function computeStats(
-  level: number,
+  _level: number,
   cards: readonly AugmentCard[],
   bought: BoughtStats = NO_STATS,
 ): HeroStats {
-  // 파워 = 스탯(골드) × 레벨 배수(경험치) × 증강 배수(선택)
+  // 파워 = 스탯(레벨업 택1 적립) × 증강 배수 — 레벨 배수는 폐지 (2안 개편)
   const str = H.HERO_BASE_STR + bought.str;
   const agi = H.HERO_BASE_AGI + bought.agi;
   const int = H.HERO_BASE_INT + bought.int;
-  const mult = H.levelMult(level);
 
-  let maxHp = H.HP_PER_STR * str * H.hpLevelMult(level);
-  let damage = H.DMG_PER_STR * str * mult;
+  let maxHp = H.HP_PER_STR * str;
+  let damage = H.DMG_PER_STR * str;
   let range = H.HERO_BASE_RANGE;
   let attackSpeed = 1 + H.AS_PER_AGI * agi;
   let moveSpeed = H.HERO_SPEED;
@@ -113,20 +112,19 @@ export class Hero {
   attackCooldown = 0;
   /** 액티브 스킬 재사용 대기 */
   skillCooldown = 0;
-  /** 골드 구매 횟수 (포인트가 아니다 — 살수록 한 번에 더 많은 포인트를 준다) */
+  /** 레벨업이 focus 스탯에 적립한 포인트 (2안 개편 — 골드 구매 아님) */
   bought: BoughtStats = NO_STATS;
+
+  /** 레벨업 포인트가 들어갈 스탯 — 기본값은 마지막 선택 반복 (비차단 UI) */
+  focus: H.StatId = 'str';
 
   /** 가스로 산 스킬 개조 횟수 */
   gasSkillDamage = 0;
   gasSkillCdr = 0;
 
-  /** 구매 횟수를 포인트로 환산 */
+  /** bought가 곧 포인트다 (환산 없음) */
   get points(): BoughtStats {
-    return {
-      str: H.statPointsFor(this.bought.str),
-      agi: H.statPointsFor(this.bought.agi),
-      int: H.statPointsFor(this.bought.int),
-    };
+    return this.bought;
   }
 
   readonly augments: AugmentCard[] = [];
@@ -151,15 +149,10 @@ export class Hero {
     return computeStats(this.level, this.augments, this.points);
   }
 
-  /** 이 스탯의 다음 1포인트 비용 */
-  statCost(stat: H.StatId): number {
-    return H.statCost(this.bought[stat]);
-  }
-
-  /** 스탯 1포인트. 체력이 늘면 증가분을 채워준다. */
-  buyStat(stat: H.StatId): void {
+  /** 레벨업 보상 — focus 스탯에 포인트 적립. 체력이 늘면 증가분을 채워준다. */
+  grantStatPoints(points: number): void {
     const before = this.stats.maxHp;
-    this.bought = { ...this.bought, [stat]: this.bought[stat] + 1 };
+    this.bought = { ...this.bought, [this.focus]: this.bought[this.focus] + points };
     const after = this.stats.maxHp;
     if (after > before) this.hp += after - before;
   }
@@ -220,6 +213,8 @@ export class Hero {
       this.xp -= this.xpNeeded;
       this.level++;
       gained++;
+      // 레벨업 = focus 스탯 포인트 적립 (2안 — 스탯 골드 구매 폐지)
+      this.grantStatPoints(H.levelStatPoints(this.level));
       if (H.grantsAugment(this.level)) this.pendingAugmentPicks++;
     }
     if (gained > 0) this.hp = this.stats.maxHp; // 레벨업 시 완전 회복

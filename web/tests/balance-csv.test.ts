@@ -69,7 +69,7 @@ describe('밸런스 CSV — 코드와 일치해야 한다', () => {
     const rows = read('hero-constants.csv').slice(1);
     const value = (key: string) => Number(rows.find((r) => r.startsWith(`${key},`))!.split(',')[1]);
     expect(value('DMG_PER_STR')).toBe(H.DMG_PER_STR);
-    expect(value('LEVEL_MULT_GROWTH')).toBe(H.LEVEL_MULT_GROWTH);
+    expect(value('XP_BUY_GOLD')).toBe(H.XP_BUY_GOLD);
     expect(value('XP_COST_GROWTH')).toBe(H.XP_COST_GROWTH);
     expect(value('SYNERGY_THRESHOLD')).toBe(H.SYNERGY_THRESHOLD);
   });
