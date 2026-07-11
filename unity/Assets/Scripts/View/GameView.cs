@@ -61,6 +61,8 @@ namespace GodTD.View
         Transform dynamicRoot;
         Vector3 boardCenter;
         Vector3 camFocus;
+        float shakeAmp;      // 감쇠 노이즈 셰이크
+        float hitstopTimer;  // 짧은 시간 정지 — 큰 순간의 '멈칫'
         float camDistanceTarget = 44f;
         float camDistance = 54f; // 시작은 살짝 멀리서 줌인
 
@@ -194,8 +196,26 @@ namespace GodTD.View
             camFocus = Vector3.Lerp(camFocus, targetFocus, 1f - Mathf.Exp(-3f * dt));
             camDistance = Mathf.Lerp(camDistance, camDistanceTarget, 1f - Mathf.Exp(-6f * dt));
 
+            // 셰이크 — 감쇠 노이즈 (unscaled: 히트스톱 중에도 흔들림은 산다)
+            Vector3 shakeOffset = Vector3.zero;
+            if (shakeAmp > 0.01f)
+            {
+                shakeAmp = Mathf.Lerp(shakeAmp, 0f, 1f - Mathf.Exp(-6f * Time.unscaledDeltaTime));
+                shakeOffset = new Vector3(
+                    (Mathf.PerlinNoise(Time.unscaledTime * 18f, 0.3f) - 0.5f),
+                    (Mathf.PerlinNoise(0.7f, Time.unscaledTime * 18f) - 0.5f),
+                    0f) * (shakeAmp * 2f);
+            }
+
+            if (hitstopTimer > 0f)
+            {
+                hitstopTimer -= Time.unscaledDeltaTime;
+                Time.timeScale = hitstopTimer > 0f ? 0.05f : 1f;
+            }
+
             var rot = Quaternion.Euler(CAM_PITCH, CAM_YAW, 0f);
-            cam.transform.SetPositionAndRotation(camFocus - rot * Vector3.forward * camDistance, rot);
+            cam.transform.SetPositionAndRotation(
+                camFocus + shakeOffset - rot * Vector3.forward * camDistance, rot);
         }
 
         // ───────── 입력 ─────────
@@ -572,6 +592,7 @@ namespace GodTD.View
                     bool isGod = tower.Tier == Units.GOD_TIER;
                     Fx.Burst(at, GOLD, isGod ? 34 : 16, isGod ? 5.5f : 3.6f, 0.22f);
                     Fx.Pulse(at, GOLD, isGod ? 3.4f : 2.2f);
+                    if (isGod) Impact(0.5f, 0.12f); // GOD 탄생 — 화면이 반응한다
                 }
             }
         }
@@ -657,6 +678,7 @@ namespace GodTD.View
                         Fx.Burst(at, BOSS, 46, 7.5f, 0.3f);
                         Fx.Burst(at, GOLD, 22, 5f, 0.22f);
                         Fx.Pulse(at, BOSS, 4.6f);
+                        Impact(0.8f, 0.16f); // 보스 처치 — 셰이크 + 히트스톱
                     }
                     else
                     {
@@ -835,6 +857,13 @@ namespace GodTD.View
         static void Paint(GameObject go, Material mat)
         {
             go.GetComponent<MeshRenderer>().sharedMaterial = mat;
+        }
+
+        /// <summary>화면 흔들림 + 선택적 히트스톱 — 보스 사망·GOD 조합의 '멈칫'</summary>
+        public void Impact(float amplitude, float stopSeconds = 0f)
+        {
+            shakeAmp = Mathf.Max(shakeAmp, amplitude);
+            if (stopSeconds > 0f) hitstopTimer = stopSeconds;
         }
 
         /// <summary>인월드 라벨 — 웹 렌더러에 있던 티어·문 표기 복원 (감사: 가독성 회귀)</summary>

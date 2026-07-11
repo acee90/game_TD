@@ -100,6 +100,7 @@ namespace UnityEngine
         public static float Pow(float f, float p) => (float)Math.Pow(f, p);
         public static float Abs(float f) => Math.Abs(f);
         public static float Sqrt(float f) => (float)Math.Sqrt(f);
+        public static float PerlinNoise(float x, float y) => 0.5f;
         public static float Clamp(float v, float min, float max) => v < min ? min : v > max ? max : v;
         public static float Clamp01(float f) => f < 0 ? 0 : f > 1 ? 1 : f;
         public static float Lerp(float a, float b, float t) => a + (b - a) * Clamp01(t);
@@ -341,6 +342,8 @@ namespace UnityEngine
     {
         public static float deltaTime => 0.016f;
         public static float unscaledDeltaTime => 0.016f;
+        public static float unscaledTime => 0f;
+        public static float timeScale { get; set; }
     }
 
     public static class Screen
