@@ -337,9 +337,21 @@ namespace GodTD.View
             sun.shadows = LightShadows.Soft;
             sun.shadowStrength = 0.65f;
 
-            RenderSettings.ambientMode = AmbientMode.Flat;
-            RenderSettings.ambientLight = new Color(0.30f, 0.33f, 0.46f);
+            // Trilight — Flat(0.30,0.33,0.46)이 딥네이비 팔레트를 회청색으로 씻어냈다(아트 계획 §2.6)
+            RenderSettings.ambientMode = AmbientMode.Trilight;
+            RenderSettings.ambientSkyColor = Hex("#1A2340");
+            RenderSettings.ambientEquatorColor = Hex("#10162A");
+            RenderSettings.ambientGroundColor = Hex("#070A14");
             QualitySettings.shadowDistance = 140f;
+
+            // 반대편 차가운 필 — 실루엣이 어두운 판에서 분리된다 (감사 high/low)
+            var fill = new GameObject("Fill").AddComponent<Light>();
+            fill.transform.SetParent(transform, false);
+            fill.type = LightType.Directional;
+            fill.transform.rotation = Quaternion.Euler(38f, 140f, 0f);
+            fill.color = new Color(0.55f, 0.65f, 1f);
+            fill.intensity = 0.35f;
+            fill.shadows = LightShadows.None;
         }
 
         // ───────── 정적 씬 (배경 · 보드 · 경로 · 십자 · 타일 · 문) ─────────
@@ -482,6 +494,14 @@ namespace GodTD.View
             cube.transform.position = W(at.X, at.Y + 6f, 0.35f);
             cube.transform.localScale = new Vector3(24f * SCALE, 0.7f, 0.5f);
             Paint(cube, GlowMat(color, 1.4f));
+
+            // 발광은 광원이어야 한다 — 문 빛이 바닥에 번진다 (감사: 발광체 점광)
+            var glow = new GameObject("DoorLight").AddComponent<Light>();
+            glow.transform.SetParent(cube.transform, false);
+            glow.type = LightType.Point;
+            glow.color = color;
+            glow.range = 7f;
+            glow.intensity = 1.6f;
         }
 
         LineRenderer MakeRing(string name, Material mat, float width)
@@ -574,6 +594,16 @@ namespace GodTD.View
                 : LitMat(raceColor);
             Paint(body, mat);
 
+            if (isGod)
+            {
+                var halo = new GameObject("GodLight").AddComponent<Light>();
+                halo.transform.SetParent(body.transform, false);
+                halo.type = LightType.Point;
+                halo.color = Color.Lerp(raceColor, GOLD, 0.5f);
+                halo.range = 8f;
+                halo.intensity = 2.0f;
+            }
+
             var pop = body.AddComponent<PopScale>();
             pop.Target = new Vector3(size, height, size);
             return body;
@@ -643,6 +673,15 @@ namespace GodTD.View
             Destroy(go.GetComponent<Collider>());
             go.transform.SetParent(dynamicRoot, false);
             float d = enemy.Radius * 2f * SCALE; // 캡슐은 세로 2d — 보스가 우뚝 선다
+            if (boss)
+            {
+                var menace = new GameObject("BossLight").AddComponent<Light>();
+                menace.transform.SetParent(go.transform, false);
+                menace.type = LightType.Point;
+                menace.color = BOSS;
+                menace.range = 9f;
+                menace.intensity = 1.8f;
+            }
             var mobColor = enemy.Spec.TypeColor != null ? Hex(enemy.Spec.TypeColor) : MOB;
             var mat = boss ? GlowMat(BOSS, 1.3f)
                 : enemy.Spec.TypeColor != null ? GlowMat(mobColor, 0.5f)   // 사냥꾼 — 붉은 발광

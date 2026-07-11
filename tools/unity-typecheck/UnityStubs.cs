@@ -308,6 +308,9 @@ namespace UnityEngine
     {
         public static Rendering.AmbientMode ambientMode { get; set; }
         public static Color ambientLight { get; set; }
+        public static Color ambientSkyColor { get; set; }
+        public static Color ambientEquatorColor { get; set; }
+        public static Color ambientGroundColor { get; set; }
     }
 
     public static class QualitySettings
