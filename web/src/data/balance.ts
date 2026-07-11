@@ -220,6 +220,9 @@ export const enemyCount = (round: number): number =>
 export const SPAWN_INTERVAL = 0.18;
 export const ENEMY_SPEED = 52; // [프로토]
 
+/** 몹 2열 레인 — 경로 중심선에서 좌우로 비끼는 표시 오프셋(px). 판정은 1D 그대로. [프로토] */
+export const MOB_LANE_OFFSET = 8;
+
 // ───────── 전투 (전부 [프로토]) ─────────
 // 원본은 무기슬롯→유닛 바인딩 정보가 없어 실제 공격력을 읽을 수 없다(§11.3).
 // 태그 3종의 전투 의미도 원본이 정의하지 않는다. 아래는 태그 이름에서 유도한 설계다.

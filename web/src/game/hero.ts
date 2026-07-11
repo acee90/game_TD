@@ -112,11 +112,14 @@ export class Hero {
   attackCooldown = 0;
   /** 액티브 스킬 재사용 대기 */
   skillCooldown = 0;
-  /** 레벨업이 focus 스탯에 적립한 포인트 (2안 개편 — 골드 구매 아님) */
+  /** 레벨업이 적립한 스탯 포인트 (2안 개편 — 골드 구매 아님) */
   bought: BoughtStats = NO_STATS;
 
-  /** 레벨업 포인트가 들어갈 스탯 — 기본값은 마지막 선택 반복 (비차단 UI) */
+  /** 마지막으로 고른 스탯 — 다음 선택 카드의 기본 강조 */
   focus: H.StatId = 'str';
+
+  /** 아직 배분하지 않은 레벨업 포인트 큐 — 하나씩 증강처럼 일시정지 선택한다 */
+  pendingStatPoints: number[] = [];
 
   /** 가스로 산 스킬 개조 횟수 */
   gasSkillDamage = 0;
@@ -149,10 +152,11 @@ export class Hero {
     return computeStats(this.level, this.augments, this.points);
   }
 
-  /** 레벨업 보상 — focus 스탯에 포인트 적립. 체력이 늘면 증가분을 채워준다. */
-  grantStatPoints(points: number): void {
+  /** 레벨업 보상 배분 — 고른 스탯에 포인트 적립. 체력이 늘면 증가분을 채워준다. */
+  grantStatPoints(stat: H.StatId, points: number): void {
+    this.focus = stat;
     const before = this.stats.maxHp;
-    this.bought = { ...this.bought, [this.focus]: this.bought[this.focus] + points };
+    this.bought = { ...this.bought, [stat]: this.bought[stat] + points };
     const after = this.stats.maxHp;
     if (after > before) this.hp += after - before;
   }
@@ -213,8 +217,8 @@ export class Hero {
       this.xp -= this.xpNeeded;
       this.level++;
       gained++;
-      // 레벨업 = focus 스탯 포인트 적립 (2안 — 스탯 골드 구매 폐지)
-      this.grantStatPoints(H.levelStatPoints(this.level));
+      // 레벨업 = 스탯 선택 대기 (증강처럼 일시정지 카드 — Game.chooseStat이 배분)
+      this.pendingStatPoints.push(H.levelStatPoints(this.level));
       if (H.grantsAugment(this.level)) this.pendingAugmentPicks++;
     }
     if (gained > 0) this.hp = this.stats.maxHp; // 레벨업 시 완전 회복

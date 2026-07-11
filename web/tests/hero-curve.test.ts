@@ -77,13 +77,16 @@ describe('레벨 속도 — 골드가 주 연료다 (설계: R45에 Lv 25~30)', 
 });
 
 describe('레벨업 = focus 스탯 적립', () => {
-  test('레벨업마다 focus 스탯에 포인트가 쌓인다', () => {
+  test('레벨업은 포인트를 큐에 쌓고, 선택이 배분한다 (증강식 일시정지 카드)', () => {
     const hero = new Hero();
-    hero.focus = 'agi';
     hero.gainXp(H.xpToNext(1));
     expect(hero.level).toBe(2);
+    expect(hero.pendingStatPoints).toEqual([H.levelStatPoints(2)]);
+    expect(hero.bought.agi).toBe(0);
+
+    hero.grantStatPoints('agi', hero.pendingStatPoints.shift()!);
     expect(hero.bought.agi).toBe(H.levelStatPoints(2));
-    expect(hero.bought.str).toBe(0);
+    expect(hero.focus).toBe('agi'); // 다음 카드의 기본 강조
   });
 
   test('후반 레벨일수록 포인트가 굵다', () => {

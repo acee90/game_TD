@@ -89,7 +89,16 @@ function runGame(g: Genome, seed: number): RunResult {
   let lastRound = 0;
 
   for (let t = 0; t < MAX_TICKS && !game.over; t++) {
-    if (game.paused) pickAugment(g, game);
+    if (game.paused) {
+      // 레벨업 스탯 카드가 먼저 뜬다 — 가장 덜 가진 스탯에 배분 (균형 봇)
+      if (game.pendingStatPoints > 0) {
+        const stat = (['str', 'agi', 'int'] as const).reduce((a, b) =>
+          game.hero.bought[a] <= game.hero.bought[b] ? a : b);
+        game.chooseStat(stat);
+      } else {
+        pickAugment(g, game);
+      }
+    }
 
     if (t % DECIDE_EVERY === 0) {
       // 보스: 안전 조건을 만족하면 부른다

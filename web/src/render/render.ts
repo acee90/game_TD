@@ -1,13 +1,13 @@
 // ───────── 캔버스 렌더 ─────────
-import { CROSS_BARS, DOOR_IN, DOOR_OUT, NEXUS, TILE, WAYPOINTS, pathPos } from '../core/map';
-import { BOSS_COOLDOWN_SECONDS } from '../data/balance';
+import { pathPosOffset, CROSS_BARS, DOOR_IN, DOOR_OUT, NEXUS, TILE, WAYPOINTS, pathPos } from '../core/map';
+import { BOSS_COOLDOWN_SECONDS, MOB_LANE_OFFSET } from '../data/balance';
 import { HERO_RADIUS } from '../data/hero';
 import { GOD_TIER, RACE_COLOR } from '../data/units';
 import { range } from '../game/combat';
 import type { Game } from '../game/game';
 import type { Enemy, Slot } from '../game/types';
 
-const PATH_WIDTH = 24;
+const PATH_WIDTH = 36; // 2열 레인 (±8px) 수용
 
 function strokePath(ctx: CanvasRenderingContext2D, width: number, color: string): void {
   ctx.beginPath();
@@ -240,7 +240,7 @@ export function render(ctx: CanvasRenderingContext2D, game: Game): void {
   }
 
   for (const enemy of game.enemies) {
-    const [x, y] = pathPos(enemy.distance);
+    const [x, y] = pathPosOffset(enemy.distance, (enemy.lane ?? 0) * MOB_LANE_OFFSET);
     drawEnemy(ctx, x, y, enemy);
   }
   drawDecoy(ctx, game);

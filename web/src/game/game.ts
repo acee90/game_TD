@@ -85,9 +85,23 @@ export class Game {
     this.hero = new Hero();
   }
 
-  /** 증강 선택 중에는 시간이 흐르지 않는다 */
+  /** 스탯·증강 선택 중에는 시간이 흐르지 않는다. 스탯 선택이 먼저 뜬다. */
   get paused(): boolean {
-    return this.augmentChoices.length > 0;
+    return this.hero.pendingStatPoints.length > 0 || this.augmentChoices.length > 0;
+  }
+
+  /** 배분 대기 중인 레벨업 포인트 (0이면 스탯 선택 카드 없음) */
+  get pendingStatPoints(): number {
+    return this.hero.pendingStatPoints[0] ?? 0;
+  }
+
+  /** 레벨업 포인트를 스탯에 배분한다 — 증강 선택과 같은 일시정지 카드 */
+  chooseStat(stat: H.StatId): boolean {
+    const points = this.hero.pendingStatPoints.shift();
+    if (points === undefined) return false;
+    this.hero.grantStatPoints(stat, points);
+    this.message = `${H.STAT_LABEL[stat]} +${points} (${this.hero.bought[stat]}pt)`;
+    return true;
   }
 
   // ── 제단 · 영웅 ──
@@ -508,12 +522,6 @@ export class Game {
   }
 
   // ── 골드 스탯 구매 ──
-  /** 레벨업 포인트가 들어갈 스탯 선택 — 즉시, 무료 (비차단 UI) */
-  setStatFocus(stat: H.StatId): void {
-    this.hero.focus = stat;
-    this.message = `레벨업 포인트 → ${H.STAT_LABEL[stat]}`;
-  }
-
   get canBuyXp(): boolean {
     return !this.over && this.hero.alive && this.mineral >= H.XP_BUY_GOLD;
   }
@@ -558,7 +566,13 @@ export class Game {
 
   /** 모든 적은 북측 왼쪽 문 하나에서 나온다 */
   private spawn(spec: EnemySpec): void {
-    this.enemies.push({ ...spec, hp: spec.maxHp, distance: 0 });
+    this.enemies.push({
+      ...spec,
+      hp: spec.maxHp,
+      distance: 0,
+      // 2열 레인 — 잡몹은 좌/우 교대, 보스는 중앙. 표시 전용(판정은 distance 1D)
+      lane: spec.kind === 'boss' ? 0 : this.enemies.length % 2 === 0 ? -1 : 1,
+    });
   }
 
   // ── 누출 / 처치 ──

@@ -28,6 +28,8 @@ export interface EnemySpec {
 
 export interface Enemy extends EnemySpec {
   hp: number;
+  /** 2열 레인: -1(좌) | +1(우). 보스·테스트 픽스처는 0/생략. 표시 전용 — 판정은 distance 1D */
+  lane?: number;
   /** 입구에서 이동한 거리. PATH_LENGTH 도달 시 돌파 */
   distance: number;
   dead?: boolean;

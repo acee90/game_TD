@@ -138,6 +138,28 @@ export function pathPos(d: number): [number, number] {
   return [last[0], last[1]];
 }
 
+/**
+ * 경로 위 거리 d에서 진행 방향의 수직으로 lateral(px)만큼 비낀 좌표.
+ * 몹 2열 레인 렌더용 — **판정은 여전히 1D(distance)이고 이건 표시 전용이다.**
+ */
+export function pathPosOffset(d: number, lateral: number): [number, number] {
+  if (lateral === 0) return pathPos(d);
+  let rest = Math.max(0, Math.min(d, PATH_LENGTH));
+  for (let i = 0; i < SEGMENTS.length; i++) {
+    if (rest <= SEGMENTS[i]) {
+      const a = WAYPOINTS[i];
+      const b = WAYPOINTS[i + 1];
+      const t = SEGMENTS[i] === 0 ? 0 : rest / SEGMENTS[i];
+      const nx = -(b[1] - a[1]) / SEGMENTS[i]; // 좌측 법선
+      const ny = (b[0] - a[0]) / SEGMENTS[i];
+      return [a[0] + (b[0] - a[0]) * t + nx * lateral, a[1] + (b[1] - a[1]) * t + ny * lateral];
+    }
+    rest -= SEGMENTS[i];
+  }
+  const last = WAYPOINTS[WAYPOINTS.length - 1];
+  return [last[0], last[1]];
+}
+
 /** 넥서스 — 보스 소환 지점. 십자 중앙. */
 export const NEXUS: Pt = CENTER;
 

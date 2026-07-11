@@ -93,8 +93,10 @@ export const ENEMY_ATTACK_INTERVAL = 1;
  * "몹 10기를 막을 수 있는 시간"이 라운드 내내 완만하게만 줄어들고, 그 시간을 늘리는 건
  * 오직 탱커 증강이다 — 그래서 탱킹이 빌드 선택이 된다.
  */
-export const ENEMY_DAMAGE_BASE = 4;
-export const ENEMY_DAMAGE_PER_ROUND = 1.6;
+// 2026-07-11 하향(4/1.6 → 3/1.3): 몹 수 20~36 상향 후 접촉 몹 10기+가 동시에 때려
+// 어그로를 끌기도 전에 영웅이 죽었다(플레이테스트). 개별은 약하게, 무리는 위협적으로.
+export const ENEMY_DAMAGE_BASE = 3;
+export const ENEMY_DAMAGE_PER_ROUND = 1.3;
 export const enemyDamage = (round: number): number =>
   ENEMY_DAMAGE_BASE + ENEMY_DAMAGE_PER_ROUND * round;
 
