@@ -148,6 +148,7 @@ namespace UnityEngine
         public Vector3 localPosition { get; set; }
         public Vector3 localScale { get; set; }
         public Quaternion rotation { get; set; }
+        public Transform parent => null;
         public void SetParent(Transform parent, bool worldPositionStays) { }
         public void SetPositionAndRotation(Vector3 position, Quaternion rotation) { }
         public Transform Find(string name) => null;
@@ -590,6 +591,8 @@ namespace TMPro
         public string text { get; set; }
         public TMP_FontAsset font { get; set; }
         public float fontSize { get; set; }
+        public float characterSpacing { get; set; }
+        public UnityEngine.RectTransform rectTransform => null;
         public UnityEngine.Color color { get; set; }
         public TextAlignmentOptions alignment { get; set; }
         public FontStyles fontStyle { get; set; }

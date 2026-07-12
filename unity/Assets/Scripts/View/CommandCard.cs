@@ -152,7 +152,7 @@ namespace GodTD.View
             string bossDetail = game.BossCooldown > 0f
                 ? $"쿨타임 {Mathf.CeilToInt(game.BossCooldown)}s"
                 : $"Lv1~Lv{game.MaxBossLevel} 열림";
-            c[5] = new Command("보스 ▸", bossDetail, true, null, DANGER, opensSubmenu: true);
+            c[5] = new Command("보스 »", bossDetail, true, null, DANGER, opensSubmenu: true);
 
             // 타일을 일일이 고르지 않고 아무 빈 타일에 짓는 편의 명령 (구 단축키 P)
             c[6] = new Command("유닛 생성",

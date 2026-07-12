@@ -14,9 +14,9 @@ namespace GodTD.View
     public static class UiTheme
     {
         // ── 색 토큰 ──
-        public static readonly Color PanelBg = Hex("#0D1322", 0.94f);
+        public static readonly Color PanelBg = Hex("#0B101E", 0.97f);
         public static readonly Color PanelStroke = Hex("#2A3554");
-        public static readonly Color CardBg = Hex("#16203A");
+        public static readonly Color CardBg = Hex("#141C33");
         public static readonly Color CardHover = Hex("#1F2D50");
         public static readonly Color CardPress = Hex("#0F1728");
         public static readonly Color CardDisabled = Hex("#101627", 0.85f);
@@ -70,6 +70,32 @@ namespace GodTD.View
         // ── 스프라이트 팩토리 — 둥근 사각 9-slice를 코드로 굽는다 ──
         static readonly Dictionary<(int radius, int stroke), Sprite> rounded =
             new Dictionary<(int, int), Sprite>();
+
+        /// <summary>부드러운 그림자 — 가장자리로 사라지는 둥근 사각 (패널 뒤에 깔아 떠 있는 느낌)</summary>
+        static Sprite shadowSprite;
+
+        public static Sprite Shadow()
+        {
+            if (shadowSprite != null) return shadowSprite;
+            const int R = 18;
+            int size = R * 2 + 8;
+            var tex = new Texture2D(size, size, TextureFormat.RGBA32, false);
+            tex.wrapMode = TextureWrapMode.Clamp;
+            for (int y = 0; y < size; y++)
+            for (int x = 0; x < size; x++)
+            {
+                float dx = Mathf.Max(0, Mathf.Max(R - x, x - (size - 1 - R)));
+                float dy = Mathf.Max(0, Mathf.Max(R - y, y - (size - 1 - R)));
+                float dist = Mathf.Sqrt(dx * dx + dy * dy);
+                float a = Mathf.Clamp01(1f - dist / R);
+                tex.SetPixel(x, y, new Color(0f, 0f, 0f, a * a * 0.85f));
+            }
+            tex.Apply();
+            var border = new Vector4(R + 2, R + 2, R + 2, R + 2);
+            shadowSprite = Sprite.Create(tex, new Rect(0, 0, size, size),
+                new Vector2(0.5f, 0.5f), 100f, 0, SpriteMeshType.FullRect, border);
+            return shadowSprite;
+        }
 
         /// <summary>radius(px) 모서리의 흰색 둥근 사각. stroke>0이면 테두리만 불투명, 안은 살짝 옅게.</summary>
         public static Sprite Rounded(int radius, int stroke = 0)

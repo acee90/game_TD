@@ -186,13 +186,11 @@ namespace GodTD.View
             Fx.Sync(dt);
         }
 
-        /// <summary>보드를 상단 바(34px)와 하단 커맨드 바 사이에 프레이밍 — HUD가 보드를 가리지 않게</summary>
+        /// <summary>보드를 상단 바(34px) 아래 전체에 프레이밍 — 모서리 카드는 보드 위에 떠 있다</summary>
         void ApplyViewport()
         {
-            float bottom = Mathf.Clamp(Screen.height * 0.052f, 40f, 60f) * 3f + 20f;
-            float y = bottom / Screen.height;
-            float h = 1f - y - 34f / Screen.height;
-            cam.rect = new Rect(0f, y, 1f, Mathf.Max(0.2f, h));
+            float h = 1f - 34f / Screen.height;
+            cam.rect = new Rect(0f, 0f, 1f, Mathf.Max(0.2f, h));
         }
 
         void LateUpdate()

@@ -38,6 +38,41 @@ namespace GodTD.View
             return img;
         }
 
+        /// <summary>떠 있는 카드 패널 — 그림자 + 본체 + 상단 액센트 라인 + 제목</summary>
+        public static (Image body, TextMeshProUGUI title) FloatingPanel(
+            string name, Transform parent, Color accent, string titleText)
+        {
+            // 그림자 (본체보다 사방 8px 크게, 아래로 4px)
+            var shadow = new GameObject(name + "Shadow", typeof(RectTransform), typeof(Image));
+            var shImg = shadow.GetComponent<Image>();
+            shImg.sprite = UiTheme.Shadow();
+            shImg.type = Image.Type.Sliced;
+            shImg.color = new Color(0f, 0f, 0f, 0.6f);
+            shImg.raycastTarget = false;
+            shadow.transform.SetParent(parent, false);
+
+            var body = Panel(name, shadow.transform, UiTheme.PanelBg, UiTheme.RadiusPanel, 1);
+            Rect(body.gameObject, shadow.transform, Vector2.zero, Vector2.one,
+                new Vector2(8f, 12f), new Vector2(-8f, -4f));
+            body.raycastTarget = true; // 패널 밑 보드 클릭 차단
+
+            // 상단 액센트 라인
+            var strip = Panel("Accent", body.transform, accent, 2);
+            Rect(strip.gameObject, body.transform, new Vector2(0, 1), Vector2.one,
+                new Vector2(10f, -3f), new Vector2(-10f, -1f));
+            strip.raycastTarget = false;
+
+            // 제목 — 액센트색, 자간 살짝
+            var title = Text(name + "Title", body.transform, UiTheme.FontCaption + 1f, accent,
+                TextAlignmentOptions.TopLeft, FontStyles.Bold);
+            title.characterSpacing = 6f;
+            title.text = titleText;
+            Rect(title.gameObject, body.transform, new Vector2(0, 1), Vector2.one,
+                new Vector2(UiTheme.Pad, -22f), new Vector2(-UiTheme.Pad, -6f));
+
+            return (body, title);
+        }
+
         public static TextMeshProUGUI Text(string name, Transform parent, float size, Color color,
             TextAlignmentOptions align = TextAlignmentOptions.Left, FontStyles style = FontStyles.Normal)
         {
@@ -102,7 +137,26 @@ namespace GodTD.View
 
         public TextMeshProUGUI Label { get; private set; }
         public TextMeshProUGUI Detail { get; private set; }
-        public Color Accent = UiTheme.Build;
+        Image chip;
+        TextMeshProUGUI chipText;
+
+        /// <summary>좌상단 핫키 칩 — 액센트 채움 + 흰 글자. 없으면 숨김.</summary>
+        public void SetHotkey(string key, Color accent)
+        {
+            if (chip == null)
+            {
+                chip = UiKit.Panel("Chip", transform, accent, 4);
+                UiKit.Rect(chip.gameObject, transform, new Vector2(0, 1), new Vector2(0, 1),
+                    new Vector2(4f, -18f), new Vector2(18f, -4f));
+                chip.raycastTarget = false;
+                chipText = UiKit.Text("Key", chip.transform, 9f, Color.white,
+                    TextAlignmentOptions.Center, FontStyles.Bold);
+                UiKit.Rect(chipText.gameObject, chip.transform, Vector2.zero, Vector2.one,
+                    Vector2.zero, Vector2.zero);
+            }
+            chip.color = new Color(accent.r, accent.g, accent.b, 0.9f);
+            chipText.text = key;
+        }
 
         public void Init(Image background, Action handler)
         {
