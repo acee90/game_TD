@@ -186,8 +186,18 @@ namespace GodTD.View
             Fx.Sync(dt);
         }
 
+        /// <summary>보드를 상단 바(34px)와 하단 커맨드 바 사이에 프레이밍 — HUD가 보드를 가리지 않게</summary>
+        void ApplyViewport()
+        {
+            float bottom = Mathf.Clamp(Screen.height * 0.052f, 40f, 60f) * 3f + 20f;
+            float y = bottom / Screen.height;
+            float h = 1f - y - 34f / Screen.height;
+            cam.rect = new Rect(0f, y, 1f, Mathf.Max(0.2f, h));
+        }
+
         void LateUpdate()
         {
+            ApplyViewport();
             // 부드러운 따라가기 — 포커스는 영웅 쪽으로 살짝 쏠린다
             var hero = Game.Hero;
             var heroPos = W(hero.X, hero.Y);
@@ -345,18 +355,24 @@ namespace GodTD.View
             cam.nearClipPlane = 1f;
             cam.farClipPlane = 300f;
             if (cam.GetComponent<BloomEffect>() == null) cam.gameObject.AddComponent<BloomEffect>();
+            ApplyViewport();
         }
 
         void BuildLights()
         {
+            // 씬에 남은 기본 Directional Light 제거 — 우리 라이트와 합쳐 광량이 2배가 되어
+            // 딥네이비 팔레트를 회청색으로 씻었다 (픽셀 실측 0.45 → 제거 후 0.30)
+            foreach (var stray in FindObjectsByType<Light>(FindObjectsSortMode.None))
+                if (stray.type == LightType.Directional) Destroy(stray.gameObject);
+
             var sun = new GameObject("Sun").AddComponent<Light>();
             sun.transform.SetParent(transform, false);
             sun.type = LightType.Directional;
             sun.transform.rotation = Quaternion.Euler(55f, -35f, 0f);
             sun.color = new Color(1f, 0.96f, 0.88f);
-            sun.intensity = 1.15f;
+            sun.intensity = 0.7f; // 1.15는 딥네이비 타일을 회청색으로 씻어냈다 (캡처 검증)
             sun.shadows = LightShadows.Soft;
-            sun.shadowStrength = 0.65f;
+            sun.shadowStrength = 0.8f;
 
             // Trilight — Flat(0.30,0.33,0.46)이 딥네이비 팔레트를 회청색으로 씻어냈다(아트 계획 §2.6)
             RenderSettings.ambientMode = AmbientMode.Trilight;
@@ -371,7 +387,7 @@ namespace GodTD.View
             fill.type = LightType.Directional;
             fill.transform.rotation = Quaternion.Euler(38f, 140f, 0f);
             fill.color = new Color(0.55f, 0.65f, 1f);
-            fill.intensity = 0.35f;
+            fill.intensity = 0.22f;
             fill.shadows = LightShadows.None;
         }
 
@@ -826,8 +842,8 @@ namespace GodTD.View
         {
             if (litMats.TryGetValue(color, out var mat)) return mat;
             mat = new Material(standardShader) { color = color };
-            mat.SetFloat("_Metallic", 0.15f);
-            mat.SetFloat("_Glossiness", 0.45f);
+            mat.SetFloat("_Metallic", 0.03f);  // 0.15/0.45는 넓은 스펙큘러가 팔레트를 회색으로 씻었다 (캡처 검증)
+            mat.SetFloat("_Glossiness", 0.18f);
             litMats[color] = mat;
             return mat;
         }

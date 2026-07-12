@@ -116,11 +116,14 @@ namespace UnityEngine
         public static float value => 0.5f;
     }
 
+    public enum FindObjectsSortMode { None, InstanceID }
+
     public class Object
     {
         public string name { get; set; }
         public static void Destroy(Object obj) { }
         public static T FindObjectOfType<T>() where T : Object => null;
+        public static T[] FindObjectsByType<T>(FindObjectsSortMode sortMode) where T : Object => new T[0];
     }
 
     public class Component : Object
@@ -283,6 +286,7 @@ namespace UnityEngine
 
     public class Camera : Behaviour
     {
+        public Rect rect { get; set; }
         public static Camera main => null;
         public bool orthographic { get; set; }
         public float orthographicSize { get; set; }
@@ -560,6 +564,9 @@ namespace UnityEngine.UI
 
 namespace TMPro
 {
+    public enum TextWrappingModes { NoWrap, Normal }
+    public enum TextOverflowModes { Overflow, Ellipsis, Truncate }
+
     public enum TextAlignmentOptions
     {
         Left, Center, Right, Top, Bottom, TopLeft, TopRight, BottomLeft, BottomRight, Midline,
@@ -588,5 +595,7 @@ namespace TMPro
         public FontStyles fontStyle { get; set; }
         public bool richText { get; set; }
         public bool raycastTarget { get; set; }
+        public TextWrappingModes textWrappingMode { get; set; }
+        public TextOverflowModes overflowMode { get; set; }
     }
 }

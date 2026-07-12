@@ -10,8 +10,8 @@ namespace GodTD.View
     [RequireComponent(typeof(Camera))]
     public sealed class BloomEffect : MonoBehaviour
     {
-        [Range(0f, 2f)] public float Threshold = 0.85f;
-        [Range(0f, 3f)] public float Intensity = 0.9f;
+        [Range(0f, 2f)] public float Threshold = 1.05f;
+        [Range(0f, 3f)] public float Intensity = 0.75f;
 
         Material mat;
 

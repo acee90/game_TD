@@ -111,11 +111,15 @@ namespace GodTD.View
 
             Label = UiKit.Text("Label", transform, UiTheme.FontSmall, UiTheme.TextMain,
                 TextAlignmentOptions.Top, FontStyles.Bold);
+            Label.textWrappingMode = TextWrappingModes.NoWrap;
+            Label.overflowMode = TextOverflowModes.Ellipsis;
             UiKit.Rect(Label.gameObject, transform, Vector2.zero, Vector2.one,
                 new Vector2(6f, 4f), new Vector2(-6f, -5f));
 
             Detail = UiKit.Text("Detail", transform, UiTheme.FontCaption, UiTheme.TextDim,
                 TextAlignmentOptions.Bottom);
+            Detail.textWrappingMode = TextWrappingModes.NoWrap;
+            Detail.overflowMode = TextOverflowModes.Ellipsis;
             UiKit.Rect(Detail.gameObject, transform, Vector2.zero, Vector2.one,
                 new Vector2(6f, 4f), new Vector2(-6f, -5f));
         }
