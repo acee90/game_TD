@@ -31,16 +31,26 @@ namespace GodTD.View
         public readonly Color Accent;
         /// <summary>하위 메뉴로 들어가는 버튼인가</summary>
         public readonly bool OpensSubmenu;
+        /// <summary>칸을 지배하는 글리프. 텍스트 버튼 9칸은 게임 UI가 아니다.</summary>
+        public readonly HudIcon Icon;
+        /// <summary>
+        /// 글리프 색. 기본은 Accent(기능군 색)지만, 종족 업그레이드 4칸은 비용이 다 가스라
+        /// Accent가 넷 다 초록이다 — 글리프만 종족색으로 물들여 한눈에 가른다.
+        /// </summary>
+        public readonly Color IconTint;
 
         public Command(string label, string detail, bool enabled, Action invoke,
-            Color accent, bool opensSubmenu = false)
+            Color accent, HudIcon icon = HudIcon.None, bool opensSubmenu = false,
+            Color? iconTint = null)
         {
             Label = label;
             Detail = detail;
             Enabled = enabled;
             Invoke = invoke;
             Accent = accent;
+            Icon = icon;
             OpensSubmenu = opensSubmenu;
+            IconTint = iconTint ?? accent;
         }
 
         public bool IsEmpty => Label == null;
@@ -93,31 +103,43 @@ namespace GodTD.View
             return cmds;
         }
 
+        // 비용은 자원명을 적지 않는다 — 숫자를 자원 색으로 물들이면 읽힌다.
+        // 칸이 좁아 "100 미네랄 (0/…"처럼 잘리던 문제도 이걸로 사라진다.
+        static string Min(int v) => $"<color=#8fd6ff>{v}</color>";
+        static string Gs(int v) => $"<color=#6fdc8c>{v}</color>";
+
+        // 종족 인덱스 → 글리프 (Units.Race: Terran·Zerg·Protoss·Creature)
+        static readonly HudIcon[] RACE_ICONS =
+        {
+            HudIcon.RaceTerran, HudIcon.RaceZerg, HudIcon.RaceProtoss, HudIcon.RaceCreature,
+        };
+
         // ── 영웅: 전부 '상점'이다. 명령이 아니다 (스킬은 자동 시전). ──
         static void FillHero(Command[] c, Game game)
         {
             var hero = game.Hero;
             // 스탯 배분은 레벨업 일시정지 카드가 맡는다 — 여기는 XP 구매와 스킬 개조만
             c[0] = new Command("XP 구매",
-                $"+{HeroData.XP_BUY_AMOUNT} · {HeroData.XP_BUY_GOLD} 미네랄",
+                $"+{HeroData.XP_BUY_AMOUNT} · {Min(HeroData.XP_BUY_GOLD)}",
                 game.CanBuyXp,
-                () => game.BuyXp(), HERO);
+                () => game.BuyXp(), HERO, HudIcon.Xp);
 
             if (hero.Skill == null) return;   // 스킬 증강을 아직 못 뽑았다
             c[3] = new Command("스킬 피해",
-                $"+8% · {game.GasSkillCost(GasSkillTrack.Damage)} 가스 ({hero.GasSkillDamage})",
+                $"+8% · {Gs(game.GasSkillCost(GasSkillTrack.Damage))} · Lv{hero.GasSkillDamage}",
                 game.CanBuyGasSkill(GasSkillTrack.Damage),
-                () => game.BuyGasSkill(GasSkillTrack.Damage), GAS);
+                () => game.BuyGasSkill(GasSkillTrack.Damage), GAS, HudIcon.SkillDamage);
             c[4] = new Command("쿨타임",
-                $"-6% · {game.GasSkillCost(GasSkillTrack.Cdr)} 가스 ({hero.GasSkillCdr})",
+                $"-6% · {Gs(game.GasSkillCost(GasSkillTrack.Cdr))} · Lv{hero.GasSkillCdr}",
                 game.CanBuyGasSkill(GasSkillTrack.Cdr),
-                () => game.BuyGasSkill(GasSkillTrack.Cdr), GAS);
+                () => game.BuyGasSkill(GasSkillTrack.Cdr), GAS, HudIcon.Cooldown);
         }
 
         // ── 타워: 판매뿐. GOD 타입 변경(미네랄 리롤)은 게임 시스템이라 보류 — c[1] 자리를 비워 둔다. ──
         static void FillTower(Command[] c, Game game, Slot slot)
         {
-            c[0] = new Command("판매", "미네랄 환급", true, () => game.SellSelected(), DANGER);
+            c[0] = new Command("판매", "미네랄 환급", true, () => game.SellSelected(),
+                DANGER, HudIcon.Sell);
         }
 
         static void FillEmptyTile(Command[] c, Game game, Slot slot)
@@ -126,39 +148,41 @@ namespace GodTD.View
             if (altar) return;   // 제단엔 유닛을 놓을 수 없다 (Game.cs:216)
 
             c[0] = new Command("유닛 생성",
-                $"{game.SpawnCost} 미네랄",
+                Min(game.SpawnCost),
                 game.Mineral >= game.SpawnCost,
-                () => game.SpawnUnit(slot), BUILD);
+                () => game.SpawnUnit(slot), BUILD, HudIcon.Spawn);
         }
 
         // ── 전역: 11칸이 필요해 보스를 하위 메뉴로 접었다 ──
         static void FillGlobal(Command[] c, Game game)
         {
             c[0] = new Command("프로브",
-                $"{game.ProbeCost} 미네랄 ({game.Probes}/{Balance.PROBE_MAX})",
+                $"{Min(game.ProbeCost)} · {game.Probes}/{Balance.PROBE_MAX}",
                 game.Probes < Balance.PROBE_MAX && game.Mineral >= game.ProbeCost,
-                () => game.BuyProbe(), BUILD);
+                () => game.BuyProbe(), BUILD, HudIcon.Probe);
 
             for (int i = 0; i < 4; i++)
             {
                 var race = (Race)i;
                 int cost = game.UpgradeCost(race);
                 c[i + 1] = new Command(Units.RACES[i],
-                    $"+{game.Upgrades[race]} · {cost} 가스",
+                    $"Lv{game.Upgrades[race]} · {Gs(cost)}",
                     game.Gas >= cost,
-                    () => game.Upgrade(race), GAS);
+                    () => game.Upgrade(race), GAS, RACE_ICONS[i],
+                    iconTint: GameView.Hex(Units.RACE_COLOR[i]));
             }
 
             string bossDetail = game.BossCooldown > 0f
                 ? $"쿨타임 {Mathf.CeilToInt(game.BossCooldown)}s"
-                : $"Lv1~Lv{game.MaxBossLevel} 열림";
-            c[5] = new Command("보스 »", bossDetail, true, null, DANGER, opensSubmenu: true);
+                : $"Lv1~Lv{game.MaxBossLevel}";
+            c[5] = new Command("보스", bossDetail, true, null, DANGER, HudIcon.Boss,
+                opensSubmenu: true);
 
             // 타일을 일일이 고르지 않고 아무 빈 타일에 짓는 편의 명령 (구 단축키 P)
             c[6] = new Command("유닛 생성",
-                $"{game.SpawnCost} 미네랄 · 빈 타일 아무 곳",
+                $"{Min(game.SpawnCost)} · 빈 타일",
                 game.Mineral >= game.SpawnCost,
-                () => game.SpawnUnitAnywhere(), BUILD);
+                () => game.SpawnUnitAnywhere(), BUILD, HudIcon.Spawn);
         }
 
         static void FillBossSummon(Command[] c, Game game)
@@ -169,10 +193,10 @@ namespace GodTD.View
                 bool open = level <= game.MaxBossLevel;
                 c[level - 1] = new Command(
                     $"Lv{level}",
-                    open ? $"+{Balance.BOSS_KILL_MINERAL[level - 1]} 미네랄" : $"Lv{level - 1} 처치 시 해금",
+                    open ? $"+{Min(Balance.BOSS_KILL_MINERAL[level - 1])}" : $"Lv{level - 1} 해금",
                     game.CanSummonBossLevel(level),
                     () => game.SummonBoss(captured),
-                    open ? DANGER : NEUTRAL);
+                    open ? DANGER : NEUTRAL, HudIcon.Boss);
             }
         }
 

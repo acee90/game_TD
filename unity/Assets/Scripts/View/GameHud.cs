@@ -19,11 +19,11 @@ namespace GodTD.View
         Canvas canvas;
         RectTransform root;
 
-        // ── 상단 바 ──
-        RectTransform topBar;
-        TextMeshProUGUI topLeft;    // 라운드 · 타이머 · 다음 웨이브
-        TextMeshProUGUI topCenter;  // 자원
-        TextMeshProUGUI topRight;   // 라이프 · 킬 · 점수
+        // ── 상단: 떠 있는 플레이트 3장 (전폭 바 폐기 — 그건 웹 네비게이션 바다) ──
+        RectTransform statusRoot, resourceRoot, scoreRoot;
+        TextMeshProUGUI topLeft;                          // 라운드 · 타이머 · 다음 웨이브
+        TextMeshProUGUI mineralText, gasText, probeText;  // 자원 — 각자 글리프를 단다
+        TextMeshProUGUI lifeText, killText, scoreText;
 
         // ── 좌하단: 선택 정보 ──
         RectTransform infoRoot;      // 그림자 루트 (배치 단위)
@@ -85,36 +85,85 @@ namespace GodTD.View
             ApplyLayout();
         }
 
-        static float CellW() => Mathf.Clamp(Screen.height * 0.135f, 64f, 84f);
-        static float CellH() => Mathf.Clamp(Screen.height * 0.088f, 42f, 54f);
-        const float TOP_H = 34f;
+        // 칸은 글리프(24) + 라벨 + 세부를 담아야 해서 예전 텍스트 버튼보다 키가 크다
+        static float CellW() => Mathf.Clamp(Screen.height * 0.145f, 74f, 92f);
+        static float CellH() => Mathf.Clamp(Screen.height * 0.112f, 58f, 70f);
         const float CARD_HEADER = 24f;
+
+        // 상단 플레이트 — 여백 / 높이 / 각 판의 폭
+        const float TOP_M = 9f;
+        const float TOP_H = 38f;
+        const float W_STATUS = 236f, W_RESOURCE = 272f, W_SCORE = 272f;
+
+        /// <summary>
+        /// 화면 상단에 떠 있는 유리판 하나. 앵커(0=좌, 0.5=중앙, 1=우) 기준으로 폭 w를 잡고,
+        /// 그림자 여백(좌우 8 · 위 4 · 아래 12)을 감안해 루트를 본체보다 크게 잡는다.
+        /// </summary>
+        (RectTransform plateRoot, Transform body) TopPlate(string name, float anchorX, float w)
+        {
+            var img = UiKit.GlassPlate(name, root, 10);
+            var plateRoot = img.transform.parent.GetComponent<RectTransform>();
+
+            // 본체가 놓일 x 구간 — 앵커에 상대적
+            float bodyL = anchorX <= 0f ? 10f : anchorX >= 1f ? -10f - w : -w * 0.5f;
+            var anchor = new Vector2(anchorX, 1f);
+            UiKit.Rect(plateRoot.gameObject, root, anchor, anchor,
+                new Vector2(bodyL - 8f, -TOP_M - TOP_H - 12f),
+                new Vector2(bodyL + w + 8f, -TOP_M + 4f));
+
+            return (plateRoot, img.transform);
+        }
+
+        /// <summary>
+        /// 판 안의 '글리프 + 수치' 한 벌. 판을 x0~x1(0~1) 구간으로 나눠 차지한다.
+        /// 아이콘을 텍스트에 인라인으로 박지 않는 이유: 정렬이 폰트 메트릭에 끌려다닌다.
+        /// </summary>
+        TextMeshProUGUI StatGroup(Transform plate, HudIcon id, Color tint, float x0, float x1)
+        {
+            var go = new GameObject($"Icon{id}", typeof(RectTransform), typeof(Image));
+            var img = go.GetComponent<Image>();
+            img.sprite = HudIcons.Get(id);
+            img.color = tint;
+            img.raycastTarget = false;
+            img.preserveAspect = true;
+            UiKit.Rect(go, plate, new Vector2(x0, 0.5f), new Vector2(x0, 0.5f),
+                new Vector2(11f, -9f), new Vector2(29f, 9f));
+
+            var t = UiKit.Text($"Val{id}", plate, UiTheme.FontLabel, tint,
+                TextAlignmentOptions.Left, FontStyles.Bold);
+            UiKit.Rect(t.gameObject, plate, new Vector2(x0, 0f), new Vector2(x1, 1f),
+                new Vector2(34f, 0f), new Vector2(-4f, 0f));
+            return t;
+        }
 
         void BuildTopBar()
         {
-            var panel = UiKit.Panel("TopBar", root, UiTheme.PanelBg, 0);
-            topBar = panel.rectTransform;
-
-            // 하단 헤어라인 — 바가 보드 위에 '얹혀' 보이게
-            var line = UiKit.Panel("Hairline", topBar, UiTheme.PanelStroke, 0);
-            UiKit.Rect(line.gameObject, topBar, Vector2.zero, new Vector2(1, 0),
-                Vector2.zero, new Vector2(0, 1f));
-            line.raycastTarget = false;
-
-            topLeft = UiKit.Text("Left", topBar, UiTheme.FontSmall, UiTheme.TextMain,
+            var (sRoot, sBody) = TopPlate("Status", 0f, W_STATUS);
+            statusRoot = sRoot;
+            topLeft = UiKit.Text("Text", sBody, UiTheme.FontSmall, UiTheme.TextMain,
                 TextAlignmentOptions.Left);
-            UiKit.Rect(topLeft.gameObject, topBar, new Vector2(0, 0), new Vector2(0.34f, 1),
-                new Vector2(UiTheme.Pad, 0), Vector2.zero);
+            UiKit.Rect(topLeft.gameObject, sBody, Vector2.zero, Vector2.one,
+                new Vector2(UiTheme.Pad + 2f, 0f), new Vector2(-UiTheme.Pad - 2f, 0f));
 
-            topCenter = UiKit.Text("Center", topBar, UiTheme.FontSmall, UiTheme.TextMain,
-                TextAlignmentOptions.Center);
-            UiKit.Rect(topCenter.gameObject, topBar, new Vector2(0.34f, 0), new Vector2(0.66f, 1),
-                Vector2.zero, Vector2.zero);
+            var (rRoot, rBody) = TopPlate("Resource", 0.5f, W_RESOURCE);
+            resourceRoot = rRoot;
+            mineralText = StatGroup(rBody, HudIcon.Mineral, UiTheme.Mineral, 0f, 0.38f);
+            gasText = StatGroup(rBody, HudIcon.Gas, UiTheme.Gas, 0.38f, 0.68f);
+            probeText = StatGroup(rBody, HudIcon.Probe, UiTheme.HeroCol, 0.68f, 1f);
 
-            topRight = UiKit.Text("Right", topBar, UiTheme.FontSmall, UiTheme.TextMain,
-                TextAlignmentOptions.Right);
-            UiKit.Rect(topRight.gameObject, topBar, new Vector2(0.66f, 0), new Vector2(1, 1),
-                Vector2.zero, new Vector2(-UiTheme.Pad, 0));
+            var (cRoot, cBody) = TopPlate("Score", 1f, W_SCORE);
+            scoreRoot = cRoot;
+            lifeText = StatGroup(cBody, HudIcon.Life, UiTheme.Danger, 0f, 0.28f);
+            killText = StatGroup(cBody, HudIcon.Kill, UiTheme.TextDim, 0.28f, 0.56f);
+            scoreText = StatGroup(cBody, HudIcon.Score, UiTheme.Gold, 0.56f, 1f);
+        }
+
+        /// <summary>상단 플레이트의 화면 좌표 사각형 (원점 좌하단 — 마우스 좌표계와 같다)</summary>
+        static UnityEngine.Rect TopPlateScreenRect(float anchorX, float w)
+        {
+            float bodyL = anchorX <= 0f ? 10f : anchorX >= 1f ? -10f - w : -w * 0.5f;
+            float x = anchorX * Screen.width + bodyL;
+            return new UnityEngine.Rect(x, Screen.height - TOP_M - TOP_H, w, TOP_H);
         }
 
         /// <summary>좌하단 정보 카드 — 눈썹(대상 종류) + 제목 + 게이지 + 본문 2~3줄</summary>
@@ -161,20 +210,12 @@ namespace GodTD.View
             {
                 // 소켓 — 커맨드가 비어도 3×3 구조가 읽힌다 (스타크래프트식)
                 cardSockets[i] = UiKit.Panel($"Socket{i}", cardBody,
-                    UiTheme.Hex("#0E1526", 0.85f), UiTheme.RadiusButton);
+                    UiTheme.SocketBg, UiTheme.CutButton);
                 cardSockets[i].raycastTarget = false;
 
                 int captured = i;
-                var btn = UiKit.Button($"Cmd{i}", cardBody, () => InvokeCard(captured));
-                // 칩 아래 중앙 라벨 + 하단 세부 — 그리드 배치는 ApplyLayout에서
-                btn.Label.alignment = TextAlignmentOptions.Center;
-                btn.Label.fontSize = UiTheme.FontCaption + 1.5f;
-                UiKit.Rect(btn.Label.gameObject, btn.transform, Vector2.zero, Vector2.one,
-                    new Vector2(2f, 12f), new Vector2(-2f, -16f));
-                btn.Detail.fontSize = 8.5f;
-                UiKit.Rect(btn.Detail.gameObject, btn.transform, Vector2.zero, Vector2.one,
-                    new Vector2(2f, 3f), new Vector2(-2f, -3f));
-                cardButtons[i] = btn;
+                // 칸 내부(글리프 · 라벨 · 세부)는 HudButton이 직접 배치한다.
+                cardButtons[i] = UiKit.Button($"Cmd{i}", cardBody, () => InvokeCard(captured));
             }
         }
 
@@ -209,16 +250,29 @@ namespace GodTD.View
                 float x0 = 0.5f + (captured - 1.5f) * 0.19f + 0.01f;
                 UiKit.Rect(btn.gameObject, overlayDim.transform,
                     new Vector2(x0, 0.33f), new Vector2(x0 + 0.17f, 0.60f), Vector2.zero, Vector2.zero);
+
+                // 전면 카드는 커맨드 칸과 배치가 다르다 — HudButton의 기본(글리프용 좁은 띠)을 덮어쓴다.
                 btn.Label.alignment = TextAlignmentOptions.Top;
                 btn.Label.fontSize = UiTheme.FontLabel;
+                UiKit.Rect(btn.Label.gameObject, btn.transform, Vector2.zero, Vector2.one,
+                    new Vector2(10f, 10f), new Vector2(-10f, -12f));
+
                 btn.Detail.alignment = TextAlignmentOptions.Center;
                 btn.Detail.fontSize = UiTheme.FontCaption;
+                btn.Detail.textWrappingMode = TextWrappingModes.Normal; // 증강 설명은 여러 줄이다
+                btn.Detail.overflowMode = TextOverflowModes.Truncate;
+                UiKit.Rect(btn.Detail.gameObject, btn.transform, Vector2.zero, Vector2.one,
+                    new Vector2(10f, 10f), new Vector2(-10f, -62f));
+
                 overlayCards.Add(btn);
             }
 
             overlayAction = UiKit.Button("Action", overlayDim.transform, ClickOverlayAction, 10f);
             UiKit.Rect(overlayAction.gameObject, overlayDim.transform,
                 new Vector2(0.40f, 0.24f), new Vector2(0.60f, 0.30f), Vector2.zero, Vector2.zero);
+            overlayAction.Label.alignment = TextAlignmentOptions.Center;
+            UiKit.Rect(overlayAction.Label.gameObject, overlayAction.transform,
+                Vector2.zero, Vector2.one, new Vector2(8f, 4f), new Vector2(-8f, -4f));
 
             overlayDim.gameObject.SetActive(false);
         }
@@ -228,8 +282,7 @@ namespace GodTD.View
             builtW = Screen.width;
             builtH = Screen.height;
 
-            UiKit.Rect(topBar.gameObject, root, new Vector2(0, 1), Vector2.one,
-                new Vector2(0, -TOP_H), Vector2.zero);
+            // 상단 플레이트 3장은 화면 모서리/중앙에 앵커돼 있어 리사이즈를 알아서 따라간다.
 
             // 우하단 커맨드 카드 — 셀 크기에서 패널 크기를 역산
             float cw = CellW(), ch = CellH();
@@ -252,19 +305,22 @@ namespace GodTD.View
             }
 
             // 좌하단 정보 카드 — 내용에 딱 맞는 컴팩트 높이 (빈 슬라브 금지)
-            infoW = Mathf.Clamp(Screen.width * 0.30f, 280f, 360f);
-            infoH = 128f;
+            infoW = Mathf.Clamp(Screen.width * 0.30f, 290f, 372f);
+            infoH = 136f;
             UiKit.Rect(infoRoot.gameObject, root, Vector2.zero, Vector2.zero,
                 new Vector2(0f, 0f), new Vector2(infoW + 24f, infoH + 16f));
         }
 
         // ───────── GameView 연동 ─────────
 
-        /// <summary>보드 클릭과 HUD 클릭을 가른다 — 상단 바, 두 모서리 카드, 오버레이</summary>
+        /// <summary>보드 클릭과 HUD 클릭을 가른다 — 상단 플레이트 3장, 두 모서리 카드, 오버레이</summary>
         public bool IsPointerOverHud(Vector2 mouseScreenPos)
         {
             if (overlayDim != null && overlayDim.gameObject.activeSelf) return true;
-            if (mouseScreenPos.y >= Screen.height - TOP_H) return true;
+            // 전폭 바가 아니므로 판 사이 틈으로는 보드를 클릭할 수 있다
+            if (TopPlateScreenRect(0f, W_STATUS).Contains(mouseScreenPos)) return true;
+            if (TopPlateScreenRect(0.5f, W_RESOURCE).Contains(mouseScreenPos)) return true;
+            if (TopPlateScreenRect(1f, W_SCORE).Contains(mouseScreenPos)) return true;
             if (mouseScreenPos.x <= infoW + 16f && mouseScreenPos.y <= infoH + 12f) return true;
             if (mouseScreenPos.x >= Screen.width - cardW - 16f && mouseScreenPos.y <= cardH + 12f) return true;
             return false;
@@ -304,15 +360,14 @@ namespace GodTD.View
                 $"<b>R{Mathf.Max(1, game.Round)}</b>" +
                 $" <color=#5A6480>다음 {Mathf.CeilToInt(Mathf.Max(0, game.RoundTimer))}s</color>{notice}";
 
-            topCenter.text =
-                $"<color=#8FD6FF>◆ {Mathf.RoundToInt(displayMineral)}</color>   " +
-                $"<color=#6FDC8C>● {game.Gas}</color>   " +
-                $"<color=#B08CFF>프로브 {game.Probes}</color>";
+            // 수치만 찍는다 — 자원의 정체는 옆의 글리프가 말한다 (유니코드 때우기 폐기)
+            mineralText.text = Mathf.RoundToInt(displayMineral).ToString();
+            gasText.text = game.Gas.ToString();
+            probeText.text = game.Probes.ToString();
 
-            topRight.text =
-                $"<color=#FF5A3C>♥ {game.Lives}</color>  " +
-                $"<color=#5A6480>킬 {game.Kills}</color>  " +
-                $"<color=#FFD23F>{game.ScoreValue:N0}</color>";
+            lifeText.text = game.Lives.ToString();
+            killText.text = game.Kills.ToString();
+            scoreText.text = game.ScoreValue.ToString("N0");
 
             msgText.text = $"<color=#5A6480>{game.Message}</color>";
         }
@@ -416,6 +471,7 @@ namespace GodTD.View
                 if (!active) continue;
 
                 btn.SetHotkey(CommandCard.HOTKEY_LABELS[i], cmd.Accent);
+                btn.SetIcon(cmd.Icon, cmd.IconTint);
                 btn.Label.text = cmd.Label;
                 btn.Detail.text = cmd.Detail ?? "";
                 btn.Interactable = cmd.Enabled;
