@@ -76,7 +76,7 @@ namespace GodTD.View
         // 기능군 색 — 의미론적으로 쓴다
         static readonly Color BUILD = GameView.Hex("#4ea3ff");   // 생성·프로브 (미네랄)
         static readonly Color GAS = GameView.Hex("#6fdc8c");     // 가스 소비
-        static readonly Color HERO = GameView.Hex("#b08cff");    // 영웅 강화
+        static readonly Color HERO = GameView.Hex("#4f86d8");    // 영웅 강화 — 월드의 성주 망토색과 같아야 한다
         static readonly Color DANGER = GameView.Hex("#ff5a3c");  // 보스·판매
         static readonly Color NEUTRAL = GameView.Hex("#8a93ad");
 

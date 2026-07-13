@@ -1,0 +1,25 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 7bcb0991e77bf49dba22ef8f4abb53ff, type: 3}
+  m_Name: KenneyTowerCatalog
+  m_EditorClassIdentifier: Assembly-CSharp::GodTD.View.KenneyTowerCatalog
+  TierBases:
+  - {fileID: 919132149155446097, guid: 178624de3763e4c498a37dd5c4f97d59, type: 3}
+  - {fileID: 919132149155446097, guid: 70259c8f765794837a3c4d9144ead79d, type: 3}
+  - {fileID: 919132149155446097, guid: caf30a670d890412fa736525dc942302, type: 3}
+  - {fileID: 919132149155446097, guid: a3f573e3ec5924114849d12923304b3d, type: 3}
+  - {fileID: 919132149155446097, guid: 55dc5df75d83742a3b6a190a4ad36536, type: 3}
+  RaceWeapons:
+  - {fileID: 919132149155446097, guid: 26e8274a817124fb99016a453eafd64e, type: 3}
+  - {fileID: 919132149155446097, guid: d0772fe3f973a46e78e753772a842ee4, type: 3}
+  - {fileID: 919132149155446097, guid: b2029fc8b69bf446b9ec8fd093cdc1e1, type: 3}
+  - {fileID: 919132149155446097, guid: 50c6514b1e2a54c7ca7faef007955816, type: 3}

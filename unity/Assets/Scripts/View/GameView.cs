@@ -1,6 +1,6 @@
 // 원본: web/src/render/render.ts + web/src/main.ts (렌더·입력) — 프레젠테이션 패스
 // ───────── Unity 뷰: 보드게임 디오라마 ─────────
-// 에셋 없이 GameObject.CreatePrimitive + 코드 생성 메시/파티클만으로 그린다.
+// 보드·적·영웅은 코드 생성 메시로, 타워는 Kenney Tower Defense Kit 프로토타입으로 그린다.
 // 웹 캔버스의 복제가 아니라: 기울어진 원근 카메라(휠 줌), Directional 그림자,
 // Standard 머티리얼(메탈릭/스무스니스), GOD 타워·보스 emissive 발광.
 // 스폰 팝·피격 플래시·사망 파티클·투사체·HP바·플로팅 텍스트는 GameViewFx.cs가 맡는다.
@@ -110,13 +110,18 @@ namespace GodTD.View
         static readonly Color TILE_EMPTY = Hex("#161c30");
         static readonly Color TILE_TOWER = Hex("#232a44");
         static readonly Color TILE_BASE = Hex("#0b0f1d");
-        static readonly Color ALTAR = Hex("#2a2140");
-        static readonly Color ALTAR_EDGE = Hex("#b08cff");
+        // 제단 — 성주가 부활하는 사당. 보라 마법진(#2a2140/#b08cff)에서 흙·금동으로 바꿨다 (세계관 §8).
+        static readonly Color ALTAR = Hex("#2b2418");
+        static readonly Color ALTAR_EDGE = Hex("#c8a24a");
         static readonly Color DOOR_IN_COLOR = Hex("#8a6fd0");
         static readonly Color DOOR_OUT_COLOR = Hex("#ff5a3c");
         static readonly Color MOB = Hex("#9aa2c0");
         static readonly Color BOSS = Hex("#ff5a3c");
-        static readonly Color HERO = Hex("#b08cff");
+        // 영웅 = 성주. 망토색이다 — 몸은 밝은 강철 갑주다 (LowPoly.Hero).
+        // 보라(#b08cff)에서 청으로 바꿨다: 세계관 §8이 마법적 네온 인물을 배제한다.
+        static readonly Color HERO = Hex("#4f86d8");
+        /// <summary>불빛 — 세계관 §8이 허용하는 유일한 광원색. 화로·횃불·불화살에 쓴다.</summary>
+        static readonly Color FIRELIGHT = Hex("#ff9a48");
         static readonly Color DECOY_COLOR = Hex("#ff8a3c");
         public static readonly Color GOLD = Hex("#ffd23f");
 
@@ -615,42 +620,62 @@ namespace GodTD.View
         GameObject BuildTowerBody(Slot slot, Tower tower)
         {
             bool isGod = tower.Tier == Units.GOD_TIER;
-            var raceColor = Hex(Units.RACE_COLOR[(int)tower.Def.Race]);
 
-            var body = GameObject.CreatePrimitive(PrimitiveType.Cube);
-            body.name = $"Tower {tower.Def.Name}";
-            Destroy(body.GetComponent<Collider>()); // 클릭은 타일 콜라이더가 받는다
+            // 병과 식별색. 세계관 §8에 따라 이 색은 몸이 아니라 <b>군기</b>에만 실린다 —
+            // 몸체는 목재·철·가죽의 물성색이다. Core의 RACE_COLOR는 UI(HudIcons)와 공유하므로
+            // 그대로 쓴다: 같은 색이 UI에서도 전장에서도 같은 병과를 뜻해야 한다.
+            var flagColor = Hex(Units.RACE_COLOR[(int)tower.Def.Race]);
+
+            var body = new GameObject($"Tower {tower.Def.Name}"); // 클릭은 타일 콜라이더가 받는다
             body.transform.SetParent(dynamicRoot, false);
+            body.transform.position = W(slot.X, slot.Y, 0.37f);
 
-            float size = (isGod ? 22f : 14f + 3f * tower.Tier) * SCALE;
-            float height = isGod ? 3.6f : 1.2f + 0.55f * tower.Tier;
-            body.transform.position = W(slot.X, slot.Y, 0.37f + height / 2f);
+            // 프로토타입에서는 Kenney 원본 받침+무기를 조립한다. 카탈로그가 빠지거나 참조가
+            // 깨진 빌드에서는 기존 절차적 메시로 폴백해 게임 화면이 사라지지 않게 한다.
+            float modelHeight = 0f;
+            var kenney = KenneyTowerCatalog.Load();
+            bool usedKenney = kenney != null &&
+                kenney.TryBuild(body.transform, (int)tower.Def.Race, tower.Tier, out modelHeight);
+            if (!usedKenney)
+            {
+                var filter = body.AddComponent<MeshFilter>();
+                body.AddComponent<MeshRenderer>();
+                filter.sharedMesh = LowPoly.Tower((int)tower.Def.Race, tower.Tier, isGod, flagColor);
+                Paint(body, LowPoly.Mat(0f));
+                modelHeight = isGod ? 1.62f : 1.32f;
+            }
 
-            // 티어가 오를수록 은은하게, GOD은 강하게 발광
-            float glow = isGod ? 1.8f : 0.12f * tower.Tier;
-            var mat = glow > 0f
-                ? GlowMat(isGod ? Color.Lerp(raceColor, GOLD, 0.45f) : raceColor, glow,
-                    isGod ? Color.Lerp(raceColor, GOLD, 0.3f) : raceColor)
-                : LitMat(raceColor);
-            Paint(body, mat);
+            // <b>균등 스케일</b>이다. 예전의 (size, height, size) 비균등 스케일은 투석기 암 같은
+            // 사선 부품을 왜곡시켰다. 티어는 이제 크기가 아니라 메시 레시피(창 수·노 문수·기치 수)로
+            // 표현되므로(LowPoly.Tower), 스케일은 완만하게만 키운다.
+            // 메시는 밑면이 y=0 규약이라 타일 윗면(0.37)에 그대로 얹는다.
+            float s = isGod ? 2.60f : 2.15f + 0.09f * tower.Tier;
+            // 병사는 <b>카메라를 향해</b> 선다. 메시 정면은 +Z인데 게임 카메라는 +Z 방향을 보므로,
+            // 그대로 두면 판 위의 모든 병사가 등을 돌린다 — 쇠뇌·대방패·포신이 전부 안 보인다.
+            // (적은 반대다. 적은 진행 방향을 바라봐야 하므로 회전을 걸지 않는다.)
+            body.transform.rotation = Quaternion.Euler(0f, 180f, 0f);
 
             // 티어 라벨 — 웹의 render.ts:93 복원. GOD은 골드 'G'
+            // 오프셋은 <b>머리 위</b>다. 메시가 밑면 기준(y=0)으로 바뀌었으므로 예전 값(0.75)은
+            // 가슴 높이가 되어 라벨이 몸에 박혔다. 명장은 대장기가 더 높아 라벨도 더 올린다.
             MakeWorldLabel(body.transform, isGod ? "G" : (tower.Tier + 1).ToString(),
                 isGod ? GOLD : Color.white, isGod ? 0.10f : 0.07f,
-                new Vector3(0f, 0.75f, 0f));
+                new Vector3(0f, modelHeight + 0.18f, 0f));
 
             if (isGod)
             {
-                var halo = new GameObject("GodLight").AddComponent<Light>();
+                // 명장의 화로 불빛. 색이 보라·네온이 아니라 <b>불</b>이라는 게 요점이다.
+                var halo = new GameObject("BrazierLight").AddComponent<Light>();
                 halo.transform.SetParent(body.transform, false);
+                halo.transform.localPosition = new Vector3(0f, 0.25f, 0f);
                 halo.type = LightType.Point;
-                halo.color = Color.Lerp(raceColor, GOLD, 0.5f);
+                halo.color = FIRELIGHT;
                 halo.range = 8f;
-                halo.intensity = 2.0f;
+                halo.intensity = 1.7f;
             }
 
             var pop = body.AddComponent<PopScale>();
-            pop.Target = new Vector3(size, height, size);
+            pop.Target = new Vector3(s, s, s);
             return body;
         }
 
@@ -663,9 +688,18 @@ namespace GodTD.View
                     body = BuildEnemyBody(enemy);
                     enemyBodies[enemy] = body;
                 }
-                var p = MapData.PathPosOffset(enemy.Distance, enemy.Lane * Balance.MOB_LANE_OFFSET);
-                float h = enemy.Kind == EnemyKind.Boss ? enemy.Radius * 2f * SCALE : enemy.Radius * SCALE;
-                body.Go.transform.position = W(p.X, p.Y, 0.4f + h);
+                float lane = enemy.Lane * Balance.MOB_LANE_OFFSET;
+                var p = MapData.PathPosOffset(enemy.Distance, lane);
+                // 메시는 보스도 단위 큐브라 높이 규약이 잡몹과 같다 (캡슐은 세로 2배였다)
+                body.Go.transform.position = W(p.X, p.Y, 0.4f + enemy.Radius * SCALE);
+
+                // 진행 방향을 바라본다 — 구체는 앞이 없었지만 생물은 있다.
+                // 경로를 조금 앞서 샘플해 접선을 얻는다.
+                var ahead = MapData.PathPosOffset(enemy.Distance + 2f, lane);
+                var dir = W(ahead.X, ahead.Y) - W(p.X, p.Y);
+                if (dir.sqrMagnitude > 1e-5f)
+                    body.Go.transform.rotation = Quaternion.Slerp(
+                        body.Go.transform.rotation, Quaternion.LookRotation(dir), dt * 10f);
 
                 // 피격 플래시 — 체력이 줄어든 프레임에 짧게 하얗게
                 if (enemy.Hp < body.LastHp - 0.01f) body.Flash = 0.07f;
@@ -713,27 +747,43 @@ namespace GodTD.View
         EnemyBody BuildEnemyBody(Enemy enemy)
         {
             bool boss = enemy.Kind == EnemyKind.Boss;
-            var go = GameObject.CreatePrimitive(boss ? PrimitiveType.Capsule : PrimitiveType.Sphere);
-            go.name = enemy.Name;
+            var go = new GameObject(enemy.Name, typeof(MeshFilter), typeof(MeshRenderer));
             go.AddComponent<EnemyMarker>().Enemy = enemy;
-            Destroy(go.GetComponent<Collider>());
             go.transform.SetParent(dynamicRoot, false);
-            float d = enemy.Radius * 2f * SCALE; // 캡슐은 세로 2d — 보스가 우뚝 선다
-            if (boss)
-            {
-                var menace = new GameObject("BossLight").AddComponent<Light>();
-                menace.transform.SetParent(go.transform, false);
-                menace.type = LightType.Point;
-                menace.color = BOSS;
-                menace.range = 9f;
-                menace.intensity = 1.8f;
-            }
-            var mobColor = enemy.Spec.TypeColor != null ? Hex(enemy.Spec.TypeColor) : MOB;
-            var mat = boss ? GlowMat(BOSS, 1.3f)
-                : enemy.Spec.TypeColor != null ? GlowMat(mobColor, 0.5f)   // 사냥꾼 — 붉은 발광
-                : LitMat(mobColor);
+
+            // 세력색. 세계관 §7·§8에 따라 이 색은 몸이 아니라 군기·술띠·투구 깃에만 실린다.
+            bool hunter = enemy.Spec.TypeColor != null;
+            var bannerColor = hunter ? Hex(enemy.Spec.TypeColor) : MOB;
+
+            // 적은 괴수가 아니라 <b>군세</b>다 (세계관 §7). 갑각·등뿔·발광 눈은 폐기했다.
+            //   일반  → 보병 (창·방패. 발자국이 작은 정사각)
+            //   사냥꾼 → 기병 (말 때문에 발자국이 세로로 길다). 연출이 아니라 사양의 직역이다 —
+            //            사냥꾼은 접촉 피해 ×6으로 영웅을 노리도록 설계됐다(balance.ts).
+            //   보스  → 적장 (전차. 가장 크고 가장 세로로 길다)
+            // 셋을 가르는 것은 색이 아니라 <b>부감 발자국</b>이다. 무리 속에서도 형태로 읽혀야 한다.
+            // 메시는 단위 큐브(±0.5) 중심 규약이라 스케일·높이 계산이 기존과 같다.
+            go.GetComponent<MeshFilter>().sharedMesh =
+                boss ? LowPoly.Warlord(BOSS)
+                     : hunter ? LowPoly.Rider(bannerColor)
+                              : LowPoly.Foot(bannerColor);
+
+            // 발광 0 — 적은 사람이다. 빛나는 것은 아무것도 없다 (세계관 §8).
+            var mat = LowPoly.Mat(0f);
             Paint(go, mat);
 
+            if (boss)
+            {
+                // 적장의 존재감은 광원으로 낸다. 다만 마법 오라가 아니라 <b>횃불빛</b>이다 —
+                // 전차 앞뒤로 횃불을 든 무리가 온다는 함의.
+                var menace = new GameObject("BossTorch").AddComponent<Light>();
+                menace.transform.SetParent(go.transform, false);
+                menace.type = LightType.Point;
+                menace.color = FIRELIGHT;
+                menace.range = 9f;
+                menace.intensity = 1.5f;
+            }
+
+            float d = enemy.Radius * 2f * SCALE;
             var pop = go.AddComponent<PopScale>();
             pop.Target = new Vector3(d, d, d);
 
@@ -750,22 +800,27 @@ namespace GodTD.View
         {
             if (heroObject == null)
             {
-                heroObject = GameObject.CreatePrimitive(PrimitiveType.Sphere);
-                heroObject.name = "Hero";
-                // 콜라이더를 남긴다 — 좌클릭으로 영웅을 선택하기 위해서다
+                // 성주 — 판 위에서 유일하게 <b>움직이는 사람</b>이다. 예전엔 "유일한 2족 보행"이
+                // 구분 단서였지만, 적이 군세가 되면서(세계관 §7) 그 단서가 사라졌다. 새 단서는
+                // 밝은 강철 갑주 + 청 망토 + <b>군기가 없다는 것</b>(명장은 등에 군기를 지고 정지해 있다).
+                // 콜라이더는 남긴다 (좌클릭 선택). 메시는 프리미티브가 아니므로 직접 붙인다.
+                heroObject = new GameObject("Hero", typeof(MeshFilter), typeof(MeshRenderer));
+                heroObject.AddComponent<SphereCollider>();
                 heroObject.AddComponent<HeroMarker>();
                 heroObject.transform.SetParent(dynamicRoot, false);
+                heroObject.GetComponent<MeshFilter>().sharedMesh = LowPoly.Hero(HERO);
                 float d = HeroData.HERO_RADIUS * 2f * SCALE;
                 heroObject.transform.localScale = new Vector3(d, d, d);
-                Paint(heroObject, GlowMat(HERO, 1.1f));
+                Paint(heroObject, LowPoly.Mat(0f)); // 재질은 빛나지 않는다 (세계관 §8)
 
-                // 영웅 전용 보라 포인트 라이트 — 색·발광으로 구분
-                var glow = new GameObject("HeroLight").AddComponent<Light>();
+                // 영웅 전용 포인트 라이트 — 갑주에 닿는 빛으로 위치를 알린다.
+                // 마법 오라가 아니라 <b>성주를 따르는 횃불</b>이라는 함의로 불빛을 쓴다.
+                var glow = new GameObject("HeroTorch").AddComponent<Light>();
                 glow.transform.SetParent(heroObject.transform, false);
                 glow.type = LightType.Point;
-                glow.color = HERO;
+                glow.color = FIRELIGHT;
                 glow.range = 7f;
-                glow.intensity = 1.4f;
+                glow.intensity = 1.3f;
             }
             var hero = Game.Hero;
             bool alive = hero.Alive;

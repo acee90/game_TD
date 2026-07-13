@@ -1,11 +1,11 @@
 # docs — 문서 지도
 
-> 상태: **현행** (새 문서는 여기에 등록한다) · 최종 갱신: 2026-07-10
+> 상태: **현행** (새 문서는 여기에 등록한다) · 최종 갱신: 2026-07-13
 > 규칙: [documentation-rules.md](documentation-rules.md) · 상태가 **현행**인 문서만 기준으로 삼는다.
 
 ```
 docs/
-├── design/      비전·필러 / 시스템 명세 / 백로그   ← 기준 문서 (고정 파일명, 최신 유지)
+├── design/      비전·세계관 / 시스템 명세 / 백로그 ← 기준 문서 (고정 파일명, 최신 유지)
 ├── reports/     측정 리포트                        ← 불변 스냅샷 (실행 단위마다 새 버전)
 ├── reference/   원본(갓타디) 분석 자료              ← [원본확정]의 출처
 ├── archive/     대체된 옛 방향 문서                 ← 기준으로 쓰지 않는다
@@ -19,6 +19,7 @@ docs/
 | 문서 | 상태 | 역할 |
 |---|---|---|
 | [vision.md](design/vision.md) | 현행 | 한 줄 피치 · 판타지 · 타깃 · 하지 않을 것 · **코어 필러 4종** |
+| [worldbuilding.md](design/worldbuilding.md) | 현행 | 초한지 대체역사 · 병과 · 명장 · 아트/용어 기준 |
 | [game-system-spec.md](design/game-system-spec.md) | 현행 | 코어 루프 + 시스템 명세 + 목표 지표 + 설계 결정 기록 |
 | [backlog.md](design/backlog.md) | 현행 | 미확정 아이디어 대기실 (기각 사유 포함) |
 
