@@ -435,17 +435,10 @@ describe('빌드 정체성 — 탱커는 버티고 원거리는 때린다', () =
 
   /** 시뮬레이션에서 관측된 라운드별 전형적 영웅 레벨 */
   const typicalLevel = (round: number) => Math.min(60, Math.round(1 + round * 0.7));
-  const curvePoints = (level: number): number => {
-    let sum = 0;
-    for (let l = 2; l <= level; l++) sum += H.levelStatPoints(l);
-    return sum;
-  };
-
   /** 몹 10기가 붙었을 때 버티는 시간 (그 라운드의 전형적 레벨 기준) */
   const blockSeconds = (ids: string[], round: number): number => {
     const level = typicalLevel(round);
-    const s = computeStats(level, ids.map((id) => H.makeCard(aug(id), 'silver')),
-      { str: curvePoints(level), agi: 0, int: 0 });
+    const s = computeStats(level, ids.map((id) => H.makeCard(aug(id), 'silver')));
     const effectiveHp = s.maxHp / (1 - s.damageReduction);
     return effectiveHp / (10 * H.enemyDamage(round));
   };

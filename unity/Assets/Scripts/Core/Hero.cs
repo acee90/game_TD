@@ -44,42 +44,6 @@ namespace GodTD.Core
         }
     }
 
-    /// <summary>골드로 산 스탯 포인트. 기본값(전부 0) = 웹의 NO_STATS.</summary>
-    public readonly struct BoughtStats
-    {
-        public readonly int Str;
-        public readonly int Agi;
-        public readonly int Int;
-
-        public BoughtStats(int str, int agi, int @int)
-        {
-            Str = str;
-            Agi = agi;
-            Int = @int;
-        }
-
-        public int Of(StatId stat)
-        {
-            switch (stat)
-            {
-                case StatId.Str: return Str;
-                case StatId.Agi: return Agi;
-                default: return Int;
-            }
-        }
-
-        /// <summary>해당 스탯 +1한 새 값 — 웹의 스프레드 갱신과 같은 불변 패턴</summary>
-        public BoughtStats Plus(StatId stat, int points = 1)
-        {
-            switch (stat)
-            {
-                case StatId.Str: return new BoughtStats(Str + points, Agi, Int);
-                case StatId.Agi: return new BoughtStats(Str, Agi + points, Int);
-                default: return new BoughtStats(Str, Agi, Int + points);
-            }
-        }
-    }
-
     /// <summary>
     /// 영웅은 몹과 같은 경로 위에서만 움직인다. 타워 타일을 넘어 날아다닐 수 없다.
     /// 그래서 위치는 좌표가 아니라 경로 위 거리 하나로 표현된다.
@@ -99,22 +63,9 @@ namespace GodTD.Core
         public float AttackCooldown;
         /// <summary>액티브 스킬 재사용 대기</summary>
         public float SkillCooldown;
-        /// <summary>골드 구매 횟수 (포인트가 아니다 — 살수록 한 번에 더 많은 포인트를 준다)</summary>
-        public BoughtStats Bought;
-
         /// <summary>가스로 산 스킬 개조 횟수</summary>
         public int GasSkillDamage;
         public int GasSkillCdr;
-
-        /// <summary>구매 횟수를 포인트로 환산</summary>
-        /// <summary>bought가 곧 포인트다 (2안 — 환산 없음)</summary>
-        public BoughtStats Points => Bought;
-
-        /// <summary>마지막으로 고른 스탯 — 다음 선택 카드의 기본 강조</summary>
-        public StatId Focus = StatId.Str;
-
-        /// <summary>아직 배분하지 않은 레벨업 포인트 큐 — 하나씩 증강처럼 일시정지 선택</summary>
-        public readonly List<int> PendingStatPoints = new List<int>();
 
         public readonly List<AugmentCard> AugmentCards = new List<AugmentCard>();
         /// <summary>아직 고르지 않은 증강 선택 횟수</summary>
@@ -133,17 +84,7 @@ namespace GodTD.Core
         public float X => MapData.PathPos(Distance).X;
         public float Y => MapData.PathPos(Distance).Y;
 
-        public HeroStats Stats => ComputeStats(Level, AugmentCards, Points);
-
-        /// <summary>레벨업 보상 배분 — 고른 스탯에 포인트 적립. 체력이 늘면 증가분을 채워준다.</summary>
-        public void GrantStatPoints(StatId stat, int points)
-        {
-            Focus = stat;
-            float before = Stats.MaxHp;
-            Bought = Bought.Plus(stat, points);
-            float after = Stats.MaxHp;
-            if (after > before) Hp += after - before;
-        }
+        public HeroStats Stats => ComputeStats(Level, AugmentCards);
 
         public int XpNeeded => HeroData.XpToNext(Level);
 
@@ -213,8 +154,6 @@ namespace GodTD.Core
                 Xp -= XpNeeded;
                 Level++;
                 gained++;
-                // 레벨업 = 스탯 선택 대기 (증강처럼 일시정지 카드 — Game.ChooseStat이 배분)
-                PendingStatPoints.Add(HeroData.LevelStatPoints(Level));
                 if (HeroData.GrantsAugment(Level)) PendingAugmentPicks++;
             }
             if (gained > 0) Hp = Stats.MaxHp; // 레벨업 시 완전 회복
@@ -275,17 +214,15 @@ namespace GodTD.Core
 
         /// <summary>
         /// 증강 카드를 접어서 최종 스탯을 만든다. 순수 함수 — 테스트하기 쉽다.
-        /// bought에는 구매 횟수가 아니라 **환산된 포인트**(Hero.Points)가 들어온다.
         /// </summary>
         public static HeroStats ComputeStats(
             int level,
-            IReadOnlyList<AugmentCard> cards,
-            BoughtStats bought = default)
+            IReadOnlyList<AugmentCard> cards)
         {
-            // 파워 = 스탯(레벨업 택1 적립) × 증강 배수 — 레벨 배수는 폐지 (2안)
-            int str = HeroData.HERO_BASE_STR + bought.Str;
-            int agi = HeroData.HERO_BASE_AGI + bought.Agi;
-            int intel = HeroData.HERO_BASE_INT + bought.Int;
+            // 파워 = 스탯(레벨업 자동 균등 성장) × 증강 배수 — 레벨 배수는 없다 (3안)
+            float str = HeroData.StatValue(level, StatId.Str);
+            float agi = HeroData.StatValue(level, StatId.Agi);
+            float intel = HeroData.StatValue(level, StatId.Int);
 
             float maxHp = HeroData.HP_PER_STR * str;
             float damage = HeroData.DMG_PER_STR * str;

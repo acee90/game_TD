@@ -11,15 +11,16 @@
 
 import { Game } from '../src/game/game';
 import * as B from '../src/data/balance';
+import * as H from '../src/data/hero';
 import type { AugmentCard } from '../src/data/hero';
-import type { Race } from '../src/game/types';
+import type { Race } from '../src/data/units';
 
 // ── 유전자 ──
 // 연속값은 [0,1]로 정규화해 두고 쓰는 곳에서 스케일한다.
 interface Genome {
   /** 프로브(가스 채취) 목표 기수 0~8. 0이면 가스 경제를 버린다 */
   probeTarget: number;
-  /** 영웅 강화 전에 남겨둘 미네랄 (0~400). 낮을수록 영웅 몰빵 */
+  /** XP 구매 전에 남겨둘 미네랄 (0~400). 낮을수록 영웅 몰빵 */
   heroReserve: number;
   /** 증강 계열 몰기 성향 0~1. 높을수록 이미 든 계열을 또 고른다 */
   focus: number;
@@ -90,14 +91,7 @@ function runGame(g: Genome, seed: number): RunResult {
 
   for (let t = 0; t < MAX_TICKS && !game.over; t++) {
     if (game.paused) {
-      // 레벨업 스탯 카드가 먼저 뜬다 — 가장 덜 가진 스탯에 배분 (균형 봇)
-      if (game.pendingStatPoints > 0) {
-        const stat = (['str', 'agi', 'int'] as const).reduce((a, b) =>
-          game.hero.bought[a] <= game.hero.bought[b] ? a : b);
-        game.chooseStat(stat);
-      } else {
-        pickAugment(g, game);
-      }
+      pickAugment(g, game);
     }
 
     if (t % DECIDE_EVERY === 0) {
@@ -110,19 +104,16 @@ function runGame(g: Genome, seed: number): RunResult {
       // 프로브: 목표 기수까지, 유닛 2기 값은 남기고 산다
       while (
         game.probes < g.probeTarget &&
-        game.mineral >= B.PROBE_MINERAL + 2 * B.SPAWN_UNIT_MINERAL
+        game.mineral >= B.PROBE_MINERAL + 2 * game.spawnCost
       ) {
         if (!game.buyProbe()) break;
       }
-      // 유닛: 빈 타일이 있는 한 채운다 (조합의 재료)
-      while (game.mineral >= B.SPAWN_UNIT_MINERAL && game.spawnUnitAnywhere()) {}
-      // 스탯 구매: 예비금 위로만, 가장 덜 산 스탯부터 (균형 구매)
+      // 유닛: 빈 타일이 있는 한 채운다 (조합의 재료). 생성 비용은 누적 증가한다
+      while (game.mineral >= game.spawnCost && game.spawnUnitAnywhere()) {}
+      // XP 구매: 예비금 위로만. 스탯은 레벨에 따라 자동 성장하므로 골드의 영웅 창구는 XP다
       for (let guard = 0; guard < 64; guard++) {
-        const stat = (['str', 'agi', 'int'] as const).reduce((a, b) =>
-          game.hero.bought[a] <= game.hero.bought[b] ? a : b,
-        );
-        if (!(game.canBuyStat(stat) && game.mineral >= game.statCost(stat) + g.heroReserve)) break;
-        if (!game.buyStat(stat)) break;
+        if (!(game.canBuyXp && game.mineral >= H.XP_BUY_GOLD + g.heroReserve)) break;
+        if (!game.buyXp()) break;
       }
       spendGas(game);
     }
@@ -135,7 +126,7 @@ function runGame(g: Genome, seed: number): RunResult {
     round: lastRound,
     score: game.score,
     heroLevel: game.hero.level,
-    statPoints: game.hero.bought.str + game.hero.bought.agi + game.hero.bought.int,
+    statPoints: H.statBonusByLevel(game.hero.level) * H.STAT_IDS.length,
     augments: game.hero.augments.length,
     probes: game.probes,
     heroShare: game.heroDamageDealt / Math.max(1, game.heroDamageDealt + game.towerDamageDealt),
