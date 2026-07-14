@@ -19,6 +19,15 @@ canvas.addEventListener('pointerdown', (event) => {
   const x = (event.clientX - rect.left) * scale;
   const y = (event.clientY - rect.top) * scale;
 
+  // 몹/보스를 찍으면 스탯을 본다 (타일보다 먼저 — 몹은 타일 위를 지나간다)
+  const enemy = game.enemyAt(x, y);
+  if (enemy) {
+    game.selectedEnemy = enemy;
+    game.selected = null;
+    return;
+  }
+  game.selectedEnemy = null;
+
   const hit = game.slots.find(
     (slot) => Math.abs(slot.x - x) <= TILE / 2 && Math.abs(slot.y - y) <= TILE / 2,
   );
@@ -39,6 +48,11 @@ canvas.addEventListener('pointerdown', (event) => {
 el.spawn.addEventListener('click', () => game.spawnUnitAnywhere());
 el.probe.addEventListener('click', () => game.buyProbe());
 el.sell.addEventListener('click', () => game.sellSelected());
+el.copyTower.addEventListener('click', () => {
+  // 예약돼 있으면 취소, 아니면 선택한 타워를 예약한다
+  const target = game.copyTarget ?? game.selected;
+  if (target) game.markCopyTarget(target);
+});
 el.buyXp.addEventListener('click', () => game.buyXp());
 el.reroll.addEventListener('click', () => game.rerollAugments());
 el.gasSkillDmg.addEventListener('click', () => game.buyGasSkill('damage'));

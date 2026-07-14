@@ -96,6 +96,12 @@ export const SPAWN_COST_GROWTH = 0.45;
 export const spawnUnitCost = (spawned: number): number =>
   Math.round(SPAWN_UNIT_MINERAL + SPAWN_COST_GROWTH * Math.max(0, spawned - SPAWN_FREE_COUNT));
 export const PROBE_MINERAL = 100;
+
+// ── 타워 복제 ('복제 장치' 증강) ──
+// 복제 가능 티어 상한은 라운드와 영웅 레벨 중 **더 빠른 쪽**을 따라 오른다.
+// 초반엔 싸구려만 복제되고, 후반에 GOD가 열린다 — 복제가 계속 살아 있는 카드가 된다.
+export const COPY_TIER_ROUNDS = 12;
+export const COPY_TIER_LEVELS = 9;
 /**
  * [프로토] 프로브 비용은 지수로 오른다 — "지금 전력이냐 미래 경제냐"의 일꾼 딜레마.
  * 8기 고정 상한이던 시절에는 GA가 전 세대 7~8로 수렴하는 무뇌 투자였다.
@@ -218,7 +224,9 @@ export const enemyCount = (round: number): number =>
 
 /** 웨이브 내 스폰 간격(초). 36기 × 0.18 = 6.5초 스폰 창 [프로토] */
 export const SPAWN_INTERVAL = 0.18;
-export const ENEMY_SPEED = 52; // [프로토]
+// 52 → 42 (2026-07-14): 초반 체감 템포를 늦춘다. 경로 통과 시간이 24% 늘어 타워가 더 많이
+// 쏘고, 영웅이 몹 무리를 정리할 시간도 늘어난다. 난이도는 쉬워지는 방향이다. [프로토]
+export const ENEMY_SPEED = 42;
 
 /** 몹 2열 레인 — 경로 중심선에서 좌우로 비끼는 표시 오프셋(px). 판정은 1D 그대로. [프로토] */
 export const MOB_LANE_OFFSET = 8;

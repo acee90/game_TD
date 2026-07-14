@@ -53,6 +53,7 @@ export interface Elements {
   readonly gasSkillCdr: HTMLButtonElement;
   readonly spawn: HTMLButtonElement;
   readonly sell: HTMLButtonElement;
+  readonly copyTower: HTMLButtonElement;
   readonly upgrades: readonly HTMLButtonElement[];
   readonly overlay: HTMLElement;
   readonly overlayTitle: HTMLElement;
@@ -106,6 +107,7 @@ export function bindElements(): Elements {
     gasSkillCdr: $<HTMLButtonElement>('gasSkillCdr'),
     spawn: $<HTMLButtonElement>('spawn'),
     sell: $<HTMLButtonElement>('sell'),
+    copyTower: $<HTMLButtonElement>('copyTower'),
     upgrades: [0, 1, 2, 3].map((i) => $<HTMLButtonElement>(`up${i}`)),
     overlay: $('overlay'),
     overlayTitle: $('overlayTitle'),
@@ -126,10 +128,57 @@ function bossStateLabel(game: Game): string {
   return fighting + gate;
 }
 
+/** 몹·보스를 클릭했을 때 — 무엇이 얼마나 아픈지, 지금 무슨 상태인지 */
+function enemyInfo(game: Game): string {
+  const enemy = game.selectedEnemy;
+  if (!enemy) return '';
+
+  const boss = enemy.kind === 'boss';
+  const level = enemy.bossLevel ?? 1;
+  const contact = boss
+    ? HD.bossDamage(level, game.round)
+    : HD.enemyDamage(game.round) * (enemy.contactDamageMult ?? 1);
+
+  // 영웅이 이 몹에게 실제로 넣는 한 방 (장갑 감산 반영)
+  const heroHit = B.effectiveDamage(game.hero.attackDamage, enemy.armor);
+  const toKill = heroHit > 0 ? Math.ceil(enemy.hp / heroHit) : Infinity;
+  // 이 몹만 붙었을 때 영웅이 버티는 시간
+  const survive = contact > 0 ? (game.hero.hp / contact).toFixed(0) : '∞';
+
+  const states: string[] = [];
+  if (enemy.burnTimer && enemy.burnTimer > 0) {
+    states.push(`<span style="color:#ff8a3c">화상 ${enemy.burnStacks ?? 1}중첩</span>`);
+  }
+  if (enemy.slowFactor !== undefined && enemy.slowFactor < 1) {
+    states.push(`<span style="color:#7ce7ff">감속 ${Math.round((1 - enemy.slowFactor) * 100)}%</span>`);
+  }
+  if (enemy.held) states.push('<span style="color:#6fdc8c">붙잡힘</span>');
+
+  const speed = enemy.speed * (enemy.slowFactor ?? 1);
+  const hpPct = Math.max(0, (enemy.hp / enemy.maxHp) * 100);
+
+  return `
+    <div class="name" style="color:${boss ? '#ff5a3c' : (enemy.typeColor ?? '#9aa2c0')}">
+      ${boss ? `BOSS Lv${level}` : enemy.name}
+      <span class="chip">${boss ? '보스' : '몹'}</span>
+      ${states.length ? `<span class="chip">${states.join(' · ')}</span>` : ''}
+    </div>
+    <div class="dim">
+      체력 ${Math.ceil(enemy.hp)}/${enemy.maxHp} (${hpPct.toFixed(0)}%) ·
+      장갑 ${enemy.armor} · 이동속도 ${speed.toFixed(0)}<br>
+      접촉 공격력 ${contact.toFixed(1)}/초 —
+      ${contact > 0 ? `영웅이 <b>${survive}초</b> 버팀` : '<b>영웅을 때리지 않는다</b>'} ·
+      영웅 한 방 ${heroHit.toFixed(0)} (약 <b>${toKill}대</b>)
+      ${boss ? '<br><b>보스는 영웅에게 저지되지 않는다</b> — 도발 인형만 붙잡는다.' : ''}
+    </div>`;
+}
+
 function selectionInfo(game: Game): string {
+  if (game.selectedEnemy) return enemyInfo(game);
+
   const tower = game.selected?.tower;
   if (!tower) {
-    return '<span class="dim">빈 타일 = 유닛 생성 · 유닛 타일 = 정보. 같은 유닛 2기가 모이면 자동 조합됩니다.</span>';
+    return '<span class="dim">빈 타일 = 유닛 생성 · 유닛 타일 = 정보 · 몹/보스 클릭 = 스탯. 같은 유닛 2기가 모이면 자동 조합됩니다.</span>';
   }
   const dmg = damage(tower, game.upgrades).toFixed(0);
   const dps = (damage(tower, game.upgrades) / attackInterval(tower)).toFixed(0);
@@ -306,6 +355,20 @@ export function refresh(el: Elements, game: Game): void {
   el.spawn.disabled = game.mineral < game.spawnCost;
 
   el.sell.disabled = !game.selected?.tower;
+
+  // 복제 장치 — 증강을 들었을 때만 보인다
+  el.copyTower.hidden = !game.canCopyTower;
+  if (game.canCopyTower) {
+    const target = game.copyTarget;
+    const selected = game.selected;
+    if (target?.tower) {
+      el.copyTower.textContent = `복제 예약됨: ${target.tower.def.name} (취소)`;
+      el.copyTower.disabled = false;
+    } else {
+      el.copyTower.textContent = `복제 예약 (티어 ${game.copyTierCap}까지)`;
+      el.copyTower.disabled = !selected || !game.canMarkCopy(selected);
+    }
+  }
 
   el.upgrades.forEach((button, i) => {
     const race = i as Race;

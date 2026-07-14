@@ -45,8 +45,10 @@ export interface Enemy extends EnemySpec {
   slowFactor?: number;
   /** 화상 남은 시간 — 영웅의 '화염 부착' 계열이 붙인다 */
   burnTimer?: number;
-  /** 화상 초당 피해 */
+  /** 화상 초당 피해 — **스택 1개당**이다. 실제 피해는 burnDps × burnStacks */
   burnDps?: number;
+  /** 화상 중첩 수. 때릴 때마다 쌓이고, 점화 증강은 최대 스택에서 터뜨린다 */
+  burnStacks?: number;
   /** 이번 프레임에 영웅/허수아비에게 붙잡혀 있는가 — 탱킹 기여 집계용 */
   held?: boolean;
 }
@@ -60,6 +62,25 @@ export interface Decoy {
   life: number;
   /** 주변 몹을 강제로 끌어당기는가 */
   taunts: boolean;
+}
+
+/**
+ * 바닥에 깔린 장판 (불화살의 불바다 · 얼음화살의 빙판).
+ * 몹은 경로를 따라야만 하므로 장판은 "길목에 놓는 지속 효과"가 된다.
+ */
+export interface Zone {
+  /** 경로 위 중심 */
+  distance: number;
+  x: number;
+  y: number;
+  radius: number;
+  /** 남은 시간(초) */
+  remaining: number;
+  /** 초당 피해 (0이면 피해 없는 장판) */
+  dps: number;
+  /** 안에 있는 몹의 이동속도 배수 (1이면 감속 없음) */
+  slow: number;
+  color: string;
 }
 
 export interface Shot {

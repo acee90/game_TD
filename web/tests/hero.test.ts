@@ -342,7 +342,7 @@ describe('증강 — 선택 동안 게임이 멈춘다', () => {
   });
 });
 
-describe('증강 효과 — 곱연산으로 쌓여 먼치킨이 된다', () => {
+describe('증강 효과 — 가산 합산이 기본, 곱연산은 소수 정예 (2026-07-14)', () => {
   test('피해 감소는 곱연산이라 100%에 도달하지 않는다', () => {
     const plating = card('plating');
     const stats = computeStats(1, [plating, plating]);
@@ -350,12 +350,33 @@ describe('증강 효과 — 곱연산으로 쌓여 먼치킨이 된다', () => {
     expect(stats.damageReduction).toBeLessThan(1);
   });
 
-  test('공격력 증강을 한 계열로 몰면 배수가 폭발한다', () => {
-    const plain = dps(10);
-    const stacked = dps(10, ['might', 'might', 'might', 'marksman', 'rapid']);
-    expect(stacked / plain).toBeGreaterThan(5);
+  test('같은 증강을 쌓으면 가산이다 — 복리로 터지지 않는다', () => {
+    const plain = computeStats(10, []);
+    const three = computeStats(10, [card('might'), card('might'), card('might')]);
 
-    // 더 몰면 더 커진다 — 상한이 없다는 게 먼치킨의 조건이다
+    // 완력 +60% 세 장 = +180%, 강화 특화(3장)가 +40% 더해 총 +220% (×3.2).
+    // 전부 곱연산이었다면 1.6³ × 1.4 = ×5.7이 됐을 것이다 — 시너지도 가산이다.
+    expect(three.damage / plain.damage).toBeCloseTo(3.2, 1);
+    expect(three.damage / plain.damage).toBeLessThan(1.6 ** 3 * 1.4);
+  });
+
+  test('곱연산 증강(광전사)만 최종 공격력에 통째로 곱해진다', () => {
+    // 둘 다 강화 3장이라 특화 조건은 같다 — 차이는 셋째 장이 곱이냐 가산이냐뿐이다
+    const additive = computeStats(10, [card('might'), card('might'), card('vigor')]);
+    const compound = computeStats(10, [card('might'), card('might'), card('glasscannon')]);
+
+    // 광전사는 가산 보너스 전체(+220%)에 ×1.5를 곱한다 — 가산 한 장보다 훨씬 크다
+    expect(compound.damage).toBeGreaterThan(additive.damage * 1.3);
+    expect(H.isCompounding(augment('glasscannon'))).toBe(true);
+    expect(H.isCompounding(augment('might'))).toBe(false);
+  });
+
+  test('곱연산 증강은 셋뿐이다 — 곱이 흔해지면 다시 복리가 된다', () => {
+    expect(H.COMPOUNDING_IDS).toHaveLength(3);
+  });
+
+  test('더 몰면 더 커진다 (상한은 없다)', () => {
+    const stacked = dps(10, ['might', 'might', 'might', 'marksman', 'rapid']);
     const deeper = dps(10, ['might', 'might', 'might', 'marksman', 'rapid', 'arcane', 'vigor']);
     expect(deeper).toBeGreaterThan(stacked);
   });
@@ -365,9 +386,9 @@ describe('증강 효과 — 곱연산으로 쌓여 먼치킨이 된다', () => {
     expect(stats.splashRadius).toBe(45 + 40);
   });
 
-  test('전쟁군주는 타워를 강화한다', () => {
+  test('전쟁군주는 타워를 강화한다 — 두 장이면 가산으로 +24%', () => {
     const stats = computeStats(1, [card('warlord'), card('warlord')]);
-    expect(stats.towerDamageMult).toBeCloseTo(1.12 * 1.12, 5);
+    expect(stats.towerDamageMult).toBeCloseTo(1.24, 5);
   });
 });
 
@@ -499,7 +520,7 @@ describe('탐욕 증강 — 처치당 미네랄', () => {
     });
     game.update(0.016);
 
-    expect(game.mineral).toBe(mineral + 1);
+    expect(game.mineral).toBe(mineral + game.hero.stats.mineralPerKill);
   });
 });
 

@@ -1,4 +1,4 @@
-import type { SkillId, SkillModPatch } from './skills';
+import { SKILLS, type SkillId, type SkillModPatch } from './skills';
 
 // ───────── 영웅 · 제단 · 증강 ─────────
 // 원본 갓타디에는 없는 신규 설계다. 근거 표기 대상이 아니다.
@@ -40,6 +40,17 @@ export const HERO_BASE_INT = 8;
 export const DMG_PER_STR = 6;
 /** 힘 1당 최대 체력 — 같은 이유로 18 → 70 [프로토] */
 export const HP_PER_STR = 70;
+/**
+ * 레벨과 무관한 기본 체력 (2026-07-14).
+ *
+ * 체력이 `힘 × 70`뿐이라 Lv1(힘 2) 영웅이 140이었다. 어그로 범위가 110이라 몹이 10기씩
+ * 뭉쳐 붙는데, R1 몹 공격력이 기당 1.6/초 → **8.8초면 죽는다**(라운드가 22초인데).
+ * 측정: 시드 12판 중 9판에서 영웅이 죽었고 첫 사망 중앙값이 R5, R1~R2 사망도 3판.
+ *
+ * 기본값을 주면 **초반만** 두꺼워진다 — 레벨이 오를수록 힘 몫이 커져 비중이 줄기 때문에
+ * 후반 밸런스(탱커 빌드의 존재 이유)는 거의 그대로다.
+ */
+export const HERO_BASE_HP = 260;
 /** 민첩 1당 공격 속도 +4% */
 export const AS_PER_AGI = 0.04;
 /** 공격 간격 하한 — 민첩을 아무리 골라도 이 밑으로는 안 내려간다 */
@@ -200,6 +211,14 @@ export const AUGMENT_KIND_COLOR: Record<AugmentKind, string> = {
 // ───────── 발동 효과 상수 ─────────
 /** 화상 지속 시간 — 공격할 때마다 새로 덧씌운다 */
 export const BURN_SECONDS = 3;
+/**
+ * 화상 기본 최대 중첩.
+ *
+ * 화상은 처음엔 "때리면 초당 고정 피해"였고, 그래서 아무 선택도 만들지 않는 죽은 카드였다.
+ * 이제 **때릴수록 쌓인다** — 공속·다단히트가 화상과 맞물리고, 최대 스택은 '점화'로
+ * 터뜨릴 자원이 된다. 도트를 얹는 다른 것들(불바다 장판·레이저 틱)도 스택을 쌓는다.
+ */
+export const BURN_BASE_MAX_STACKS = 3;
 /** 공격 감속 지속 시간 */
 export const SLOW_ON_HIT_SECONDS = 1.5;
 /** 이 비율 밑이면 '위기' — 위기 증강이 켜진다 */
@@ -254,8 +273,29 @@ export interface AugmentEffect {
   readonly critMultAdd?: number;
   /** 대상 최대 체력의 이 비율 밑이면 즉사시킨다 */
   readonly executeBelow?: number;
-  /** 공격에 화상을 붙인다 — 초당 피해 */
-  readonly burnDps?: number;
+  /**
+   * 공격에 화상을 붙인다 — **초당 영웅 공격력의 이 배수**.
+   *
+   * 처음엔 고정값(초당 8)이었다. 측정해 보니 Lv30 영웅 공격력이 614인데 초당 8이라
+   * 사실상 0이었다. 고정 수치는 레벨을 못 따라간다 — 발동 효과는 전부 영웅 파워에
+   * 비례해야 강화 계열(곱연산)과 같은 저울에 오른다.
+   */
+  readonly burnMult?: number;
+  /** 화상 최대 중첩을 늘린다 */
+  readonly burnStacksAdd?: number;
+  /**
+   * 점화 — 화상이 최대 중첩에 닿으면 스택을 태워 터뜨린다.
+   * 폭발 피해 = 영웅 공격력 × 이 배수 × 터진 스택 수.
+   */
+  readonly igniteMult?: number;
+  /** 점화 폭발 반경 */
+  readonly igniteRadius?: number;
+  /**
+   * 화상에 걸린 적이 **모든 영웅 피해**를 이만큼 더 받는다 (0.25 = +25%).
+   * 평타·스킬·장판·레이저가 전부 이득을 본다 — 도트끼리 시너지가 나는 지점이다.
+   */
+  readonly burnAmp?: number;
+
   /** 공격에 감속을 붙인다 (0.25 = 25% 감속) */
   readonly slowOnHit?: number;
   /** 받은 피해의 이 배수를 때린 적에게 되돌린다 */
@@ -266,8 +306,13 @@ export interface AugmentEffect {
   readonly deathBlastRadius?: number;
   /** 처치당 추가 미네랄 */
   readonly mineralPerKill?: number;
-  /** 라운드마다 미네랄 */
+  /** 라운드마다 미네랄 (고정값) */
   readonly mineralPerWave?: number;
+  /**
+   * 라운드 보상 배수. 보상은 `10 + 3×라운드`라 라운드가 갈수록 커진다 —
+   * 고정 가산(라운드마다 +6)은 R30에서 보상의 6%밖에 안 됐다. 경제는 배수여야 큰다.
+   */
+  readonly waveRewardMult?: number;
   /** 라운드마다 가스 */
   readonly gasPerWave?: number;
   /** 부활 대기시간 감소(초). 음수면 늘어난다 */
@@ -280,6 +325,21 @@ export interface AugmentEffect {
   readonly waveStackDamage?: number;
   /** 라운드마다 최대 체력 +이 값 (영구 누적) */
   readonly waveStackHp?: number;
+
+  /** 영웅이 피격당할 때마다 스킬 쿨타임이 이만큼(초) 줄어든다 ('마나 회복'의 번역) */
+  readonly skillCdrOnHit?: number;
+  /** 영웅이 죽을 때 터진다 — 영웅 공격력의 이 배수만큼 광역 피해 */
+  readonly deathNova?: number;
+  /** 영웅이 부활할 때 제단에서 터진다 */
+  readonly reviveNova?: number;
+  /** 사망·부활 폭발의 반경 */
+  readonly novaRadius?: number;
+
+  /**
+   * 타워 복제를 연다 — 라운드마다 타워 하나를 찍어두면 라운드 종료 시 복제된다.
+   * 값은 **기본 티어 상한**이다 (1 = 티어 0까지). 실제 상한은 라운드·영웅 레벨이 더 밀어올린다.
+   */
+  readonly towerCopyTier?: number;
 }
 
 export interface Augment {
@@ -304,10 +364,29 @@ export interface Augment {
   readonly skillMod?: SkillModPatch;
   /** 이 스킬을 든 영웅에게만 등장한다 */
   readonly requiresSkill?: SkillId | 'any';
+  /** 장판을 까는 스킬(불화살·얼음화살)을 든 영웅에게만 등장한다 */
+  readonly requiresZone?: boolean;
 }
 
 /** 대가가 달린 증강인가 — UI가 경고색으로 칠한다 */
 export const isRisky = (augment: Augment): boolean => augment.penalty !== undefined;
+
+/**
+ * 곱연산 증강 — **소수 정예다.**
+ *
+ * 기본값은 **가산**이다. `damageMult: 1.45`는 "기본 공격력의 45%를 더한다"는 뜻이고,
+ * 세 장을 쌓으면 +135%(×2.35)지, 1.45³(×3.05)이 아니다.
+ *
+ * 왜: 전부 곱이면 스택형 증강이 복리로 터진다. 완력 3장 × 특화 1.4 = ×4.3이 되고,
+ * 거기에 성장 누적까지 곱해지면 GOD 타워 15기가 나왔다(측정: 성장 3장 R40 = 14.7기).
+ * 가산이면 증강 하나하나의 값어치가 예측 가능해지고, 후반 폭주가 사라진다.
+ *
+ * 그래서 **곱은 특별한 것**이 된다. 여기 있는 소수만 진짜 배수로 곱해지고,
+ * 그 대신 배율은 작다 (×1.5 안팎). 이게 뜨면 판이 달라진다 — 그래야 곱이 사건이 된다.
+ */
+export const COMPOUNDING_IDS: readonly string[] = ['glasscannon', 'evolution', 'skill_overload'];
+export const isCompounding = (augment: Augment): boolean =>
+  COMPOUNDING_IDS.includes(augment.id);
 
 // ───────── 등급 ─────────
 // 증강 카드마다 등급이 무작위로 붙는다. 등급이 높으면 효과가 커지는 대신
@@ -361,6 +440,7 @@ export function scaleEffect(effect: AugmentEffect, power: number): AugmentEffect
     towerDamageMult: mult(effect.towerDamageMult),
     towerRangeMult: mult(effect.towerRangeMult),
     xpMult: mult(effect.xpMult),
+    waveRewardMult: mult(effect.waveRewardMult),
     aggroRangeMult: mult(effect.aggroRangeMult),
     lowHpDamageMult: mult(effect.lowHpDamageMult),
     growthMult: mult(effect.growthMult),
@@ -378,11 +458,23 @@ export function scaleEffect(effect: AugmentEffect, power: number): AugmentEffect
     critChance: add(effect.critChance),
     critMultAdd: add(effect.critMultAdd),
     executeBelow: add(effect.executeBelow),
-    burnDps: add(effect.burnDps),
+    burnMult: add(effect.burnMult),
+    burnStacksAdd:
+      effect.burnStacksAdd === undefined ? undefined : Math.round(add(effect.burnStacksAdd)!),
+    igniteMult: add(effect.igniteMult),
+    igniteRadius: add(effect.igniteRadius),
+    burnAmp: add(effect.burnAmp),
     slowOnHit: add(effect.slowOnHit),
     thorns: add(effect.thorns),
     deathBlast: add(effect.deathBlast),
     deathBlastRadius: add(effect.deathBlastRadius),
+    skillCdrOnHit: add(effect.skillCdrOnHit),
+    deathNova: add(effect.deathNova),
+    reviveNova: add(effect.reviveNova),
+    novaRadius: add(effect.novaRadius),
+    // 복제 티어 상한은 등급으로 커진다 — 플래티넘 복제 장치는 더 좋은 타워를 베낀다
+    towerCopyTier:
+      effect.towerCopyTier === undefined ? undefined : Math.round(add(effect.towerCopyTier)!),
     mineralPerKill:
       effect.mineralPerKill === undefined ? undefined : Math.round(add(effect.mineralPerKill)!),
     mineralPerWave:
@@ -420,26 +512,27 @@ export const makeCard = (augment: Augment, rarity: Rarity): AugmentCard => ({
  */
 export const AUGMENTS: readonly Augment[] = [
   // ══ 강화 (stat) — 순수 수치. 재편 전 31%에서 14%로 줄였다.
-  { id: 'might', kind: 'stat', name: '완력', description: '공격력 +45%', maxStacks: 3,
-    effect: { damageMult: 1.45 } },
-  { id: 'marksman', kind: 'stat', name: '명사수', description: '공격력 +30%, 사거리 +10%', maxStacks: 3,
-    effect: { damageMult: 1.3, rangeMult: 1.1 } },
-  { id: 'rapid', kind: 'stat', name: '속사', description: '공격 속도 +35%', maxStacks: 3,
-    effect: { attackSpeedMult: 1.35 } },
+  { id: 'might', kind: 'stat', name: '완력', description: '공격력 +60%', maxStacks: 3,
+    effect: { damageMult: 1.6 } },
+  { id: 'marksman', kind: 'stat', name: '명사수', description: '공격력 +45%, 사거리 +10%', maxStacks: 3,
+    effect: { damageMult: 1.45, rangeMult: 1.1 } },
+  { id: 'rapid', kind: 'stat', name: '속사', description: '공격 속도 +45%', maxStacks: 3,
+    effect: { attackSpeedMult: 1.45 } },
   { id: 'longbow', kind: 'stat', name: '장궁', description: '사거리 +35%', maxStacks: 3,
     effect: { rangeMult: 1.35 } },
-  { id: 'vigor', kind: 'stat', name: '활력', description: '최대 체력 +20%, 공격력 +10%', maxStacks: 4,
-    effect: { hpMult: 1.2, damageMult: 1.1 } },
-  { id: 'arcane', kind: 'stat', name: '비전 집중', description: '공격력 +25%, 공격 속도 +15%', maxStacks: 3,
-    effect: { damageMult: 1.25, attackSpeedMult: 1.15 } },
-  { id: 'bulwark', kind: 'stat', name: '방벽', description: '최대 체력 +40%', maxStacks: 3,
-    effect: { hpMult: 1.4 } },
+  { id: 'vigor', kind: 'stat', name: '활력', description: '최대 체력 +30%, 공격력 +15%', maxStacks: 4,
+    effect: { hpMult: 1.3, damageMult: 1.15 } },
+  { id: 'arcane', kind: 'stat', name: '비전 집중', description: '공격력 +35%, 공격 속도 +20%', maxStacks: 3,
+    effect: { damageMult: 1.35, attackSpeedMult: 1.2 } },
+  { id: 'bulwark', kind: 'stat', name: '방벽', description: '최대 체력 +55%', maxStacks: 3,
+    effect: { hpMult: 1.55 } },
   // 아레나 '거인(Goliath)' — 커지는 대신 느려진다
   { id: 'goliath', kind: 'stat', name: '거인', description: '최대 체력 +50%, 공격력 +20% · 이동 속도 -15%',
     maxStacks: 2, effect: { hpMult: 1.5, damageMult: 1.2 }, penalty: { moveSpeedMult: 0.85 } },
   // 아레나 '광전사' 계열 — 유리대포
-  { id: 'glasscannon', kind: 'stat', name: '광전사', description: '공격력 +80% · 최대 체력 -30%',
-    maxStacks: 2, effect: { damageMult: 1.8 }, penalty: { hpMult: 0.7 } },
+  // [곱연산] 다른 모든 공격력 보너스에 통째로 곱해진다 — 그래서 배율은 낮고 1장뿐이다
+  { id: 'glasscannon', kind: 'stat', name: '광전사', description: '[곱] 최종 공격력 ×1.5 · 최대 체력 -30%',
+    maxStacks: 1, effect: { damageMult: 1.5 }, penalty: { hpMult: 0.7 } },
   { id: 'duelist', kind: 'stat', name: '결투가', description: '공격력 +35%, 공격 속도 +20% · 사거리 -20%',
     maxStacks: 2, effect: { damageMult: 1.35, attackSpeedMult: 1.2 }, penalty: { rangeMult: 0.8 } },
 
@@ -448,11 +541,14 @@ export const AUGMENTS: readonly Augment[] = [
     effect: { damageReduction: 0.2 } },
   { id: 'regen', kind: 'defense', name: '재생', description: '초당 체력 6 회복', maxStacks: 3,
     effect: { regen: 6 } },
-  { id: 'lifesteal', kind: 'defense', name: '흡혈', description: '가한 피해의 8% 회복', maxStacks: 3,
-    effect: { lifesteal: 0.08 } },
-  // 아레나 '가시 갑옷' — 맞으면서 되돌려준다
-  { id: 'thorns', kind: 'defense', name: '가시 갑옷', description: '받은 피해의 35%를 때린 적에게 되돌린다',
-    maxStacks: 2, effect: { thorns: 0.35 } },
+  { id: 'lifesteal', kind: 'defense', name: '흡혈', description: '가한 피해의 12% 회복', maxStacks: 3,
+    effect: { lifesteal: 0.12 } },
+  // 아레나 '가시 갑옷' — 맞으면서 되돌려준다. 가시는 허수아비에게도 걸린다.
+  { id: 'thorns', kind: 'defense', name: '가시 갑옷', description: '받은 피해의 120%를 때린 적에게 되돌린다 (허수아비도 적용)',
+    maxStacks: 2, effect: { thorns: 1.2 } },
+  { id: 'thornaura', kind: 'defense', name: '가시오라',
+    description: '받은 피해의 250%를 되돌리고, 받는 피해 15% 감소 (허수아비도 적용)', maxStacks: 2,
+    effect: { thorns: 2.5, damageReduction: 0.15 } },
   { id: 'aegis', kind: 'defense', name: '이지스', description: '받는 피해 18% 감소, 초당 체력 3 회복',
     maxStacks: 2, effect: { damageReduction: 0.18, regen: 3 } },
   { id: 'fortress', kind: 'defense', name: '요새', description: '최대 체력 +25%, 받는 피해 12% 감소',
@@ -474,29 +570,49 @@ export const AUGMENTS: readonly Augment[] = [
     effect: { splashRadius: 45 } },
   { id: 'novabig', kind: 'combat', name: '대폭발', description: '광역 반경 +40 (충격파 필요)', maxStacks: 2,
     effect: { splashRadius: 40 } },
-  { id: 'crit', kind: 'combat', name: '급소 노리기', description: '치명타 확률 +20%', maxStacks: 3,
-    effect: { critChance: 0.2 } },
-  { id: 'deadeye', kind: 'combat', name: '정밀 사격', description: '치명타 확률 +12%, 치명타 피해 +50%',
-    maxStacks: 2, effect: { critChance: 0.12, critMultAdd: 0.5 } },
+  { id: 'crit', kind: 'combat', name: '급소 노리기', description: '치명타 확률 +35%', maxStacks: 3,
+    effect: { critChance: 0.35 } },
+  { id: 'deadeye', kind: 'combat', name: '정밀 사격', description: '치명타 확률 +18%, 치명타 피해 +100%',
+    maxStacks: 2, effect: { critChance: 0.18, critMultAdd: 1 } },
   // 아레나 '처형' 계열 — 체력이 낮은 적을 즉사
-  { id: 'execute', kind: 'combat', name: '처형', description: '체력 6% 이하의 적을 즉사시킨다', maxStacks: 2,
-    effect: { executeBelow: 0.06 } },
-  { id: 'ruthless', kind: 'combat', name: '무자비', description: '공격력 +20%, 체력 4% 이하의 적을 즉사시킨다',
-    maxStacks: 2, effect: { damageMult: 1.2, executeBelow: 0.04 } },
+  { id: 'execute', kind: 'combat', name: '처형', description: '체력 12% 이하의 적을 즉사시킨다', maxStacks: 2,
+    effect: { executeBelow: 0.12 } },
+  { id: 'ruthless', kind: 'combat', name: '무자비', description: '공격력 +35%, 체력 7% 이하의 적을 즉사시킨다',
+    maxStacks: 2, effect: { damageMult: 1.35, executeBelow: 0.07 } },
   // 아레나 '개척자/고문자' — 무한 중첩 화상
-  { id: 'burn', kind: 'combat', name: '화염 부착', description: '공격에 초당 8 피해의 화상을 붙인다',
-    maxStacks: 3, effect: { burnDps: 8 } },
-  { id: 'frost', kind: 'combat', name: '서리 일격', description: '공격이 적을 25% 감속시킨다', maxStacks: 2,
-    effect: { slowOnHit: 0.25 } },
-  { id: 'venom', kind: 'combat', name: '맹독', description: '공격에 초당 5 피해의 화상 · 15% 감속',
-    maxStacks: 2, effect: { burnDps: 5, slowOnHit: 0.15 } },
+  // ── 화염 계열 — 중첩 → 점화 → 증폭으로 맞물린다.
+  // 화상은 **방어력을 무시한다(트루 피해).** 몹 장갑은 라운드마다 계단식으로 오르므로
+  // (floor(R/5)×3), 후반에 유일하게 감산되지 않는 피해가 된다. 그게 화염 빌드의 정체성이다.
+  { id: 'burn', kind: 'combat', name: '화염 부착',
+    description: '공격이 화상을 중첩시킨다 — 중첩당 초당 공격력 12% (방어력 무시), 최대 3중첩',
+    maxStacks: 3, effect: { burnMult: 0.12 } },
+  { id: 'kindling', kind: 'combat', name: '불쏘시개',
+    description: '화상 최대 중첩 +3, 화상 걸린 적이 받는 피해 +15%', maxStacks: 2,
+    effect: { burnStacksAdd: 3, burnAmp: 0.15 } },
+  // 점화 — 쌓인 화상을 터뜨릴 자원으로 바꾼다
+  { id: 'ignite', kind: 'combat', name: '점화',
+    description: '화상이 최대 중첩에 닿으면 중첩을 태워 폭발 (중첩당 공격력 35%, 반경 55, 방어력 무시)',
+    maxStacks: 2, effect: { igniteMult: 0.35, igniteRadius: 55 } },
+  // 도트끼리의 시너지 — 불바다 장판·레이저 틱도 화상을 쌓는다
+  { id: 'pyromancy', kind: 'combat', name: '발화술',
+    description: '화상 걸린 적이 받는 모든 피해 +30% (평타·스킬·장판·레이저 전부)', maxStacks: 2,
+    effect: { burnAmp: 0.3 } },
+  { id: 'frost', kind: 'combat', name: '서리 일격', description: '공격이 적을 35% 감속시킨다', maxStacks: 2,
+    effect: { slowOnHit: 0.35 } },
+  { id: 'venom', kind: 'combat', name: '맹독',
+    description: '화상 중첩당 초당 공격력 8% (방어력 무시) · 20% 감속', maxStacks: 2,
+    effect: { burnMult: 0.08, slowOnHit: 0.2 } },
   // 아레나 '연쇄 폭발' — 죽은 적이 터진다
-  { id: 'deathblast', kind: 'combat', name: '폭사', description: '처치한 적이 반경 40에 공격력 1.5배로 폭발',
-    maxStacks: 2, effect: { deathBlast: 1.5, deathBlastRadius: 40 } },
-  { id: 'cleave', kind: 'combat', name: '참격', description: '공격력 +15%, 광역 반경 +25', maxStacks: 2,
-    effect: { damageMult: 1.15, splashRadius: 25 } },
-  { id: 'berserk', kind: 'combat', name: '광폭화', description: '공격 속도 +25%, 가한 피해의 5% 회복',
-    maxStacks: 2, effect: { attackSpeedMult: 1.25, lifesteal: 0.05 } },
+  { id: 'deathblast', kind: 'combat', name: '폭사', description: '처치한 적이 반경 50에 공격력 3배로 폭발',
+    maxStacks: 2, effect: { deathBlast: 3, deathBlastRadius: 50 } },
+  { id: 'cleave', kind: 'combat', name: '참격', description: '공격력 +25%, 광역 반경 +25', maxStacks: 2,
+    effect: { damageMult: 1.25, splashRadius: 25 } },
+  { id: 'berserk', kind: 'combat', name: '광폭화', description: '공격 속도 +30%, 가한 피해의 8% 회복',
+    maxStacks: 2, effect: { attackSpeedMult: 1.3, lifesteal: 0.08 } },
+  // 사망도 자원으로 쓴다 — 죽는 순간과 돌아오는 순간이 둘 다 폭발이다
+  { id: 'supernova', kind: 'combat', name: '초신성',
+    description: '사망 시 공격력 8배, 부활 시 5배로 반경 90 폭발', maxStacks: 2,
+    effect: { deathNova: 8, reviveNova: 5, novaRadius: 90 } },
 
   // ══ 스킬 (skill) — 획득과 개조. 영웅은 스킬을 하나만 든다.
   { id: 'skill_whirlwind', kind: 'skill', name: '소용돌이', maxStacks: 1,
@@ -518,9 +634,10 @@ export const AUGMENTS: readonly Augment[] = [
     description: '스킬 피해 +45%',
     effect: {}, skillMod: { damageMult: 1.45 }, requiresSkill: 'any' },
   // 대가형 개조 — 세게 때리는 대신 자주 못 쓴다
+  // [곱연산] 스킬 피해에 통째로 곱해진다 — 대신 쿨이 길어진다
   { id: 'skill_overload', kind: 'skill', name: '과부하', maxStacks: 1,
-    description: '스킬 피해 +90% · 스킬 쿨타임 +25%',
-    effect: {}, skillMod: { damageMult: 1.9, cooldownMult: 1.25 }, requiresSkill: 'any' },
+    description: '[곱] 스킬 피해 ×1.6 · 스킬 쿨타임 +25%',
+    effect: { skillDamageMult: 1.6 }, skillMod: { cooldownMult: 1.25 }, requiresSkill: 'any' },
   { id: 'skill_focus', kind: 'skill', name: '집중', maxStacks: 2,
     description: '스킬 피해 +25%, 스킬 쿨타임 10% 감소',
     effect: { skillDamageMult: 1.25, skillCooldownMult: 0.9 }, requiresSkill: 'any' },
@@ -540,54 +657,100 @@ export const AUGMENTS: readonly Augment[] = [
     description: '허수아비가 주변 몹을 강제로 끌어당기고 체력 2배',
     effect: {}, skillMod: { decoyHpMult: 2, decoyTaunts: true }, requiresSkill: 'decoy' },
 
+  // ── 스킬 획득 (원형별로 하나씩)
+  { id: 'skill_laser', kind: 'skill', name: '레이저', maxStacks: 1,
+    description: '[스킬] 앞쪽 직선을 관통해 0.5초마다 지속 피해 · 쿨 11초',
+    effect: {}, grantsSkill: 'laser' },
+  { id: 'skill_firearrow', kind: 'skill', name: '불화살', maxStacks: 1,
+    description: '[스킬] 바닥에 불바다를 깐다 — 초당 공격력 1.2배, 6초 · 쿨 12초',
+    effect: {}, grantsSkill: 'firearrow' },
+  { id: 'skill_icearrow', kind: 'skill', name: '얼음화살', maxStacks: 1,
+    description: '[스킬] 바닥에 빙판을 깐다 — 55% 감속, 7초 · 쿨 14초',
+    effect: {}, grantsSkill: 'icearrow' },
+  { id: 'skill_execution', kind: 'skill', name: '처형자의 일격', maxStacks: 1,
+    description: '[스킬] 체력이 가장 낮은 적에게 공격력 8배 — 처치 시 쿨 초기화 · 쿨 9초',
+    effect: {}, grantsSkill: 'execution' },
+
+  // ── 레이저 개조 — 두께 / 사거리 / 도트 간격
+  { id: 'laser_focus', kind: 'skill', name: '집속 렌즈', maxStacks: 2,
+    description: '레이저 두께 +18 (더 넓은 줄을 지진다)',
+    effect: {}, skillMod: { beamWidthAdd: 18 }, requiresSkill: 'laser' },
+  { id: 'laser_range', kind: 'skill', name: '증폭 코일', maxStacks: 2,
+    description: '레이저 길이 +90, 지속 +1.5초',
+    effect: {}, skillMod: { beamLengthAdd: 90, beamSecondsAdd: 1.5 }, requiresSkill: 'laser' },
+  { id: 'laser_rapid', kind: 'skill', name: '고속 조사', maxStacks: 1,
+    description: '레이저 도트 간격 절반 (0.5초 → 0.25초 = 피해 두 배)',
+    effect: {}, skillMod: { tickIntervalMult: 0.5 }, requiresSkill: 'laser' },
+
+  // ── 장판 개조 (불화살·얼음화살 — 장판이 있는 스킬에만 뜬다)
+  { id: 'zone_wide', kind: 'skill', name: '넓은 화선', maxStacks: 2,
+    description: '장판 반경 +30, 지속 +3초',
+    effect: {}, skillMod: { zoneRadiusAdd: 30, zoneSecondsAdd: 3 }, requiresZone: true },
+  { id: 'zone_hot', kind: 'skill', name: '맹렬한 불길', maxStacks: 2,
+    description: '장판 초당 피해 +공격력 0.8배 (빙판도 태우기 시작한다)',
+    effect: {}, skillMod: { zoneDpsAdd: 0.8 }, requiresZone: true },
+
+  // ── 모든 스킬 공용 개조
+  { id: 'skill_frostbite', kind: 'skill', name: '한파', maxStacks: 2,
+    description: '스킬에 맞은 적을 3초간 45% 감속 (모든 스킬)',
+    effect: {}, skillMod: { slowFactor: 0.55, slowSeconds: 3 }, requiresSkill: 'any' },
+  { id: 'skill_barrage', kind: 'skill', name: '다중 투사', maxStacks: 2,
+    description: '스킬이 때리는 대상 +2 (일제 사격·처형처럼 대상을 세는 스킬)',
+    effect: {}, skillMod: { extraTargets: 2 }, requiresSkill: 'any' },
+  // '맞을 때 마나 회복'의 번역 — 우리는 마나가 없으니 쿨타임으로 갚는다
+  { id: 'skill_riposte', kind: 'skill', name: '반격 집중', maxStacks: 3,
+    description: '피격당할 때마다 스킬 쿨타임 1.5초 감소',
+    effect: { skillCdrOnHit: 1.5 }, requiresSkill: 'any' },
+
   // ══ 성장 (growth) — 누적. 아레나 9% / TFT 5%였고 우리는 0%였다.
   // 처치 스택은 **영웅이 막타를 친 몹**만 센다 (타워 막타는 안 센다).
   { id: 'hunterinstinct', kind: 'growth', name: '사냥 본능',
-    description: '막타마다 공격력 +0.4% (최대 +50%)', maxStacks: 2,
-    effect: { killStackDamage: 0.004, killStackCap: 0.5 } },
+    description: '막타마다 공격력 +0.8% (최대 +100%)', maxStacks: 2,
+    effect: { killStackDamage: 0.008, killStackCap: 1 } },
   { id: 'bloodthirst', kind: 'growth', name: '피의 갈증',
-    description: '막타마다 공격력 +0.3% (최대 +30%), 가한 피해의 3% 회복', maxStacks: 2,
-    effect: { killStackDamage: 0.003, killStackCap: 0.3, lifesteal: 0.03 } },
-  { id: 'veteran', kind: 'growth', name: '역전의 용사', description: '라운드마다 공격력 +2% (영구 누적)',
-    maxStacks: 3, effect: { waveStackDamage: 0.02 } },
-  { id: 'ironblood', kind: 'growth', name: '강철 혈통', description: '라운드마다 최대 체력 +3% (영구 누적)',
-    maxStacks: 3, effect: { waveStackHp: 0.03 } },
+    description: '막타마다 공격력 +0.6% (최대 +70%), 가한 피해의 5% 회복', maxStacks: 2,
+    effect: { killStackDamage: 0.006, killStackCap: 0.7, lifesteal: 0.05 } },
+  { id: 'veteran', kind: 'growth', name: '역전의 용사', description: '라운드마다 공격력 +3% (영구 누적)',
+    maxStacks: 3, effect: { waveStackDamage: 0.03 } },
+  { id: 'ironblood', kind: 'growth', name: '강철 혈통', description: '라운드마다 최대 체력 +5% (영구 누적)',
+    maxStacks: 3, effect: { waveStackHp: 0.05 } },
   { id: 'momentum', kind: 'growth', name: '가속',
-    description: '라운드마다 공격력 +1.5%, 최대 체력 +1.5% (영구 누적)', maxStacks: 2,
-    effect: { waveStackDamage: 0.015, waveStackHp: 0.015 } },
+    description: '라운드마다 공격력 +2%, 최대 체력 +2% (영구 누적)', maxStacks: 2,
+    effect: { waveStackDamage: 0.02, waveStackHp: 0.02 } },
   // TFT 'Soul Awakening' — 성장을 성장시킨다. 성장 특화의 핵심 카드.
-  { id: 'evolution', kind: 'growth', name: '진화', description: '모든 성장 증강의 누적치 +40%',
-    maxStacks: 2, effect: { growthMult: 1.4 } },
+  // [곱연산] 성장 누적치에 통째로 곱해진다
+  { id: 'evolution', kind: 'growth', name: '진화', description: '[곱] 성장 누적치 ×1.4',
+    maxStacks: 1, effect: { growthMult: 1.4 } },
   { id: 'adaptive', kind: 'growth', name: '적응',
-    description: '막타마다 공격력 +0.2% (최대 +25%), 라운드마다 공격력 +1%', maxStacks: 3,
-    effect: { killStackDamage: 0.002, killStackCap: 0.25, waveStackDamage: 0.01 } },
+    description: '막타마다 공격력 +0.4% (최대 +40%), 라운드마다 공격력 +1.5%', maxStacks: 3,
+    effect: { killStackDamage: 0.004, killStackCap: 0.4, waveStackDamage: 0.015 } },
   { id: 'relentless', kind: 'growth', name: '집념',
-    description: '막타마다 공격력 +0.6% (최대 +80%) · 최대 체력 -15%', maxStacks: 1,
-    effect: { killStackDamage: 0.006, killStackCap: 0.8 }, penalty: { hpMult: 0.85 } },
+    description: '막타마다 공격력 +1.2% (최대 +160%) · 최대 체력 -15%', maxStacks: 1,
+    effect: { killStackDamage: 0.012, killStackCap: 1.6 }, penalty: { hpMult: 0.85 } },
   { id: 'warmachine', kind: 'growth', name: '전쟁 기계',
-    description: '라운드마다 공격력 +3% (영구 누적) · 이동 속도 -10%', maxStacks: 2,
-    effect: { waveStackDamage: 0.03 }, penalty: { moveSpeedMult: 0.9 } },
+    description: '라운드마다 공격력 +5% (영구 누적) · 이동 속도 -10%', maxStacks: 2,
+    effect: { waveStackDamage: 0.05 }, penalty: { moveSpeedMult: 0.9 } },
 
   // ══ 경제 (econ) — 수입과 경험치. TFT 증강의 중심축(43%)이 여기다.
-  { id: 'greed', kind: 'econ', name: '탐욕', description: '처치당 미네랄 +1', maxStacks: 3,
-    effect: { mineralPerKill: 1 } },
-  { id: 'harvest', kind: 'econ', name: '수확', description: '라운드마다 미네랄 +6', maxStacks: 3,
-    effect: { mineralPerWave: 6 } },
-  { id: 'gasvein', kind: 'econ', name: '가스 정맥', description: '라운드마다 가스 +2', maxStacks: 3,
-    effect: { gasPerWave: 2 } },
-  { id: 'scholar', kind: 'econ', name: '학자', description: '경험치 획득 +25%', maxStacks: 3,
-    effect: { xpMult: 1.25 } },
-  { id: 'prospector', kind: 'econ', name: '시굴자', description: '처치당 미네랄 +1, 라운드마다 미네랄 +3',
-    maxStacks: 2, effect: { mineralPerKill: 1, mineralPerWave: 3 } },
-  { id: 'apprentice', kind: 'econ', name: '수련', description: '경험치 획득 +15%, 처치당 미네랄 +1',
-    maxStacks: 3, effect: { xpMult: 1.15, mineralPerKill: 1 } },
+  { id: 'greed', kind: 'econ', name: '탐욕', description: '처치당 미네랄 +2', maxStacks: 3,
+    effect: { mineralPerKill: 2 } },
+  { id: 'harvest', kind: 'econ', name: '수확', description: '라운드 보상 +40%', maxStacks: 3,
+    effect: { waveRewardMult: 1.4 } },
+  { id: 'gasvein', kind: 'econ', name: '가스 정맥', description: '라운드마다 가스 +5', maxStacks: 3,
+    effect: { gasPerWave: 5 } },
+  { id: 'scholar', kind: 'econ', name: '학자', description: '경험치 획득 +40%', maxStacks: 3,
+    effect: { xpMult: 1.4 } },
+  { id: 'prospector', kind: 'econ', name: '시굴자', description: '처치당 미네랄 +1, 라운드 보상 +25%',
+    maxStacks: 2, effect: { mineralPerKill: 1, waveRewardMult: 1.25 } },
+  { id: 'apprentice', kind: 'econ', name: '수련', description: '경험치 획득 +20%, 처치당 미네랄 +1',
+    maxStacks: 3, effect: { xpMult: 1.2, mineralPerKill: 1 } },
   // 아레나 'GoH 갈망' 계열 — 힘을 팔아 돈을 산다
-  { id: 'tycoon', kind: 'econ', name: '재벌', description: '라운드마다 미네랄 +10 · 공격력 -15%',
-    maxStacks: 2, effect: { mineralPerWave: 10 }, penalty: { damageMult: 0.85 } },
-  { id: 'bounty', kind: 'econ', name: '현상금 사냥꾼', description: '처치당 미네랄 +2 · 최대 체력 -10%',
-    maxStacks: 2, effect: { mineralPerKill: 2 }, penalty: { hpMult: 0.9 } },
-  { id: 'investment', kind: 'econ', name: '투자', description: '라운드마다 가스 +3 · 부활 대기 3초 증가',
-    maxStacks: 2, effect: { gasPerWave: 3 }, penalty: { respawnCut: -3 } },
+  { id: 'tycoon', kind: 'econ', name: '재벌', description: '라운드 보상 +90% · 공격력 -15%',
+    maxStacks: 2, effect: { waveRewardMult: 1.9 }, penalty: { damageMult: 0.85 } },
+  { id: 'bounty', kind: 'econ', name: '현상금 사냥꾼', description: '처치당 미네랄 +4 · 최대 체력 -10%',
+    maxStacks: 2, effect: { mineralPerKill: 4 }, penalty: { hpMult: 0.9 } },
+  { id: 'investment', kind: 'econ', name: '투자', description: '라운드마다 가스 +8 · 부활 대기 3초 증가',
+    maxStacks: 2, effect: { gasPerWave: 8 }, penalty: { respawnCut: -3 } },
 
   // ══ 유틸 (util) — 기동 · 부활 · 타워 지휘 · 어그로
   { id: 'warlord', kind: 'util', name: '전쟁군주', description: '모든 타워 공격력 +12%', maxStacks: 3,
@@ -609,6 +772,14 @@ export const AUGMENTS: readonly Augment[] = [
     maxStacks: 2, effect: { towerDamageMult: 1.2 }, penalty: { moveSpeedMult: 0.85 } },
   { id: 'martyr', kind: 'util', name: '순교', description: '부활 대기 6초 감소 · 최대 체력 -10%',
     maxStacks: 1, effect: { respawnCut: 6 }, penalty: { hpMult: 0.9 } },
+  /**
+   * 복제 장치 — 라운드 중에 타워를 하나 찍어두면 라운드가 끝날 때 똑같은 게 하나 더 생긴다.
+   * 복제는 생성 비용을 올리지 않는다(unitsSpawned를 안 건드린다) — 그게 값어치다.
+   * 복제 가능 티어 상한은 라운드·영웅 레벨을 따라 오른다: 초반엔 싸구려만, 후반엔 GOD까지.
+   */
+  { id: 'replicator', kind: 'util', name: '복제 장치',
+    description: '라운드마다 타워 하나를 복제한다 (복제 가능 등급은 라운드·레벨을 따라 오른다)',
+    maxStacks: 3, effect: { towerCopyTier: 1 } },
 ];
 
 /** 광역 증강은 '충격파'를 먼저 잡아야 의미가 있다 */
@@ -623,6 +794,10 @@ export const requiresSplash = (augment: Augment): boolean => augment.id === 'nov
  */
 export function skillGateAllows(augment: Augment, currentSkill: SkillId | null): boolean {
   if (augment.grantsSkill) return currentSkill === null;
+  // 장판 개조는 장판을 까는 스킬을 든 뒤에만 — 즉발 스킬엔 붙일 데가 없다
+  if (augment.requiresZone) {
+    return currentSkill !== null && (SKILLS[currentSkill].zoneSeconds ?? 0) > 0;
+  }
   if (!augment.requiresSkill) return true;
   if (currentSkill === null) return false;
   return augment.requiresSkill === 'any' || augment.requiresSkill === currentSkill;
@@ -673,10 +848,10 @@ export const SYNERGIES: Record<AugmentKind, { readonly specialist: SynergyBonus;
       effect: { damageReduction: 0.3, regen: 20, hpMult: 1.4 } },
   },
   combat: {
-    specialist: { name: '연쇄', description: '광역 반경 +25, 치명타 확률 +15%',
-      effect: { splashRadius: 25, critChance: 0.15 } },
-    master: { name: '파멸', description: '광역 반경 +50, 체력 5% 이하 즉사, 공격력 +50%',
-      effect: { splashRadius: 50, executeBelow: 0.05, damageMult: 1.5 } },
+    specialist: { name: '연쇄', description: '광역 반경 +25, 치명타 +25%, 화상 최대 중첩 +2',
+      effect: { splashRadius: 25, critChance: 0.25, burnStacksAdd: 2 } },
+    master: { name: '파멸', description: '광역 반경 +50, 체력 10% 이하 즉사, 공격력 +80%, 화상 대상 피해 +25%',
+      effect: { splashRadius: 50, executeBelow: 0.1, damageMult: 1.8, burnAmp: 0.25 } },
   },
   skill: {
     specialist: { name: '각성', description: '스킬 피해 +40%, 스킬 쿨타임 15% 감소',
@@ -687,14 +862,14 @@ export const SYNERGIES: Record<AugmentKind, { readonly specialist: SynergyBonus;
   growth: {
     specialist: { name: '폭주', description: '모든 성장 증강의 누적치 +50%',
       effect: { growthMult: 1.5 } },
-    master: { name: '무한 성장', description: '모든 성장 증강의 누적치 +150%, 공격력 +30%',
-      effect: { growthMult: 2.5, damageMult: 1.3 } },
+    master: { name: '무한 성장', description: '모든 성장 증강의 누적치 +120%, 공격력 +40%',
+      effect: { growthMult: 2.2, damageMult: 1.4 } },
   },
   econ: {
-    specialist: { name: '축재', description: '처치당 미네랄 +1, 경험치 +20%',
-      effect: { mineralPerKill: 1, xpMult: 1.2 } },
-    master: { name: '대부호', description: '라운드마다 미네랄 +12·가스 +3, 경험치 +50%',
-      effect: { mineralPerWave: 12, gasPerWave: 3, xpMult: 1.5 } },
+    specialist: { name: '축재', description: '처치당 미네랄 +2, 라운드 보상 +30%, 경험치 +25%',
+      effect: { mineralPerKill: 2, waveRewardMult: 1.3, xpMult: 1.25 } },
+    master: { name: '대부호', description: '라운드 보상 +80%, 라운드마다 가스 +8, 경험치 +60%',
+      effect: { waveRewardMult: 1.8, gasPerWave: 8, xpMult: 1.6 } },
   },
   util: {
     specialist: { name: '지휘', description: '모든 타워 공격력 +15%', effect: { towerDamageMult: 1.15 } },
