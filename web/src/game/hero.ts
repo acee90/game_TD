@@ -30,8 +30,15 @@ export interface HeroStats {
   readonly critChance: number;
   readonly critMult: number;
   readonly executeBelow: number;
-  /** 화상 — 초당 영웅 공격력의 이 배수 */
+  /** 화상 — **스택 1개당** 초당 영웅 공격력의 이 배수 */
   readonly burnMult: number;
+  /** 화상 최대 중첩 */
+  readonly burnMaxStacks: number;
+  /** 점화 — 최대 중첩에서 스택을 태워 터뜨린다 (0이면 안 터진다) */
+  readonly igniteMult: number;
+  readonly igniteRadius: number;
+  /** 화상 걸린 적이 영웅 피해를 더 받는 비율 */
+  readonly burnAmp: number;
   readonly slowOnHit: number;
   readonly thorns: number;
   readonly deathBlast: number;
@@ -88,7 +95,7 @@ export function computeStats(
   // 파워 = 스탯(레벨업 자동 균등 성장) × 증강 배수 — 레벨 배수는 없다 (3안 개편)
   const { str, agi, int } = H.attributesByLevel(level);
 
-  let maxHp = H.HP_PER_STR * str;
+  let maxHp = H.HERO_BASE_HP + H.HP_PER_STR * str;
   let damage = H.DMG_PER_STR * str;
   let range = H.HERO_BASE_RANGE;
   let attackSpeed = 1 + H.AS_PER_AGI * agi;
@@ -104,6 +111,10 @@ export function computeStats(
   let critMultAdd = 0;
   let executeBelow = 0;
   let burnMult = 0;
+  let burnStacksAdd = 0;
+  let igniteMult = 0;
+  let igniteRadius = 0;
+  let burnAmp = 0;
   let slowOnHit = 0;
   let thorns = 0;
   let deathBlast = 0;
@@ -181,6 +192,10 @@ export function computeStats(
     if (e.critMultAdd) critMultAdd += e.critMultAdd;
     if (e.executeBelow) executeBelow += e.executeBelow;
     if (e.burnMult) burnMult += e.burnMult;
+    if (e.burnStacksAdd) burnStacksAdd += e.burnStacksAdd;
+    if (e.igniteMult) igniteMult += e.igniteMult;
+    if (e.igniteRadius) igniteRadius += e.igniteRadius;
+    if (e.burnAmp) burnAmp += e.burnAmp;
     if (e.slowOnHit) slowOnHit += e.slowOnHit;
     if (e.thorns) thorns += e.thorns;
     if (e.deathBlast) deathBlast += e.deathBlast;
@@ -233,6 +248,10 @@ export function computeStats(
     critMult: H.CRIT_BASE_MULT + critMultAdd,
     executeBelow: Math.min(H.EXECUTE_CAP, executeBelow),
     burnMult,
+    burnMaxStacks: H.BURN_BASE_MAX_STACKS + burnStacksAdd,
+    igniteMult,
+    igniteRadius,
+    burnAmp,
     slowOnHit: Math.min(0.8, slowOnHit),
     thorns,
     deathBlast,

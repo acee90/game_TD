@@ -19,6 +19,15 @@ canvas.addEventListener('pointerdown', (event) => {
   const x = (event.clientX - rect.left) * scale;
   const y = (event.clientY - rect.top) * scale;
 
+  // 몹/보스를 찍으면 스탯을 본다 (타일보다 먼저 — 몹은 타일 위를 지나간다)
+  const enemy = game.enemyAt(x, y);
+  if (enemy) {
+    game.selectedEnemy = enemy;
+    game.selected = null;
+    return;
+  }
+  game.selectedEnemy = null;
+
   const hit = game.slots.find(
     (slot) => Math.abs(slot.x - x) <= TILE / 2 && Math.abs(slot.y - y) <= TILE / 2,
   );

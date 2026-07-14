@@ -224,7 +224,9 @@ export const enemyCount = (round: number): number =>
 
 /** 웨이브 내 스폰 간격(초). 36기 × 0.18 = 6.5초 스폰 창 [프로토] */
 export const SPAWN_INTERVAL = 0.18;
-export const ENEMY_SPEED = 52; // [프로토]
+// 52 → 42 (2026-07-14): 초반 체감 템포를 늦춘다. 경로 통과 시간이 24% 늘어 타워가 더 많이
+// 쏘고, 영웅이 몹 무리를 정리할 시간도 늘어난다. 난이도는 쉬워지는 방향이다. [프로토]
+export const ENEMY_SPEED = 42;
 
 /** 몹 2열 레인 — 경로 중심선에서 좌우로 비끼는 표시 오프셋(px). 판정은 1D 그대로. [프로토] */
 export const MOB_LANE_OFFSET = 8;

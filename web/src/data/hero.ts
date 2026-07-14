@@ -40,6 +40,17 @@ export const HERO_BASE_INT = 8;
 export const DMG_PER_STR = 6;
 /** 힘 1당 최대 체력 — 같은 이유로 18 → 70 [프로토] */
 export const HP_PER_STR = 70;
+/**
+ * 레벨과 무관한 기본 체력 (2026-07-14).
+ *
+ * 체력이 `힘 × 70`뿐이라 Lv1(힘 2) 영웅이 140이었다. 어그로 범위가 110이라 몹이 10기씩
+ * 뭉쳐 붙는데, R1 몹 공격력이 기당 1.6/초 → **8.8초면 죽는다**(라운드가 22초인데).
+ * 측정: 시드 12판 중 9판에서 영웅이 죽었고 첫 사망 중앙값이 R5, R1~R2 사망도 3판.
+ *
+ * 기본값을 주면 **초반만** 두꺼워진다 — 레벨이 오를수록 힘 몫이 커져 비중이 줄기 때문에
+ * 후반 밸런스(탱커 빌드의 존재 이유)는 거의 그대로다.
+ */
+export const HERO_BASE_HP = 260;
 /** 민첩 1당 공격 속도 +4% */
 export const AS_PER_AGI = 0.04;
 /** 공격 간격 하한 — 민첩을 아무리 골라도 이 밑으로는 안 내려간다 */
@@ -200,6 +211,14 @@ export const AUGMENT_KIND_COLOR: Record<AugmentKind, string> = {
 // ───────── 발동 효과 상수 ─────────
 /** 화상 지속 시간 — 공격할 때마다 새로 덧씌운다 */
 export const BURN_SECONDS = 3;
+/**
+ * 화상 기본 최대 중첩.
+ *
+ * 화상은 처음엔 "때리면 초당 고정 피해"였고, 그래서 아무 선택도 만들지 않는 죽은 카드였다.
+ * 이제 **때릴수록 쌓인다** — 공속·다단히트가 화상과 맞물리고, 최대 스택은 '점화'로
+ * 터뜨릴 자원이 된다. 도트를 얹는 다른 것들(불바다 장판·레이저 틱)도 스택을 쌓는다.
+ */
+export const BURN_BASE_MAX_STACKS = 3;
 /** 공격 감속 지속 시간 */
 export const SLOW_ON_HIT_SECONDS = 1.5;
 /** 이 비율 밑이면 '위기' — 위기 증강이 켜진다 */
@@ -262,6 +281,21 @@ export interface AugmentEffect {
    * 비례해야 강화 계열(곱연산)과 같은 저울에 오른다.
    */
   readonly burnMult?: number;
+  /** 화상 최대 중첩을 늘린다 */
+  readonly burnStacksAdd?: number;
+  /**
+   * 점화 — 화상이 최대 중첩에 닿으면 스택을 태워 터뜨린다.
+   * 폭발 피해 = 영웅 공격력 × 이 배수 × 터진 스택 수.
+   */
+  readonly igniteMult?: number;
+  /** 점화 폭발 반경 */
+  readonly igniteRadius?: number;
+  /**
+   * 화상에 걸린 적이 **모든 영웅 피해**를 이만큼 더 받는다 (0.25 = +25%).
+   * 평타·스킬·장판·레이저가 전부 이득을 본다 — 도트끼리 시너지가 나는 지점이다.
+   */
+  readonly burnAmp?: number;
+
   /** 공격에 감속을 붙인다 (0.25 = 25% 감속) */
   readonly slowOnHit?: number;
   /** 받은 피해의 이 배수를 때린 적에게 되돌린다 */
@@ -425,6 +459,11 @@ export function scaleEffect(effect: AugmentEffect, power: number): AugmentEffect
     critMultAdd: add(effect.critMultAdd),
     executeBelow: add(effect.executeBelow),
     burnMult: add(effect.burnMult),
+    burnStacksAdd:
+      effect.burnStacksAdd === undefined ? undefined : Math.round(add(effect.burnStacksAdd)!),
+    igniteMult: add(effect.igniteMult),
+    igniteRadius: add(effect.igniteRadius),
+    burnAmp: add(effect.burnAmp),
     slowOnHit: add(effect.slowOnHit),
     thorns: add(effect.thorns),
     deathBlast: add(effect.deathBlast),
@@ -541,12 +580,28 @@ export const AUGMENTS: readonly Augment[] = [
   { id: 'ruthless', kind: 'combat', name: '무자비', description: '공격력 +35%, 체력 7% 이하의 적을 즉사시킨다',
     maxStacks: 2, effect: { damageMult: 1.35, executeBelow: 0.07 } },
   // 아레나 '개척자/고문자' — 무한 중첩 화상
-  { id: 'burn', kind: 'combat', name: '화염 부착', description: '공격에 화상 — 초당 공격력의 90%, 3초',
-    maxStacks: 3, effect: { burnMult: 0.9 } },
+  // ── 화염 계열 — 중첩 → 점화 → 증폭으로 맞물린다.
+  // 화상은 **방어력을 무시한다(트루 피해).** 몹 장갑은 라운드마다 계단식으로 오르므로
+  // (floor(R/5)×3), 후반에 유일하게 감산되지 않는 피해가 된다. 그게 화염 빌드의 정체성이다.
+  { id: 'burn', kind: 'combat', name: '화염 부착',
+    description: '공격이 화상을 중첩시킨다 — 중첩당 초당 공격력 12% (방어력 무시), 최대 3중첩',
+    maxStacks: 3, effect: { burnMult: 0.12 } },
+  { id: 'kindling', kind: 'combat', name: '불쏘시개',
+    description: '화상 최대 중첩 +3, 화상 걸린 적이 받는 피해 +15%', maxStacks: 2,
+    effect: { burnStacksAdd: 3, burnAmp: 0.15 } },
+  // 점화 — 쌓인 화상을 터뜨릴 자원으로 바꾼다
+  { id: 'ignite', kind: 'combat', name: '점화',
+    description: '화상이 최대 중첩에 닿으면 중첩을 태워 폭발 (중첩당 공격력 35%, 반경 55, 방어력 무시)',
+    maxStacks: 2, effect: { igniteMult: 0.35, igniteRadius: 55 } },
+  // 도트끼리의 시너지 — 불바다 장판·레이저 틱도 화상을 쌓는다
+  { id: 'pyromancy', kind: 'combat', name: '발화술',
+    description: '화상 걸린 적이 받는 모든 피해 +30% (평타·스킬·장판·레이저 전부)', maxStacks: 2,
+    effect: { burnAmp: 0.3 } },
   { id: 'frost', kind: 'combat', name: '서리 일격', description: '공격이 적을 35% 감속시킨다', maxStacks: 2,
     effect: { slowOnHit: 0.35 } },
-  { id: 'venom', kind: 'combat', name: '맹독', description: '공격에 화상 초당 공격력 40% · 20% 감속',
-    maxStacks: 2, effect: { burnMult: 0.4, slowOnHit: 0.2 } },
+  { id: 'venom', kind: 'combat', name: '맹독',
+    description: '화상 중첩당 초당 공격력 8% (방어력 무시) · 20% 감속', maxStacks: 2,
+    effect: { burnMult: 0.08, slowOnHit: 0.2 } },
   // 아레나 '연쇄 폭발' — 죽은 적이 터진다
   { id: 'deathblast', kind: 'combat', name: '폭사', description: '처치한 적이 반경 50에 공격력 3배로 폭발',
     maxStacks: 2, effect: { deathBlast: 3, deathBlastRadius: 50 } },
@@ -793,10 +848,10 @@ export const SYNERGIES: Record<AugmentKind, { readonly specialist: SynergyBonus;
       effect: { damageReduction: 0.3, regen: 20, hpMult: 1.4 } },
   },
   combat: {
-    specialist: { name: '연쇄', description: '광역 반경 +25, 치명타 확률 +25%, 치명타 피해 +50%',
-      effect: { splashRadius: 25, critChance: 0.25, critMultAdd: 0.5 } },
-    master: { name: '파멸', description: '광역 반경 +50, 체력 10% 이하 즉사, 공격력 +80%',
-      effect: { splashRadius: 50, executeBelow: 0.1, damageMult: 1.8 } },
+    specialist: { name: '연쇄', description: '광역 반경 +25, 치명타 +25%, 화상 최대 중첩 +2',
+      effect: { splashRadius: 25, critChance: 0.25, burnStacksAdd: 2 } },
+    master: { name: '파멸', description: '광역 반경 +50, 체력 10% 이하 즉사, 공격력 +80%, 화상 대상 피해 +25%',
+      effect: { splashRadius: 50, executeBelow: 0.1, damageMult: 1.8, burnAmp: 0.25 } },
   },
   skill: {
     specialist: { name: '각성', description: '스킬 피해 +40%, 스킬 쿨타임 15% 감소',

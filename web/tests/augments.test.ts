@@ -500,3 +500,87 @@ describe('타워 복제 (복제 장치)', () => {
     expect(game.markCopyTarget(slot)).toBe(false);
   });
 });
+
+describe('화염 계열 — 씨앗 한 장은 약하고, 쌓아야 터진다', () => {
+  const burnState = (ids: string[]) => {
+    const game = new Game();
+    for (const id of ids) game.hero.addAugment(card(id));
+    const target = mob(game.hero.distance, 1e9, 1e9);
+    game.enemies.push(target);
+    return { game, target };
+  };
+
+  test('화상은 공격마다 중첩된다', () => {
+    const { game, target } = burnState(['burn']);
+    game.update(0.016);
+    const first = target.burnStacks!;
+    expect(first).toBe(1);
+
+    // 여러 번 때리면 쌓인다 (상한까지)
+    for (let i = 0; i < 60; i++) game.update(0.05);
+    expect(target.burnStacks!).toBeGreaterThan(first);
+    expect(target.burnStacks!).toBeLessThanOrEqual(game.hero.stats.burnMaxStacks);
+  });
+
+  test('화상은 방어력을 무시한다 (트루 피해)', () => {
+    const armored = { ...mob(0, 1e9, 1e9), armor: 10_000 };
+    const game = new Game();
+    game.hero.addAugment(card('burn'));
+    armored.distance = game.hero.distance;
+    game.enemies.push(armored);
+
+    game.update(0.016); // 화상 부착 (평타는 장갑에 거의 다 막힌다)
+    const afterHit = armored.hp;
+    game.update(0.5); // 화상만 타는 구간
+    // 장갑 10000짜리 몹인데도 화상은 그대로 들어간다
+    expect(armored.hp).toBeLessThan(afterHit);
+  });
+
+  test('불쏘시개는 최대 중첩을 늘린다', () => {
+    const plain = new Hero();
+    plain.addAugment(card('burn'));
+    const kindled = new Hero();
+    kindled.addAugment(card('burn'));
+    kindled.addAugment(card('kindling'));
+
+    expect(kindled.stats.burnMaxStacks).toBeGreaterThan(plain.stats.burnMaxStacks);
+  });
+
+  test('점화 — 최대 중첩에 닿으면 중첩을 태워 광역 폭발', () => {
+    const game = new Game();
+    game.hero.addAugment(card('burn'));
+    game.hero.addAugment(card('ignite'));
+
+    const target = mob(game.hero.distance, 1e9, 1e9);
+    const bystander = mob(game.hero.distance + 30, 1e9, 1e9); // 폭발 반경 안, 평타 대상은 아님
+    game.enemies.push(target, bystander);
+
+    const before = bystander.hp;
+    for (let i = 0; i < 200; i++) game.update(0.05);
+
+    // 폭발이 옆 몹까지 태웠다
+    expect(bystander.hp).toBeLessThan(before);
+    // 터진 뒤엔 중첩이 비워진다 (상한에 계속 머무르지 않는다)
+    expect(target.burnStacks ?? 0).toBeLessThan(game.hero.stats.burnMaxStacks);
+  });
+
+  test('발화술 — 화상 걸린 적은 모든 피해를 더 받는다', () => {
+    const hero = new Hero();
+    hero.addAugment(card('pyromancy'));
+    expect(hero.stats.burnAmp).toBeGreaterThan(0);
+  });
+
+  test('불바다 장판도 화상을 쌓는다 — 도트끼리 맞물린다', () => {
+    const game = new Game();
+    game.hero.addAugment(card('skill_firearrow'));
+    game.hero.addAugment(card('burn'));
+
+    const target = mob(game.hero.distance, 1e9, 1e9);
+    game.enemies.push(target, mob(game.hero.distance, 1e9, 1e9));
+    game.useSkill();
+    expect(game.zones.length).toBe(1);
+
+    for (let i = 0; i < 40; i++) game.update(0.05);
+    expect(target.burnStacks ?? 0).toBeGreaterThan(0);
+  });
+});

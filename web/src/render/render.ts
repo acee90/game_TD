@@ -263,6 +263,23 @@ export function render(ctx: CanvasRenderingContext2D, game: Game): void {
   for (const enemy of game.enemies) {
     const [x, y] = pathPosOffset(enemy.distance, (enemy.lane ?? 0) * MOB_LANE_OFFSET);
     drawEnemy(ctx, x, y, enemy);
+
+    // 클릭해서 들여다보는 중인 몹에 표식
+    if (enemy === game.selectedEnemy) {
+      ctx.beginPath();
+      ctx.arc(x, y, enemy.radius + 5, 0, Math.PI * 2);
+      ctx.strokeStyle = '#ffd23f';
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+    }
+    // 화상 중이면 테두리를 불색으로
+    if (enemy.burnTimer && enemy.burnTimer > 0) {
+      ctx.beginPath();
+      ctx.arc(x, y, enemy.radius + 2, 0, Math.PI * 2);
+      ctx.strokeStyle = '#ff8a3c';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+    }
   }
   drawDecoy(ctx, game);
   drawHero(ctx, game);
