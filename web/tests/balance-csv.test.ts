@@ -74,7 +74,7 @@ describe('밸런스 CSV — 코드와 일치해야 한다', () => {
     expect(value('SYNERGY_THRESHOLD')).toBe(H.SYNERGY_THRESHOLD);
   });
 
-  test('액티브 스킬 4종이 들어있다', () => {
+  test('액티브 스킬이 전부 들어있다', () => {
     const rows = read('skills.csv').slice(1);
     expect(rows).toHaveLength(K.SKILL_IDS.length);
     for (const id of K.SKILL_IDS) {

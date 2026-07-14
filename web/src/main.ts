@@ -39,6 +39,11 @@ canvas.addEventListener('pointerdown', (event) => {
 el.spawn.addEventListener('click', () => game.spawnUnitAnywhere());
 el.probe.addEventListener('click', () => game.buyProbe());
 el.sell.addEventListener('click', () => game.sellSelected());
+el.copyTower.addEventListener('click', () => {
+  // 예약돼 있으면 취소, 아니면 선택한 타워를 예약한다
+  const target = game.copyTarget ?? game.selected;
+  if (target) game.markCopyTarget(target);
+});
 el.buyXp.addEventListener('click', () => game.buyXp());
 el.reroll.addEventListener('click', () => game.rerollAugments());
 el.gasSkillDmg.addEventListener('click', () => game.buyGasSkill('damage'));

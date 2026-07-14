@@ -12,7 +12,7 @@ import { attackInterval, damage, isSplash, range, slowFactor, type UpgradeLevels
 import { bossKillMineral, killIncome } from './economy';
 import { Hero, rollAugmentChoices, type HeroStats } from './hero';
 import { findMerge, unitFor, type Rand } from './merge';
-import type { Decoy, Enemy, EnemySpec, FloatText, Shot, Slot } from './types';
+import type { Decoy, Enemy, EnemySpec, FloatText, Shot, Slot, Zone } from './types';
 
 export class Game {
   mineral = B.START_MINERAL;
@@ -64,12 +64,24 @@ export class Game {
 
   slots: Slot[] = SLOT_POS.map(([x, y]) => ({ x, y, tower: null }));
   selected: Slot | null = null;
+  /** 라운드 종료 시 복제할 타워 ('복제 장치' 증강) */
+  copyTarget: Slot | null = null;
 
   enemies: Enemy[] = [];
   shots: Shot[] = [];
   floats: FloatText[] = [];
   /** 영웅이 세운 미끼 (허수아비 스킬) */
   decoy: Decoy | null = null;
+  /** 깔려 있는 장판들 (불바다·빙판) */
+  zones: Zone[] = [];
+  /** 지금 쏘고 있는 레이저 빔 (없으면 null) */
+  beam: {
+    skill: K.ResolvedSkill;
+    remaining: number;
+    tickTimer: number;
+    /** 쏘기 시작한 지점 — 빔은 영웅을 따라간다 */
+    origin: number;
+  } | null = null;
 
   private spawnQueue: EnemySpec[] = [];
   private spawnTimer = 0;
@@ -141,6 +153,26 @@ export class Game {
           const gap = hero.distance - e.distance;
           return gap >= 0 && gap <= K.DECOY_AUTOCAST_RANGE;
         }).length;
+      case 'laser':
+        // 이미 쏘고 있으면 다시 안 쏜다. 빔은 앞쪽 직선만 태운다.
+        if (this.beam) return 0;
+        return live.filter((e) => {
+          const gap = e.distance - hero.distance;
+          return gap >= -H.ENEMY_TOUCH_RANGE && gap <= skill.beamLength;
+        }).length;
+      case 'firearrow':
+      case 'icearrow':
+        // 장판은 '가장 뭉친 곳'에 깐다 — 유성과 같은 셈법
+        return live.reduce(
+          (best, candidate) =>
+            Math.max(
+              best,
+              live.filter((e) => Math.abs(e.distance - candidate.distance) <= skill.zoneRadius).length,
+            ),
+          0,
+        );
+      case 'execution':
+        return live.filter((e) => Math.abs(e.distance - hero.distance) <= hero.stats.range).length;
     }
   }
 
@@ -163,14 +195,96 @@ export class Game {
       case 'decoy':
         this.castDecoy(skill);
         break;
+      case 'laser':
+        this.castLaser(skill);
+        break;
+      case 'firearrow':
+      case 'icearrow':
+        this.castZoneArrow(skill);
+        break;
+      case 'execution':
+        this.castExecution(skill);
+        return true; // 쿨은 castExecution이 정한다 (처치하면 초기화)
     }
     hero.skillCooldown = skill.cooldown;
     return true;
   }
 
+  /**
+   * 레이저 — 즉발이 아니라 지속이다. 여기서는 빔을 '켜기만' 하고,
+   * 실제 피해는 tickBeam이 tickInterval마다 넣는다.
+   */
+  private castLaser(skill: K.ResolvedSkill): void {
+    this.beam = { skill, remaining: skill.beamSeconds, tickTimer: 0, origin: this.hero.distance };
+    this.float(this.hero.x, this.hero.y, '레이저!', '#c065e0');
+  }
+
+  /** 불화살·얼음화살 — 착탄 피해 + 바닥에 장판 */
+  private castZoneArrow(skill: K.ResolvedSkill): void {
+    const hero = this.hero;
+    const live = this.enemies.filter((e) => !e.dead);
+    // 가장 뭉친 지점에 쏜다
+    let best = hero.distance;
+    let bestCount = -1;
+    for (const candidate of live) {
+      const count = live.filter(
+        (e) => Math.abs(e.distance - candidate.distance) <= skill.zoneRadius,
+      ).length;
+      if (count > bestCount) {
+        bestCount = count;
+        best = candidate.distance;
+      }
+    }
+
+    // 착탄 즉발 피해
+    for (const enemy of live) {
+      if (Math.abs(enemy.distance - best) <= skill.radius) this.skillHit(enemy, skill);
+    }
+
+    const [zx, zy] = pathPos(best);
+    this.zones.push({
+      distance: best,
+      x: zx,
+      y: zy,
+      radius: skill.zoneRadius,
+      remaining: skill.zoneSeconds,
+      // 장판 피해는 영웅 공격력에 비례한다 — 고정값은 레벨을 못 따라간다
+      dps: skill.zoneDps * hero.stats.skillPower,
+      slow: skill.zoneSlow,
+      color: skill.def.id === 'icearrow' ? '#7ce7ff' : '#ff8a3c',
+    });
+    this.float(zx, zy, skill.def.name + '!', skill.def.id === 'icearrow' ? '#7ce7ff' : '#ff8a3c');
+  }
+
+  /**
+   * 처형자의 일격 — 체력이 가장 낮은 적을 때린다. 죽이면 쿨이 즉시 돌아온다.
+   * '다중 투사'로 대상 수를 늘리면 낮은 순서대로 여러 명을 정리한다.
+   */
+  private castExecution(skill: K.ResolvedSkill): void {
+    const hero = this.hero;
+    const reach = hero.stats.range;
+    const targets = this.enemies
+      .filter((e) => !e.dead && Math.abs(e.distance - hero.distance) <= reach)
+      .sort((a, b) => a.hp - b.hp)
+      .slice(0, Math.max(1, skill.targets));
+
+    let killed = false;
+    for (const enemy of targets) {
+      this.skillHit(enemy, skill);
+      if (enemy.hp <= 0) killed = true;
+      const [tx, ty] = pathPos(enemy.distance);
+      this.shots.push({ x: hero.x, y: hero.y, tx, ty, life: 0.12, color: '#ff5a3c' });
+    }
+
+    // 처치하면 쿨타임 초기화 — 잘 고르면 연쇄 처형이 된다
+    hero.skillCooldown = killed ? 0 : skill.cooldown;
+    if (killed) this.float(hero.x, hero.y, '처형!', '#ff5a3c');
+  }
+
   /** 스킬 피해 한 방 */
-  private skillHit(enemy: Enemy, skill: K.ResolvedSkill): void {
-    const raw = this.hero.stats.damage * skill.damageMult * this.hero.stats.skillPower;
+  private skillHit(enemy: Enemy, skill: K.ResolvedSkill, rawOverride?: number): void {
+    const raw =
+      rawOverride ?? this.hero.attackDamage * skill.damageMult * this.hero.stats.skillPower;
     const dealt = B.effectiveDamage(raw, enemy.armor);
     enemy.hp -= dealt;
     this.heroDamageDealt += dealt;
@@ -427,6 +541,77 @@ export class Game {
     return this.spawnUnit(empty);
   }
 
+  // ── 타워 복제 ('복제 장치' 증강) ──
+  // 라운드 중에 타워 하나를 찍어두면 라운드가 끝날 때 빈 타일에 똑같은 게 하나 더 생긴다.
+  // 상한 티어가 라운드·영웅 레벨을 따라 오르므로, "지금 뭘 복제할 수 있나"가 계속 바뀐다.
+
+  /** 복제 증강을 들고 있는가 */
+  get canCopyTower(): boolean {
+    return this.hero.stats.towerCopyTier > 0;
+  }
+
+  /**
+   * 지금 복제할 수 있는 최고 티어.
+   * 증강이 준 기본 상한(towerCopyTier) + 라운드/영웅 레벨이 밀어올린 만큼.
+   * 초반엔 싸구려만, 후반엔 GOD까지 — 복제가 "언젠가 쓸 카드"로 남는다.
+   */
+  get copyTierCap(): number {
+    if (!this.canCopyTower) return -1;
+    const base = this.hero.stats.towerCopyTier - 1; // 1스택 = 티어 0(가장 낮은 등급)까지
+    const byRound = Math.floor(this.round / B.COPY_TIER_ROUNDS);
+    const byLevel = Math.floor(this.hero.level / B.COPY_TIER_LEVELS);
+    return Math.min(GOD_TIER, base + Math.max(byRound, byLevel));
+  }
+
+  /** 이 타워를 복제 예약할 수 있는가 */
+  canMarkCopy(slot: Slot): boolean {
+    return (
+      this.canCopyTower &&
+      slot.tower !== null &&
+      slot.tower.tier <= this.copyTierCap &&
+      this.slots.some((s) => !s.tower && s !== this.altarSlot)
+    );
+  }
+
+  /** 라운드가 끝날 때 복제할 타워를 찍는다. 다시 찍으면 예약이 풀린다. */
+  markCopyTarget(slot: Slot): boolean {
+    if (this.copyTarget === slot) {
+      this.copyTarget = null;
+      this.message = '복제 예약을 취소했습니다.';
+      return true;
+    }
+    if (!this.canCopyTower) return false;
+    if (!slot.tower) {
+      this.message = '복제할 타워를 고르세요.';
+      return false;
+    }
+    if (slot.tower.tier > this.copyTierCap) {
+      this.message = `아직 티어 ${this.copyTierCap}까지만 복제할 수 있습니다 (라운드·영웅 레벨이 오르면 열립니다).`;
+      return false;
+    }
+    this.copyTarget = slot;
+    this.message = `${slot.tower.def.name} 복제 예약 — 라운드가 끝나면 하나 더 생깁니다.`;
+    return true;
+  }
+
+  /** 라운드 종료 — 예약된 타워를 빈 타일에 복제한다 */
+  private resolveCopy(): void {
+    const target = this.copyTarget;
+    this.copyTarget = null;
+    if (!target?.tower || !this.canCopyTower) return;
+
+    const empty = this.slots.find((s) => !s.tower && s !== this.altarSlot);
+    if (!empty) {
+      this.message = '복제 실패 — 빈 타일이 없습니다.';
+      return;
+    }
+    // 복제는 생성 비용을 올리지 않는다 (unitsSpawned를 건드리지 않는다) — 그게 복제의 값어치다
+    empty.tower = { def: target.tower.def, tier: target.tower.tier, cooldown: 0 };
+    this.float(empty.x, empty.y, `복제: ${target.tower.def.name}`, '#7ce7ff');
+    this.message = `${target.tower.def.name}을(를) 복제했습니다.`;
+    this.resolveMerges();
+  }
+
   /** 연쇄 조합까지 전부 해소한다 */
   resolveMerges(): void {
     for (let guard = 0; guard < 64; guard++) {
@@ -527,7 +712,8 @@ export class Game {
   private beginRound(): void {
     // 직전 라운드를 넘긴 대가 — 첫 라운드에는 없다
     if (this.round >= 1) {
-      const reward = B.waveReward(this.round);
+      // 경제 증강은 라운드 보상에 **배수**로 붙는다 — 보상 자체가 라운드를 따라 커지므로
+      const reward = Math.round(B.waveReward(this.round) * this.hero.stats.waveRewardMult);
       this.mineral += reward;
       this.score += S.roundScore(this.round);
       this.float(this.slots[0].x, this.slots[0].y, `웨이브 +${reward}`, '#ffd23f');
@@ -545,6 +731,9 @@ export class Game {
 
       // 성장 증강 — 라운드를 넘길 때마다 누적된다
       this.hero.waveStacks++;
+
+      // 라운드가 끝났으니 예약된 타워를 복제한다
+      this.resolveCopy();
     }
 
     this.round++;
@@ -715,6 +904,11 @@ export class Game {
 
     this.fireTowers(dt);
     this.stepHero(dt);
+    // 영웅 생사와 무관하게 돌아야 한다 — 화상·장판은 계속 타고, 사망 폭발은 죽는 순간 터진다
+    this.tickBurns(dt);
+    this.tickBeam(dt);
+    this.tickZones(dt);
+    this.tickNova();
     if (this.shouldAutoCastSkill) this.useSkill();
     this.stepDecoy(dt);
 
@@ -803,14 +997,28 @@ export class Game {
 
     if (this.decoyHitTimer <= 0) {
       let incoming = 0;
+      const attackers: Enemy[] = [];
       for (const enemy of this.enemies) {
         if (Math.abs(enemy.distance - decoy.distance) > H.ENEMY_TOUCH_RANGE + enemy.radius) continue;
         incoming +=
           enemy.kind === 'boss'
             ? H.bossDamage(enemy.bossLevel ?? 1, this.round)
             : H.enemyDamage(this.round) * (enemy.contactDamageMult ?? 1);
+        attackers.push(enemy);
       }
       decoy.hp -= incoming;
+
+      // 가시는 허수아비에게도 걸린다 ('가시오라') — 미끼가 스스로 되받아친다
+      const thorns = this.hero.stats.thorns;
+      if (thorns > 0 && incoming > 0 && attackers.length > 0) {
+        const back = (incoming * thorns) / attackers.length;
+        for (const enemy of attackers) {
+          const dealt = B.effectiveDamage(back, enemy.armor);
+          enemy.hp -= dealt;
+          this.heroDamageDealt += dealt;
+          enemy.lastHitByHero = true;
+        }
+      }
       this.decoyHitTimer = H.ENEMY_ATTACK_INTERVAL;
     }
 
@@ -886,7 +1094,6 @@ export class Game {
       }
     }
 
-    this.tickBurns(dt);
 
     // 적의 반격 — 영웅에 닿은 적이 때린다
     this.heroHitTimer -= dt;
@@ -942,8 +1149,9 @@ export class Game {
     if (stats.lifesteal > 0 && this.hero.alive) {
       this.hero.heal(dealt * stats.lifesteal);
     }
-    if (stats.burnDps > 0) {
-      enemy.burnDps = stats.burnDps;
+    if (stats.burnMult > 0) {
+      // 화상 피해는 영웅 공격력에 비례한다 — 고정값이면 레벨이 오를수록 무의미해진다
+      enemy.burnDps = this.hero.attackDamage * stats.burnMult;
       enemy.burnTimer = H.BURN_SECONDS;
     }
     if (stats.slowOnHit > 0) {
@@ -976,6 +1184,95 @@ export class Game {
         enemy.burnTimer = undefined;
       }
     }
+  }
+
+  /**
+   * 레이저 빔 — tickInterval마다 앞쪽 직선의 적을 전부 지진다.
+   * 빔은 영웅을 따라다닌다(영웅이 움직이면 태우는 줄도 움직인다).
+   */
+  private tickBeam(dt: number): void {
+    const beam = this.beam;
+    if (!beam) return;
+    const hero = this.hero;
+    if (!hero.alive) {
+      this.beam = null;
+      return;
+    }
+
+    beam.remaining -= dt;
+    beam.tickTimer -= dt;
+    beam.origin = hero.distance;
+
+    if (beam.tickTimer <= 0) {
+      beam.tickTimer = beam.skill.tickInterval;
+      const raw = hero.attackDamage * beam.skill.damageMult * hero.stats.skillPower;
+      for (const enemy of this.enemies) {
+        if (enemy.dead) continue;
+        const gap = enemy.distance - hero.distance;
+        // 앞쪽 beamLength 안 + 경로에서 벗어난 레인은 beamWidth 안
+        if (gap < -H.ENEMY_TOUCH_RANGE || gap > beam.skill.beamLength) continue;
+        if (Math.abs((enemy.lane ?? 0) * 12) > beam.skill.beamWidth) continue;
+        this.skillHit(enemy, beam.skill, raw);
+      }
+      const [tx, ty] = pathPos(Math.min(PATH_LENGTH, hero.distance + beam.skill.beamLength));
+      this.shots.push({ x: hero.x, y: hero.y, tx, ty, life: beam.skill.tickInterval, color: '#c065e0' });
+    }
+
+    if (beam.remaining <= 0) this.beam = null;
+  }
+
+  /** 장판 — 불바다는 태우고 빙판은 늦춘다. 몹이 지나갈 수밖에 없는 길목에 깔린다. */
+  private tickZones(dt: number): void {
+    for (const zone of this.zones) {
+      zone.remaining -= dt;
+      for (const enemy of this.enemies) {
+        if (enemy.dead) continue;
+        if (Math.abs(enemy.distance - zone.distance) > zone.radius) continue;
+
+        if (zone.dps > 0) {
+          const dealt = B.effectiveDamage(zone.dps * dt, enemy.armor);
+          enemy.hp -= dealt;
+          this.heroDamageDealt += dealt;
+          enemy.lastHitByHero = true;
+        }
+        if (zone.slow < 1) {
+          // 장판 안에 있는 동안만 느리다 — 나가면 곧 풀린다
+          if (enemy.slowFactor === undefined || zone.slow < enemy.slowFactor) {
+            enemy.slowFactor = zone.slow;
+          }
+          enemy.slowTimer = Math.max(enemy.slowTimer ?? 0, 0.3);
+        }
+      }
+    }
+    this.zones = this.zones.filter((z) => z.remaining > 0);
+  }
+
+  /** 사망·부활 폭발 ('초신성') — 죽는 순간과 돌아오는 순간을 자원으로 바꾼다 */
+  private tickNova(): void {
+    const hero = this.hero;
+    const stats = hero.stats;
+
+    if (hero.justDied) {
+      hero.justDied = false;
+      if (stats.deathNova > 0) this.novaAt(hero.distance, stats.damage * stats.deathNova, stats.novaRadius, '초신성!');
+    }
+    if (hero.justRevived) {
+      hero.justRevived = false;
+      if (stats.reviveNova > 0) this.novaAt(hero.distance, stats.damage * stats.reviveNova, stats.novaRadius, '재림!');
+    }
+  }
+
+  private novaAt(distance: number, raw: number, radius: number, label: string): void {
+    const [x, y] = pathPos(distance);
+    for (const enemy of this.enemies) {
+      if (enemy.dead || Math.abs(enemy.distance - distance) > radius) continue;
+      const dealt = B.effectiveDamage(raw, enemy.armor);
+      enemy.hp -= dealt;
+      this.heroDamageDealt += dealt;
+      enemy.lastHitByHero = true;
+    }
+    this.shots.push({ x, y, tx: x, ty: y, life: 0.3, color: '#ffd23f', splashRadius: radius });
+    this.float(x, y, label, '#ffd23f');
   }
 
   private nearestEnemy(x: number, y: number, reach: number): Enemy | null {

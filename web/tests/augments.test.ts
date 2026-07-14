@@ -5,7 +5,7 @@ import { describe, expect, test } from 'vitest';
 import * as H from '../src/data/hero';
 import { AUGMENTS } from '../src/data/hero';
 import { Game } from '../src/game/game';
-import { Hero, computeStats } from '../src/game/hero';
+import { Hero, augmentAllowed, computeStats } from '../src/game/hero';
 import type { Enemy } from '../src/game/types';
 
 const aug = (id: string) => AUGMENTS.find((a) => a.id === id)!;
@@ -73,8 +73,8 @@ describe('성장 — 쌓을수록 세진다', () => {
     const capped = stats(['hunterinstinct'], 30, { killStacks: 10_000, waveStacks: 0 });
 
     expect(some.damage).toBeGreaterThan(none.damage);
-    // 사냥 본능: 막타당 +0.4%, 최대 +50%
-    expect(capped.damage / none.damage).toBeCloseTo(1.5, 1);
+    // 사냥 본능: 막타당 +0.8%, 최대 +100% (가산 50%는 완력 한 장보다 약했다 → 배수로 상향)
+    expect(capped.damage / none.damage).toBeCloseTo(2, 1);
     // 상한을 넘겨도 더 오르지 않는다
     const wayOver = stats(['hunterinstinct'], 30, { killStacks: 1e9, waveStacks: 0 });
     expect(wayOver.damage).toBe(capped.damage);
@@ -83,7 +83,7 @@ describe('성장 — 쌓을수록 세진다', () => {
   test('라운드를 넘길수록 커진다 — 상한 없이 누적', () => {
     const r0 = stats(['veteran'], 30, { killStacks: 0, waveStacks: 0 });
     const r30 = stats(['veteran'], 30, { killStacks: 0, waveStacks: 30 });
-    expect(r30.damage / r0.damage).toBeCloseTo(1.6, 1); // 라운드당 +2% × 30
+    expect(r30.damage / r0.damage).toBeCloseTo(1.9, 1); // 라운드당 +3% × 30
   });
 
   test('진화(growthMult)가 누적치 자체를 키운다', () => {
@@ -224,7 +224,8 @@ describe('경제 — 라운드 수입', () => {
     game.hero.addAugment(card('gasvein'));
 
     const s = game.hero.stats;
-    expect(s.mineralPerWave).toBeGreaterThan(0);
+    // 수확은 고정 가산이 아니라 라운드 보상 **배수**다 (라운드가 커질수록 같이 커진다)
+    expect(s.waveRewardMult).toBeGreaterThan(1);
     expect(s.gasPerWave).toBeGreaterThan(0);
 
     // 첫 라운드(0→1)는 설계상 보상이 없다 — 라운드를 한 번 넘긴 뒤부터 잰다
@@ -236,7 +237,7 @@ describe('경제 — 라운드 수입', () => {
     for (let i = 0; i < 4000 && game.round === round; i++) game.update(0.05);
 
     expect(game.round).toBeGreaterThan(round);
-    expect(game.mineral).toBeGreaterThan(mineral + s.mineralPerWave - 1);
+    expect(game.mineral).toBeGreaterThan(mineral);
     expect(game.gas).toBeGreaterThan(gas);
   });
 
@@ -293,5 +294,209 @@ describe('시너지 — 계열이 곧 플레이 스타일', () => {
     hero.addAugment(card('skill_amp'));
     hero.addAugment(card('skill_cdr')); // 스킬 3개 = 각성 특화
     expect(hero.skill!.damageMult).toBeGreaterThan(before);
+  });
+});
+
+describe('스킬 확장 — 레이저 · 장판 · 처형', () => {
+  const withSkill = (ids: string[]) => {
+    const game = new Game();
+    for (const id of ids) game.hero.addAugment(card(id));
+    return game;
+  };
+
+  test('레이저는 앞쪽 직선의 적을 관통해 지속 피해를 준다', () => {
+    const game = withSkill(['skill_laser']);
+    const hero = game.hero;
+    const near = mob(hero.distance + 40, 1e9, 1e9);
+    const far = mob(hero.distance + 150, 1e9, 1e9);
+    const behind = mob(hero.distance - 300, 1e9, 1e9); // 빔 밖
+    game.enemies.push(near, far, behind);
+
+    game.useSkill();
+    expect(game.beam).not.toBeNull();
+    for (let i = 0; i < 20; i++) game.update(0.1);
+
+    expect(near.hp).toBeLessThan(1e9);
+    expect(far.hp).toBeLessThan(1e9); // 관통 — 앞의 적이 막지 않는다
+    expect(behind.hp).toBe(1e9);
+  });
+
+  test('고속 조사는 도트 간격을 절반으로 줄인다 (0.5초 → 0.25초)', () => {
+    const plain = withSkill(['skill_laser']).hero.skill!;
+    const rapid = withSkill(['skill_laser', 'laser_rapid']).hero.skill!;
+    expect(rapid.tickInterval).toBeCloseTo(plain.tickInterval / 2, 5);
+  });
+
+  test('불화살은 바닥에 태우는 장판을 남긴다', () => {
+    const game = withSkill(['skill_firearrow']);
+    const target = mob(game.hero.distance, 1e9, 1e9);
+    game.enemies.push(target, mob(game.hero.distance, 1e9, 1e9));
+
+    game.useSkill();
+    expect(game.zones.length).toBe(1);
+    expect(game.zones[0].dps).toBeGreaterThan(0);
+
+    const afterHit = target.hp;
+    game.update(0.5); // 장판이 계속 태운다
+    expect(target.hp).toBeLessThan(afterHit);
+  });
+
+  test('얼음화살 장판은 피해 대신 감속을 건다', () => {
+    const game = withSkill(['skill_icearrow']);
+    const target = mob(game.hero.distance, 1e9, 1e9);
+    game.enemies.push(target, mob(game.hero.distance, 1e9, 1e9), mob(game.hero.distance, 1e9, 1e9));
+
+    game.useSkill();
+    expect(game.zones[0].dps).toBe(0);
+    expect(game.zones[0].slow).toBeLessThan(1);
+
+    game.update(0.1);
+    expect(target.slowFactor).toBeLessThan(1);
+  });
+
+  test('장판 개조는 장판 스킬을 든 영웅에게만 뜬다', () => {
+    const fire = withSkill(['skill_firearrow']).hero;
+    const melee = withSkill(['skill_whirlwind']).hero;
+    expect(augmentAllowed(fire, aug('zone_hot'))).toBe(true);
+    expect(augmentAllowed(melee, aug('zone_hot'))).toBe(false);
+  });
+
+  test('처형자의 일격은 처치하면 쿨타임이 즉시 초기화된다', () => {
+    const game = withSkill(['skill_execution']);
+    const hero = game.hero;
+    game.enemies.push(mob(hero.distance, 1, 1000)); // 한 방에 죽는다
+    game.useSkill();
+    expect(hero.skillCooldown).toBe(0); // 처치 → 쿨 초기화
+
+    // 못 죽이면 쿨이 돈다
+    const game2 = withSkill(['skill_execution']);
+    game2.enemies.push(mob(game2.hero.distance, 1e9, 1e9));
+    game2.useSkill();
+    expect(game2.hero.skillCooldown).toBeGreaterThan(0);
+  });
+
+  test('한파는 모든 스킬에 감속을 붙인다', () => {
+    const game = withSkill(['skill_whirlwind', 'skill_frostbite']);
+    const target = mob(game.hero.distance, 1e9, 1e9);
+    game.enemies.push(target, mob(game.hero.distance, 1e9, 1e9));
+    game.useSkill();
+    expect(target.slowFactor).toBeLessThan(1);
+  });
+
+  test('허수아비·처형은 공속이 오르면 쿨이 짧아진다', () => {
+    const slow = withSkill(['skill_decoy']).hero.skill!.cooldown;
+    const fast = withSkill(['skill_decoy', 'rapid', 'rapid']).hero.skill!.cooldown;
+    expect(fast).toBeLessThan(slow);
+
+    // 공속과 무관한 스킬은 그대로
+    const a = withSkill(['skill_meteor']).hero.skill!.cooldown;
+    const b = withSkill(['skill_meteor', 'rapid', 'rapid']).hero.skill!.cooldown;
+    expect(b).toBe(a);
+  });
+
+  test('반격 집중 — 맞으면 스킬 쿨타임이 줄어든다', () => {
+    const hero = new Hero();
+    hero.addAugment(card('skill_meteor'));
+    hero.addAugment(card('skill_riposte'));
+    hero.skillCooldown = 10;
+
+    hero.takeDamage(1);
+    expect(hero.skillCooldown).toBeLessThan(10);
+  });
+});
+
+describe('사망·부활 폭발 (초신성)', () => {
+  test('영웅이 죽으면 주변이 터진다', () => {
+    const game = new Game();
+    const hero = game.hero;
+    hero.addAugment(card('supernova'));
+
+    const target = mob(hero.distance, 1e9, 1e9);
+    game.enemies.push(target);
+    const before = target.hp;
+
+    hero.takeDamage(1e9);
+    expect(hero.alive).toBe(false);
+    game.update(0.016);
+
+    expect(target.hp).toBeLessThan(before);
+  });
+});
+
+describe('가시 — 허수아비도 되받아친다', () => {
+  test('허수아비를 때린 몹이 가시 피해를 받는다', () => {
+    const game = new Game();
+    const hero = game.hero;
+    hero.addAugment(card('skill_decoy'));
+    hero.addAugment(card('thornaura'));
+
+    // 허수아비를 세우고, 그 앞에 몹을 붙인다
+    game.enemies.push(mob(hero.distance - 30, 1e9, 1e9), mob(hero.distance - 30, 1e9, 1e9));
+    game.useSkill();
+    expect(game.decoy).not.toBeNull();
+
+    const attacker = mob(game.decoy!.distance, 1e9, 1e9);
+    game.enemies.push(attacker);
+    const before = attacker.hp;
+    for (let i = 0; i < 20; i++) game.update(0.1);
+
+    expect(attacker.hp).toBeLessThan(before);
+  });
+});
+
+describe('타워 복제 (복제 장치)', () => {
+  test('증강이 없으면 복제 자체가 없다', () => {
+    const game = new Game();
+    expect(game.canCopyTower).toBe(false);
+    expect(game.copyTierCap).toBe(-1);
+  });
+
+  test('복제 가능 티어 상한은 라운드·영웅 레벨을 따라 오른다', () => {
+    const game = new Game();
+    game.hero.addAugment(card('replicator'));
+    const early = game.copyTierCap;
+
+    game.round = 40;
+    game.hero.level = 40;
+    expect(game.copyTierCap).toBeGreaterThan(early);
+  });
+
+  test('예약한 타워가 라운드 종료 시 빈 타일에 복제된다 — 생성 비용은 오르지 않는다', () => {
+    const game = new Game(() => 0.5);
+    game.hero.addAugment(card('replicator'));
+    game.mineral = 999;
+    game.spawnUnitAnywhere();
+
+    const source = game.slots.find((s) => s.tower)!;
+    const before = game.slots.filter((s) => s.tower).length;
+    const spawnedBefore = game.unitsSpawned;
+
+    expect(game.markCopyTarget(source)).toBe(true);
+    expect(game.copyTarget).toBe(source);
+
+    // 복제는 '라운드를 끝냈을 때' 일어난다 — R1을 시작하고 R2로 넘어갈 때까지 돌린다
+    for (let i = 0; i < 8000 && game.round < 2; i++) game.update(0.05);
+
+    // 복제본이 원본과 같은 유닛이면 **즉시 조합된다** — 타워 수가 아니라 티어가 오른다.
+    // 그래서 둘 중 하나로 확인한다: 타워가 늘었거나, 티어가 올랐거나.
+    const towers = game.slots.filter((s) => s.tower);
+    const merged = towers.some((s) => s.tower!.tier > 0);
+    expect(towers.length > before || merged).toBe(true);
+
+    // 복제는 유닛 생성 비용을 올리지 않는다 — 그게 복제의 값어치다
+    expect(game.unitsSpawned).toBe(spawnedBefore);
+    expect(game.copyTarget).toBeNull(); // 예약은 한 라운드짜리다
+  });
+
+  test('상한을 넘는 티어는 예약할 수 없다', () => {
+    const game = new Game(() => 0.5);
+    game.hero.addAugment(card('replicator'));
+    game.mineral = 999;
+    game.spawnUnitAnywhere();
+
+    const slot = game.slots.find((s) => s.tower)!;
+    slot.tower = { ...slot.tower!, tier: 3 }; // GOD — 초반엔 못 베낀다
+    expect(game.canMarkCopy(slot)).toBe(false);
+    expect(game.markCopyTarget(slot)).toBe(false);
   });
 });

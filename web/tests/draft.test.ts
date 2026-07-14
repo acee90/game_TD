@@ -31,6 +31,7 @@ describe('적응형 드래프트', () => {
     const hero = new Hero();
     for (const augment of H.AUGMENTS) {
       if (augment.requiresSkill) continue; // 스킬 개조는 스킬을 들어야 뜬다
+      if (augment.requiresZone) continue; // 장판 개조는 장판 스킬을 들어야 뜬다
       if (H.requiresSplash(augment)) continue; // 대폭발은 충격파(광역)를 들어야 뜬다
       expect(augmentAllowed(hero, augment)).toBe(true);
     }

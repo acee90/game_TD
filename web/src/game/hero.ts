@@ -30,7 +30,8 @@ export interface HeroStats {
   readonly critChance: number;
   readonly critMult: number;
   readonly executeBelow: number;
-  readonly burnDps: number;
+  /** 화상 — 초당 영웅 공격력의 이 배수 */
+  readonly burnMult: number;
   readonly slowOnHit: number;
   readonly thorns: number;
   readonly deathBlast: number;
@@ -38,6 +39,7 @@ export interface HeroStats {
 
   // ── 경제
   readonly mineralPerWave: number;
+  readonly waveRewardMult: number;
   readonly gasPerWave: number;
   readonly xpMult: number;
 
@@ -50,6 +52,16 @@ export interface HeroStats {
 
   /** 체력이 낮을 때만 켜지는 공격력 배수. 평상시엔 1 */
   readonly lowHpDamageMult: number;
+
+  /** 피격 시 스킬 쿨타임 감소(초) */
+  readonly skillCdrOnHit: number;
+  /** 사망 시 폭발 (영웅 공격력 배수) */
+  readonly deathNova: number;
+  /** 부활 시 폭발 */
+  readonly reviveNova: number;
+  readonly novaRadius: number;
+  /** 타워 복제 기본 티어 상한 (0이면 복제 못 한다) */
+  readonly towerCopyTier: number;
 }
 
 /** 성장(누적) 증강이 참조하는 런타임 카운터 */
@@ -87,19 +99,11 @@ export function computeStats(
   let mineralPerWave = 0;
   let gasPerWave = 0;
   let respawnCut = 0;
-  let towerDamageMult = 1;
-  let towerRangeMult = 1;
-  let xpMult = 1;
-  let aggroRangeMult = 1;
-  let lowHpDamageMult = 1;
-  let growthMult = 1;
-  let skillDamageMult = 1;
-  let skillCooldownMult = 1;
   let lifesteal = 0;
   let critChance = 0;
   let critMultAdd = 0;
   let executeBelow = 0;
-  let burnDps = 0;
+  let burnMult = 0;
   let slowOnHit = 0;
   let thorns = 0;
   let deathBlast = 0;
@@ -108,43 +112,75 @@ export function computeStats(
   let killStackCap = 0;
   let waveStackDamage = 0;
   let waveStackHp = 0;
+  let skillCdrOnHit = 0;
+  let deathNova = 0;
+  let reviveNova = 0;
+  let novaRadius = 0;
+  let towerCopyTier = 0;
 
   // 피해 감소는 곱연산으로 쌓아 100%에 도달하지 않게 한다
   let damageTaken = 1;
 
-  const effects: AugmentEffect[] = [
-    ...cards.map((c) => c.effect),
-    // 대가는 등급으로 커지지 않는다 — 카드가 아니라 증강 정의에서 바로 가져온다
+  /**
+   * 배수형 필드는 **가산으로 접는다** — `damageMult: 1.45`는 "기본값의 45%를 더한다".
+   * 곱연산은 COMPOUNDING_IDS의 소수만 (data/hero.ts 주석 참고).
+   */
+  const bonus = {
+    hp: 0, damage: 0, range: 0, attackSpeed: 0, moveSpeed: 0,
+    towerDamage: 0, towerRange: 0, xp: 0, aggro: 0, lowHp: 0,
+    growth: 0, skillDamage: 0, skillCooldown: 0, waveReward: 0,
+  };
+  /** 곱연산 증강만 여기에 곱해진다 */
+  const compound = { damage: 1, hp: 1, growth: 1, skillDamage: 1 };
+
+  const additive: AugmentEffect[] = [
+    ...cards.filter((c) => !H.isCompounding(c.augment)).map((c) => c.effect),
+    // 대가는 등급으로 커지지 않는다 — 카드가 아니라 증강 정의에서 바로 가져온다.
+    // 대가는 곱연산 증강의 것이라도 가산으로 접는다 (대가가 복리로 불어나면 잔인해진다)
     ...cards.map((c) => c.augment.penalty).filter((p): p is AugmentEffect => p !== undefined),
+    // 시너지도 가산이다 — 특화가 곱이면 몰빵이 다시 복리가 된다
     ...H.activeSynergies(cards).map((s) => s.effect),
   ];
 
-  for (const e of effects) {
-    if (e.hpMult) maxHp *= e.hpMult;
-    if (e.damageMult) damage *= e.damageMult;
-    if (e.rangeMult) range *= e.rangeMult;
-    if (e.attackSpeedMult) attackSpeed *= e.attackSpeedMult;
-    if (e.moveSpeedMult) moveSpeed *= e.moveSpeedMult;
+  // 곱연산 증강 (소수) — 카드 효과가 통째로 곱해진다
+  for (const c of cards) {
+    if (!H.isCompounding(c.augment)) continue;
+    const e = c.effect;
+    if (e.damageMult) compound.damage *= e.damageMult;
+    if (e.hpMult) compound.hp *= e.hpMult;
+    if (e.growthMult) compound.growth *= e.growthMult;
+    if (e.skillDamageMult) compound.skillDamage *= e.skillDamageMult;
+  }
+
+  for (const e of additive) {
+    if (e.hpMult) bonus.hp += e.hpMult - 1;
+    if (e.damageMult) bonus.damage += e.damageMult - 1;
+    if (e.rangeMult) bonus.range += e.rangeMult - 1;
+    if (e.attackSpeedMult) bonus.attackSpeed += e.attackSpeedMult - 1;
+    if (e.moveSpeedMult) bonus.moveSpeed += e.moveSpeedMult - 1;
+    if (e.towerDamageMult) bonus.towerDamage += e.towerDamageMult - 1;
+    if (e.towerRangeMult) bonus.towerRange += e.towerRangeMult - 1;
+    if (e.xpMult) bonus.xp += e.xpMult - 1;
+    if (e.aggroRangeMult) bonus.aggro += e.aggroRangeMult - 1;
+    if (e.lowHpDamageMult) bonus.lowHp += e.lowHpDamageMult - 1;
+    if (e.growthMult) bonus.growth += e.growthMult - 1;
+    if (e.skillDamageMult) bonus.skillDamage += e.skillDamageMult - 1;
+    if (e.skillCooldownMult) bonus.skillCooldown += e.skillCooldownMult - 1;
+    if (e.waveRewardMult) bonus.waveReward += e.waveRewardMult - 1;
+
     if (e.regen) regen += e.regen;
+    // 피해 감소만은 곱으로 쌓는다 — 가산이면 다섯 장에 100%가 되어 무적이 된다
     if (e.damageReduction) damageTaken *= 1 - e.damageReduction;
     if (e.splashRadius) splashRadius += e.splashRadius;
     if (e.mineralPerKill) mineralPerKill += e.mineralPerKill;
     if (e.mineralPerWave) mineralPerWave += e.mineralPerWave;
     if (e.gasPerWave) gasPerWave += e.gasPerWave;
     if (e.respawnCut) respawnCut += e.respawnCut;
-    if (e.towerDamageMult) towerDamageMult *= e.towerDamageMult;
-    if (e.towerRangeMult) towerRangeMult *= e.towerRangeMult;
-    if (e.xpMult) xpMult *= e.xpMult;
-    if (e.aggroRangeMult) aggroRangeMult *= e.aggroRangeMult;
-    if (e.lowHpDamageMult) lowHpDamageMult *= e.lowHpDamageMult;
-    if (e.growthMult) growthMult *= e.growthMult;
-    if (e.skillDamageMult) skillDamageMult *= e.skillDamageMult;
-    if (e.skillCooldownMult) skillCooldownMult *= e.skillCooldownMult;
     if (e.lifesteal) lifesteal += e.lifesteal;
     if (e.critChance) critChance += e.critChance;
     if (e.critMultAdd) critMultAdd += e.critMultAdd;
     if (e.executeBelow) executeBelow += e.executeBelow;
-    if (e.burnDps) burnDps += e.burnDps;
+    if (e.burnMult) burnMult += e.burnMult;
     if (e.slowOnHit) slowOnHit += e.slowOnHit;
     if (e.thorns) thorns += e.thorns;
     if (e.deathBlast) deathBlast += e.deathBlast;
@@ -153,15 +189,29 @@ export function computeStats(
     if (e.killStackCap) killStackCap += e.killStackCap;
     if (e.waveStackDamage) waveStackDamage += e.waveStackDamage;
     if (e.waveStackHp) waveStackHp += e.waveStackHp;
+    if (e.skillCdrOnHit) skillCdrOnHit += e.skillCdrOnHit;
+    if (e.deathNova) deathNova += e.deathNova;
+    if (e.reviveNova) reviveNova += e.reviveNova;
+    if (e.novaRadius) novaRadius += e.novaRadius;
+    if (e.towerCopyTier) towerCopyTier = Math.max(towerCopyTier, e.towerCopyTier);
   }
 
-  // ── 성장 누적. 성장 특화(growthMult)가 누적치 자체를 키운다.
+  // ── 성장 누적. 성장 배수(growth 보너스 + 진화의 곱)가 누적치 자체를 키운다.
+  //    성장도 가산이다 — 공격력 보너스에 합류할 뿐 따로 곱하지 않는다.
+  const growthMult = (1 + bonus.growth) * compound.growth;
   if (killStackDamage > 0) {
     const gained = Math.min(killStackDamage * growth.killStacks, killStackCap);
-    damage *= 1 + gained * growthMult;
+    bonus.damage += gained * growthMult;
   }
-  if (waveStackDamage > 0) damage *= 1 + waveStackDamage * growth.waveStacks * growthMult;
-  if (waveStackHp > 0) maxHp *= 1 + waveStackHp * growth.waveStacks * growthMult;
+  if (waveStackDamage > 0) bonus.damage += waveStackDamage * growth.waveStacks * growthMult;
+  if (waveStackHp > 0) bonus.hp += waveStackHp * growth.waveStacks * growthMult;
+
+  // 최종 = 기본 × (1 + 가산 보너스 합) × 곱연산 증강
+  maxHp *= Math.max(0.1, 1 + bonus.hp) * compound.hp;
+  damage *= Math.max(0.1, 1 + bonus.damage) * compound.damage;
+  range *= Math.max(0.2, 1 + bonus.range);
+  attackSpeed *= Math.max(0.2, 1 + bonus.attackSpeed);
+  moveSpeed *= Math.max(0.2, 1 + bonus.moveSpeed);
 
   return {
     maxHp: Math.round(maxHp),
@@ -174,29 +224,37 @@ export function computeStats(
     splashRadius,
     mineralPerKill,
     respawnSeconds: Math.max(3, H.HERO_RESPAWN_SECONDS - respawnCut),
-    towerDamageMult,
-    towerRangeMult,
+    towerDamageMult: Math.max(0.1, 1 + bonus.towerDamage),
+    towerRangeMult: Math.max(0.2, 1 + bonus.towerRange),
     skillPower: 1 + H.SKILL_PER_INT * int,
 
     lifesteal: Math.min(H.LIFESTEAL_CAP, lifesteal),
     critChance: Math.min(H.CRIT_CHANCE_CAP, critChance),
     critMult: H.CRIT_BASE_MULT + critMultAdd,
     executeBelow: Math.min(H.EXECUTE_CAP, executeBelow),
-    burnDps,
+    burnMult,
     slowOnHit: Math.min(0.8, slowOnHit),
     thorns,
     deathBlast,
     deathBlastRadius,
 
     mineralPerWave,
+    waveRewardMult: Math.max(0.1, 1 + bonus.waveReward),
     gasPerWave,
-    xpMult,
+    xpMult: Math.max(0.1, 1 + bonus.xp),
 
-    aggroRange: H.HERO_AGGRO_RANGE * aggroRangeMult,
+    aggroRange: H.HERO_AGGRO_RANGE * Math.max(0.2, 1 + bonus.aggro),
 
-    skillDamageMult,
-    skillCooldownMult,
-    lowHpDamageMult,
+    skillDamageMult: Math.max(0.1, 1 + bonus.skillDamage) * compound.skillDamage,
+    // 쿨감은 가산이지만 바닥이 있다 — 0에 닿으면 스킬이 상시 발동이 된다
+    skillCooldownMult: Math.max(0.35, 1 + bonus.skillCooldown),
+    lowHpDamageMult: Math.max(1, 1 + bonus.lowHp),
+
+    skillCdrOnHit,
+    deathNova,
+    reviveNova,
+    novaRadius,
+    towerCopyTier,
   };
 }
 
@@ -297,7 +355,9 @@ export class Hero {
       gas.push({ damageMult: Math.pow(K.GAS_SKILL_DAMAGE_MULT, this.gasSkillDamage) });
     if (this.gasSkillCdr > 0)
       gas.push({ cooldownMult: Math.pow(K.GAS_SKILL_CDR_MULT, this.gasSkillCdr) });
-    return resolveSkill(id, foldMods([...patches, ...gas]));
+    // 허수아비·처형은 손이 빠를수록 자주 나간다 — 공속이 쿨을 깎는다
+    const attackSpeedRatio = H.HERO_ATTACK_INTERVAL / stats.attackInterval;
+    return resolveSkill(id, foldMods([...patches, ...gas]), attackSpeedRatio);
   }
 
   get skillReady(): boolean {
@@ -337,13 +397,26 @@ export class Hero {
 
   takeDamage(raw: number): void {
     if (!this.alive) return;
-    this.hp -= raw * (1 - this.stats.damageReduction);
+    const stats = this.stats;
+    this.hp -= raw * (1 - stats.damageReduction);
+
+    // '반격 집중' — 맞을수록 스킬이 빨리 돌아온다 ('마나 회복'의 번역)
+    if (stats.skillCdrOnHit > 0 && this.skillCooldown > 0) {
+      this.skillCooldown = Math.max(0, this.skillCooldown - stats.skillCdrOnHit);
+    }
+
     if (this.hp <= 0) {
       this.hp = 0;
       this.alive = false;
-      this.respawnTimer = this.stats.respawnSeconds;
+      this.respawnTimer = stats.respawnSeconds;
+      this.justDied = true; // Game이 이번 프레임에 사망 폭발을 터뜨린다
     }
   }
+
+  /** 이번 프레임에 죽었는가 — Game이 읽고 내린다 (사망 폭발) */
+  justDied = false;
+  /** 이번 프레임에 부활했는가 — Game이 읽고 내린다 (부활 폭발) */
+  justRevived = false;
 
   addAugment(card: AugmentCard): void {
     this.augments.push(card);
@@ -379,6 +452,7 @@ export class Hero {
     this.distance = this.altarDistance;
     this.targetDistance = this.altarDistance;
     this.respawnTimer = 0;
+    this.justRevived = true; // Game이 이번 프레임에 부활 폭발을 터뜨린다
   }
 }
 

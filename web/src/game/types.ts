@@ -62,6 +62,25 @@ export interface Decoy {
   taunts: boolean;
 }
 
+/**
+ * 바닥에 깔린 장판 (불화살의 불바다 · 얼음화살의 빙판).
+ * 몹은 경로를 따라야만 하므로 장판은 "길목에 놓는 지속 효과"가 된다.
+ */
+export interface Zone {
+  /** 경로 위 중심 */
+  distance: number;
+  x: number;
+  y: number;
+  radius: number;
+  /** 남은 시간(초) */
+  remaining: number;
+  /** 초당 피해 (0이면 피해 없는 장판) */
+  dps: number;
+  /** 안에 있는 몹의 이동속도 배수 (1이면 감속 없음) */
+  slow: number;
+  color: string;
+}
+
 export interface Shot {
   x: number;
   y: number;

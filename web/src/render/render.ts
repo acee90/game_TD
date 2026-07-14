@@ -188,6 +188,24 @@ function drawHero(ctx: CanvasRenderingContext2D, game: Game): void {
   ctx.textBaseline = 'alphabetic';
 }
 
+/** 장판 — 불바다(주황)와 빙판(하늘). 바닥에 깔리므로 몹·타워 밑에 그린다. */
+function drawZones(ctx: CanvasRenderingContext2D, game: Game): void {
+  for (const zone of game.zones) {
+    // 꺼져갈수록 옅어진다
+    const fade = Math.min(1, zone.remaining / 1.5);
+    ctx.globalAlpha = 0.18 * fade;
+    ctx.beginPath();
+    ctx.arc(zone.x, zone.y, zone.radius, 0, Math.PI * 2);
+    ctx.fillStyle = zone.color;
+    ctx.fill();
+    ctx.globalAlpha = 0.5 * fade;
+    ctx.strokeStyle = zone.color;
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+  }
+}
+
 function drawDecoy(ctx: CanvasRenderingContext2D, game: Game): void {
   const decoy = game.decoy;
   if (!decoy) return;
@@ -238,6 +256,9 @@ export function render(ctx: CanvasRenderingContext2D, game: Game): void {
     ctx.lineWidth = 2;
     ctx.stroke();
   }
+
+  // 장판은 바닥이다 — 몹보다 먼저 그린다
+  drawZones(ctx, game);
 
   for (const enemy of game.enemies) {
     const [x, y] = pathPosOffset(enemy.distance, (enemy.lane ?? 0) * MOB_LANE_OFFSET);

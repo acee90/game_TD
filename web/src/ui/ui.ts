@@ -53,6 +53,7 @@ export interface Elements {
   readonly gasSkillCdr: HTMLButtonElement;
   readonly spawn: HTMLButtonElement;
   readonly sell: HTMLButtonElement;
+  readonly copyTower: HTMLButtonElement;
   readonly upgrades: readonly HTMLButtonElement[];
   readonly overlay: HTMLElement;
   readonly overlayTitle: HTMLElement;
@@ -106,6 +107,7 @@ export function bindElements(): Elements {
     gasSkillCdr: $<HTMLButtonElement>('gasSkillCdr'),
     spawn: $<HTMLButtonElement>('spawn'),
     sell: $<HTMLButtonElement>('sell'),
+    copyTower: $<HTMLButtonElement>('copyTower'),
     upgrades: [0, 1, 2, 3].map((i) => $<HTMLButtonElement>(`up${i}`)),
     overlay: $('overlay'),
     overlayTitle: $('overlayTitle'),
@@ -306,6 +308,20 @@ export function refresh(el: Elements, game: Game): void {
   el.spawn.disabled = game.mineral < game.spawnCost;
 
   el.sell.disabled = !game.selected?.tower;
+
+  // 복제 장치 — 증강을 들었을 때만 보인다
+  el.copyTower.hidden = !game.canCopyTower;
+  if (game.canCopyTower) {
+    const target = game.copyTarget;
+    const selected = game.selected;
+    if (target?.tower) {
+      el.copyTower.textContent = `복제 예약됨: ${target.tower.def.name} (취소)`;
+      el.copyTower.disabled = false;
+    } else {
+      el.copyTower.textContent = `복제 예약 (티어 ${game.copyTierCap}까지)`;
+      el.copyTower.disabled = !selected || !game.canMarkCopy(selected);
+    }
+  }
 
   el.upgrades.forEach((button, i) => {
     const race = i as Race;

@@ -96,6 +96,12 @@ export const SPAWN_COST_GROWTH = 0.45;
 export const spawnUnitCost = (spawned: number): number =>
   Math.round(SPAWN_UNIT_MINERAL + SPAWN_COST_GROWTH * Math.max(0, spawned - SPAWN_FREE_COUNT));
 export const PROBE_MINERAL = 100;
+
+// ── 타워 복제 ('복제 장치' 증강) ──
+// 복제 가능 티어 상한은 라운드와 영웅 레벨 중 **더 빠른 쪽**을 따라 오른다.
+// 초반엔 싸구려만 복제되고, 후반에 GOD가 열린다 — 복제가 계속 살아 있는 카드가 된다.
+export const COPY_TIER_ROUNDS = 12;
+export const COPY_TIER_LEVELS = 9;
 /**
  * [프로토] 프로브 비용은 지수로 오른다 — "지금 전력이냐 미래 경제냐"의 일꾼 딜레마.
  * 8기 고정 상한이던 시절에는 GA가 전 세대 7~8로 수렴하는 무뇌 투자였다.
