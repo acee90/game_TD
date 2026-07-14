@@ -10,7 +10,7 @@ import { GOD_TIER, RACE_COLOR, tagLabel, type Race } from '../data/units';
 import type { AugmentCard } from '../data/hero';
 import { attackInterval, damage, isSplash, range, slowFactor, type UpgradeLevels } from './combat';
 import { bossKillMineral, killIncome } from './economy';
-import { Hero, rollAugmentChoices } from './hero';
+import { Hero, rollAugmentChoices, type HeroStats } from './hero';
 import { findMerge, unitFor, type Rand } from './merge';
 import type { Decoy, Enemy, EnemySpec, FloatText, Shot, Slot } from './types';
 
@@ -531,6 +531,20 @@ export class Game {
       this.mineral += reward;
       this.score += S.roundScore(this.round);
       this.float(this.slots[0].x, this.slots[0].y, `웨이브 +${reward}`, '#ffd23f');
+
+      // 경제 증강의 라운드 수입
+      const stats = this.hero.stats;
+      if (stats.mineralPerWave > 0) this.mineral += stats.mineralPerWave;
+      if (stats.gasPerWave > 0) this.gas += stats.gasPerWave;
+      if (stats.mineralPerWave > 0 || stats.gasPerWave > 0) {
+        const parts: string[] = [];
+        if (stats.mineralPerWave > 0) parts.push(`+${stats.mineralPerWave} 미네랄`);
+        if (stats.gasPerWave > 0) parts.push(`+${stats.gasPerWave} 가스`);
+        this.float(this.hero.x, this.hero.y, parts.join(' · '), '#8fd6ff');
+      }
+
+      // 성장 증강 — 라운드를 넘길 때마다 누적된다
+      this.hero.waveStacks++;
     }
 
     this.round++;
@@ -617,14 +631,46 @@ export class Game {
       this.float(x, y, `+${income.mineral}`, '#8fd6ff');
       if (income.notes.length) this.message = income.notes.join(' · ');
     }
+
+    // 처치 수입은 누가 잡았든 들어온다 (경제 증강의 기존 동작 유지)
     this.mineral += this.hero.stats.mineralPerKill;
+
+    if (enemy.lastHitByHero) {
+      // 성장 증강 — 영웅 막타만 센다. 타워가 잡은 몹은 영웅을 키우지 않는다.
+      this.hero.killStacks++;
+      this.heroExplode(enemy, x, y);
+    }
     this.grantXp(enemy.lastHitByHero ? H.XP_PER_MOB * H.HERO_LASTHIT_XP_MULT : H.XP_PER_MOB);
+  }
+
+  /**
+   * 폭사 — 영웅이 잡은 적이 터진다.
+   * 폭발이 죽인 적은 다시 터지지 않는다(연쇄 금지). 무한 연쇄를 막는 안전장치다.
+   */
+  private heroExplode(enemy: Enemy, x: number, y: number): void {
+    const stats = this.hero.stats;
+    if (stats.deathBlast <= 0 || stats.deathBlastRadius <= 0) return;
+
+    const raw = this.hero.attackDamage * stats.deathBlast;
+    for (const other of this.enemies) {
+      if (other === enemy || other.dead) continue;
+      const [ox, oy] = pathPos(other.distance);
+      if (Math.hypot(ox - x, oy - y) > stats.deathBlastRadius) continue;
+      const dealt = B.effectiveDamage(raw, other.armor);
+      other.hp -= dealt;
+      this.heroDamageDealt += dealt;
+      // lastHitByHero를 켜지 않는다 — 폭발 막타가 다시 폭발을 부르면 연쇄가 된다
+    }
+    this.shots.push({
+      x, y, tx: x, ty: y, life: 0.15,
+      color: '#ff5a3c', splashRadius: stats.deathBlastRadius,
+    });
   }
 
   /** 경험치는 타워가 잡든 영웅이 잡든 들어온다. 레벨업 시 증강 선택을 띄운다. */
   private grantXp(amount: number): void {
     const hero = this.hero;
-    const levels = hero.gainXp(amount);
+    const levels = hero.gainXp(amount * hero.stats.xpMult);
     if (levels > 0) {
       this.score += S.HERO_LEVEL_SCORE * levels;
       this.float(hero.x, hero.y, `Lv${hero.level}!`, '#ffd23f');
@@ -796,7 +842,8 @@ export class Game {
   private isAggroed(enemy: Enemy, hero: Hero): boolean {
     const gap = hero.distance - enemy.distance;
     if (gap < -H.ENEMY_TOUCH_RANGE) return false; // 이미 지나쳤다
-    return gap <= H.HERO_AGGRO_RANGE;
+    // '도발' 계열이 어그로 범위를 넓힌다 — 더 많이 붙잡는다
+    return gap <= hero.stats.aggroRange;
   }
 
   /** 영웅 이동 · 공격, 그리고 적의 반격 */
@@ -812,14 +859,15 @@ export class Game {
       const target = this.nearestEnemy(hero.x, hero.y, stats.range);
       if (target) {
         const [tx, ty] = pathPos(target.distance);
+        // 치명타는 공격당 한 번만 굴린다 — 광역이어도 대상마다 다시 굴리지 않는다
+        const crit = stats.critChance > 0 && this.rand() < stats.critChance;
+        const raw = hero.attackDamage * (crit ? stats.critMult : 1);
+
         if (stats.splashRadius > 0) {
           for (const enemy of this.enemies) {
             const [ex, ey] = pathPos(enemy.distance);
             if (Math.hypot(ex - tx, ey - ty) <= stats.splashRadius) {
-              const dealt = B.effectiveDamage(stats.damage, enemy.armor);
-              enemy.hp -= dealt;
-              this.heroDamageDealt += dealt;
-              enemy.lastHitByHero = true;
+              this.heroHitEnemy(enemy, raw, stats);
             }
           }
           this.shots.push({
@@ -827,21 +875,25 @@ export class Game {
             color: '#c065e0', splashRadius: stats.splashRadius,
           });
         } else {
-          const dealt = B.effectiveDamage(stats.damage, target.armor);
-          target.hp -= dealt;
-          this.heroDamageDealt += dealt;
-          target.lastHitByHero = true;
-          this.shots.push({ x: hero.x, y: hero.y, tx, ty, life: 0.1, color: '#ffffff' });
+          this.heroHitEnemy(target, raw, stats);
+          this.shots.push({
+            x: hero.x, y: hero.y, tx, ty, life: 0.1,
+            color: crit ? '#ffd23f' : '#ffffff',
+          });
         }
+        if (crit) this.float(tx, ty, 'CRIT!', '#ffd23f');
         hero.attackCooldown = stats.attackInterval;
       }
     }
+
+    this.tickBurns(dt);
 
     // 적의 반격 — 영웅에 닿은 적이 때린다
     this.heroHitTimer -= dt;
     if (this.heroHitTimer <= 0) {
       const decoy = this.decoy;
       let incoming = 0;
+      const attackers: Enemy[] = [];
       for (const enemy of this.enemies) {
         // 허수아비에 붙어 있는 몹은 영웅을 때리지 않는다
         if (decoy && Math.abs(enemy.distance - decoy.distance) <= H.ENEMY_TOUCH_RANGE + enemy.radius) {
@@ -853,15 +905,76 @@ export class Game {
           enemy.kind === 'boss'
             ? H.bossDamage(enemy.bossLevel ?? 1, this.round)
             : H.enemyDamage(this.round) * (enemy.contactDamageMult ?? 1);
+        attackers.push(enemy);
       }
       if (incoming > 0) {
         hero.takeDamage(incoming);
         this.float(hero.x, hero.y, `-${Math.round(incoming)}`, '#ff5a3c');
+
+        // 가시 갑옷 — 받은 피해를 때린 적들에게 나눠 되돌린다
+        if (stats.thorns > 0 && attackers.length > 0) {
+          const back = (incoming * stats.thorns) / attackers.length;
+          for (const enemy of attackers) {
+            const dealt = B.effectiveDamage(back, enemy.armor);
+            enemy.hp -= dealt;
+            this.heroDamageDealt += dealt;
+            enemy.lastHitByHero = true;
+          }
+        }
         if (!hero.alive) {
           this.message = `영웅 사망 — ${Math.ceil(hero.respawnTimer)}초 뒤 제단에서 부활합니다.`;
         }
       }
       this.heroHitTimer = H.ENEMY_ATTACK_INTERVAL;
+    }
+  }
+
+  /**
+   * 영웅의 한 방이 적에게 닿았을 때. 피해 + 발동 효과(흡혈·처형·화상·감속)를 한곳에서 처리한다.
+   * 광역이면 대상마다 불린다.
+   */
+  private heroHitEnemy(enemy: Enemy, raw: number, stats: HeroStats): void {
+    const dealt = B.effectiveDamage(raw, enemy.armor);
+    enemy.hp -= dealt;
+    this.heroDamageDealt += dealt;
+    enemy.lastHitByHero = true;
+
+    if (stats.lifesteal > 0 && this.hero.alive) {
+      this.hero.heal(dealt * stats.lifesteal);
+    }
+    if (stats.burnDps > 0) {
+      enemy.burnDps = stats.burnDps;
+      enemy.burnTimer = H.BURN_SECONDS;
+    }
+    if (stats.slowOnHit > 0) {
+      const factor = 1 - stats.slowOnHit;
+      // 이미 더 센 감속이 걸려 있으면 덮어쓰지 않는다
+      if (enemy.slowFactor === undefined || factor < enemy.slowFactor) enemy.slowFactor = factor;
+      enemy.slowTimer = Math.max(enemy.slowTimer ?? 0, H.SLOW_ON_HIT_SECONDS);
+    }
+    // 처형 — 보스는 예외다. 보스에 걸면 소환 즉시 증발한다.
+    if (stats.executeBelow > 0 && enemy.hp > 0 && enemy.kind !== 'boss') {
+      if (enemy.hp <= enemy.maxHp * stats.executeBelow) {
+        this.heroDamageDealt += enemy.hp;
+        enemy.hp = 0;
+        this.float(...pathPos(enemy.distance), '처형', '#ff5a3c');
+      }
+    }
+  }
+
+  /** 화상 — 영웅이 붙인 지속 피해. 막타가 화상이어도 영웅 막타로 친다. */
+  private tickBurns(dt: number): void {
+    for (const enemy of this.enemies) {
+      if (!enemy.burnTimer || enemy.burnTimer <= 0 || !enemy.burnDps) continue;
+      enemy.burnTimer -= dt;
+      const dealt = B.effectiveDamage(enemy.burnDps * dt, enemy.armor);
+      enemy.hp -= dealt;
+      this.heroDamageDealt += dealt;
+      enemy.lastHitByHero = true;
+      if (enemy.burnTimer <= 0) {
+        enemy.burnDps = undefined;
+        enemy.burnTimer = undefined;
+      }
     }
   }
 
@@ -887,7 +1000,8 @@ export class Game {
       tower.cooldown -= dt;
       if (tower.cooldown > 0) continue;
 
-      const reach = range(tower);
+      // '지휘' 계열이 타워 사거리를 넓힌다
+      const reach = range(tower) * this.hero.stats.towerRangeMult;
       const inReach = this.enemies.filter((e) => {
         if (e.dead) return false;
         const [x, y] = pathPos(e.distance);

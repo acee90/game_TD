@@ -36,29 +36,29 @@ describe('적응형 드래프트', () => {
     }
   });
 
-  test('원거리를 들수록 원거리가 더 자주 뜬다', () => {
+  test('한 계열을 들수록 그 계열이 더 자주 뜬다', () => {
     const empty = offerCounts(new Hero(), 400);
 
     const committed = new Hero();
-    committed.addAugment(card('marksman'));
-    committed.addAugment(card('rapid'));
+    committed.addAugment(card('greed'));
+    committed.addAugment(card('harvest'));
     const biased = offerCounts(committed, 400);
 
     const ratio = (m: Map<H.AugmentKind, number>) =>
-      (m.get('ranged') ?? 0) / [...m.values()].reduce((a, b) => a + b, 0);
+      (m.get('econ') ?? 0) / [...m.values()].reduce((a, b) => a + b, 0);
 
-    // 빈 손 대비 원거리 비중이 뚜렷이 커야 한다 (가중치 1 → 1+0.9×2)
+    // 빈 손 대비 경제 비중이 뚜렷이 커야 한다 (가중치 1 → 1+0.9×2)
     expect(ratio(biased)).toBeGreaterThan(ratio(empty) * 1.5);
   });
 
   test('관성이지 강제가 아니다 — 몰아도 다른 계열이 계속 나온다', () => {
     const committed = new Hero();
-    committed.addAugment(card('marksman'));
-    committed.addAugment(card('marksman'));
-    committed.addAugment(card('rapid'));
+    committed.addAugment(card('greed'));
+    committed.addAugment(card('greed'));
+    committed.addAugment(card('harvest'));
     const counts = offerCounts(committed, 400);
 
-    const others = [...counts.entries()].filter(([k]) => k !== 'ranged');
+    const others = [...counts.entries()].filter(([k]) => k !== 'econ');
     expect(others.length).toBeGreaterThan(2); // 다른 계열도 실제로 뜬다
   });
 

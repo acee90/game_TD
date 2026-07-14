@@ -97,9 +97,9 @@ describe('증강이 역전을 만든다 — 레벨이 아니라', () => {
     expect(dps).toBeLessThan(GOD_TOWER_DPS * 2.5);
   });
 
-  test('계열 특화(원거리 3)가 혼합보다 세다 — 몰빵의 값어치', () => {
-    const focused = heroDps(24, ['marksman', 'marksman', 'marksman']); // 원거리 3 = 특화
-    const mixed = heroDps(24, ['marksman', 'marksman', 'might']); // 2+1 — 특화 미발동
+  test('계열 특화(강화 3)가 혼합보다 세다 — 몰빵의 값어치', () => {
+    const focused = heroDps(24, ['marksman', 'marksman', 'marksman']); // 강화 3 = 특화
+    const mixed = heroDps(24, ['marksman', 'marksman', 'plating']); // 강화 2 + 방어 1 — 특화 미발동
     expect(focused).toBeGreaterThan(mixed);
   });
 });

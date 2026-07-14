@@ -7,7 +7,7 @@
 docs/
 ├── design/      비전·세계관 / 시스템 명세 / 백로그 ← 기준 문서 (고정 파일명, 최신 유지)
 ├── reports/     측정 리포트                        ← 불변 스냅샷 (실행 단위마다 새 버전)
-├── reference/   원본(갓타디) 분석 자료              ← [원본확정]의 출처
+├── reference/   원본(갓타디) · 외부 게임 분석 자료   ← [원본확정]의 출처
 ├── archive/     대체된 옛 방향 문서                 ← 기준으로 쓰지 않는다
 ├── balance/     밸런스 CSV                         ← 코드에서 자동 생성 (수정 금지)
 ├── exec-plans/  실행 계획                          ← 세션을 넘겨 이어하는 작업의 인수인계 문서
@@ -33,11 +33,13 @@ docs/
 
 플레이테스트(정성) 기록은 아직 없다 — 첫 테스트 시 `reports/playtest-*.md`로 추가.
 
-## reference/ — 원본 분석
+## reference/ — 원본·외부 게임 분석
 
 | 문서 | 상태 | 내용 |
 |---|---|---|
 | [god-td-x-vz056-map-analysis-v1.0.md](reference/god-td-x-vz056-map-analysis-v1.0.md) | 현행 (참조) | 원본 맵파일 리버스엔지니어링 — [원본확정] 수치의 1차 출처 |
+| [lol-arena-tft-augments-v1.0.md](reference/lol-arena-tft-augments-v1.0.md) | 현행 (참조) | LoL 아레나 226종 · TFT 세트17 275종 증강 전수 목록 (게임 클라이언트 데이터, 패치 16.13) |
+| [augment-taxonomy-v1.0.md](reference/augment-taxonomy-v1.0.md) | 현행 (참조) | 위 501종의 기능별 분류 (스탯/특수능력/경제/시너지…) — 우리가 붙인 해석 |
 | [god-td-system-notes-v0.1.md](reference/god-td-system-notes-v0.1.md) | 보관 | 초기 시스템 정리 (맵분석으로 대체) |
 | [god-td-ops-layer-analysis-v0.1.md](reference/god-td-ops-layer-analysis-v0.1.md) | 보관 | 운영 레이어 초기 분석 |
 

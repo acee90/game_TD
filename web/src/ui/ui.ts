@@ -266,9 +266,12 @@ function refreshAugmentOverlay(el: Elements, game: Game): void {
       const kindColor = HD.AUGMENT_KIND_COLOR[card.augment.kind];
       const kindLabel = HD.AUGMENT_KIND_LABEL[card.augment.kind];
       const rarity = HD.RARITIES[card.rarity];
+      // 대가가 달린 증강은 한눈에 보여야 한다 — 설명의 '·' 뒤가 대가다
+      const risk = HD.isRisky(card.augment) ? `<span class="risk">⚠ 대가</span>` : '';
       return `<button class="augcard" data-index="${i}" style="border-color:${rarity.color}">
         <div class="k">
           <span style="color:${kindColor}">${kindLabel}</span>
+          ${risk}
           <span class="rar" style="color:${rarity.color}">${rarity.label}</span>
         </div>
         <div class="n">${card.augment.name}</div>
