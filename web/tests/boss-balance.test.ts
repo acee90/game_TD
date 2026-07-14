@@ -37,9 +37,8 @@ function fightLv1Boss(seed: number, budget: number): Fight {
   let seconds = 0;
   while (game.liveBossLevels.length > 0 && seconds < 200) {
     if (game.paused) {
-      // 레벨업 스탯 카드·증강이 시뮬을 멈추지 않게 즉시 해소 (CLAUDE.md 경고 지점)
-      if (game.pendingStatPoints > 0) game.chooseStat('str');
-      else game.chooseAugment(0);
+      // 증강 선택이 시뮬을 멈추지 않게 즉시 해소 (AGENTS.md 경고 지점)
+      game.chooseAugment(0);
     }
     game.update(1 / 60);
     seconds += 1 / 60;
@@ -105,9 +104,8 @@ describe('Lv1 보스 — 시작 전력으로 넘을 수 있어야 한다', () =>
     let seconds = 0;
     while (game.liveBossLevels.length > 0 && seconds < 200) {
       if (game.paused) {
-      // 레벨업 스탯 카드·증강이 시뮬을 멈추지 않게 즉시 해소 (CLAUDE.md 경고 지점)
-      if (game.pendingStatPoints > 0) game.chooseStat('str');
-      else game.chooseAugment(0);
+      // 증강 선택이 시뮬을 멈추지 않게 즉시 해소 (AGENTS.md 경고 지점)
+      game.chooseAugment(0);
     }
     game.update(1 / 60);
       seconds += 1 / 60;

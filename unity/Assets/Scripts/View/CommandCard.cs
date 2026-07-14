@@ -118,7 +118,7 @@ namespace GodTD.View
         static void FillHero(Command[] c, Game game)
         {
             var hero = game.Hero;
-            // 스탯 배분은 레벨업 일시정지 카드가 맡는다 — 여기는 XP 구매와 스킬 개조만
+            // 스탯은 레벨에 따라 자동 성장한다 — 여기는 XP 구매와 스킬 개조만
             c[0] = new Command("XP 구매",
                 $"+{HeroData.XP_BUY_AMOUNT} · {Min(HeroData.XP_BUY_GOLD)}",
                 game.CanBuyXp,

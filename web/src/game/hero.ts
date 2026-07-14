@@ -25,25 +25,10 @@ export interface HeroStats {
   readonly skillPower: number;
 }
 
-/** 골드로 산 스탯 포인트 */
-export interface BoughtStats {
-  readonly str: number;
-  readonly agi: number;
-  readonly int: number;
-}
-
-export const NO_STATS: BoughtStats = { str: 0, agi: 0, int: 0 };
-
 /** 증강 카드를 접어서 최종 스탯을 만든다. 순수 함수 — 테스트하기 쉽다. */
-export function computeStats(
-  _level: number,
-  cards: readonly AugmentCard[],
-  bought: BoughtStats = NO_STATS,
-): HeroStats {
-  // 파워 = 스탯(레벨업 택1 적립) × 증강 배수 — 레벨 배수는 폐지 (2안 개편)
-  const str = H.HERO_BASE_STR + bought.str;
-  const agi = H.HERO_BASE_AGI + bought.agi;
-  const int = H.HERO_BASE_INT + bought.int;
+export function computeStats(level: number, cards: readonly AugmentCard[]): HeroStats {
+  // 파워 = 스탯(레벨업 자동 균등 성장) × 증강 배수 — 레벨 배수는 없다 (3안 개편)
+  const { str, agi, int } = H.attributesByLevel(level);
 
   let maxHp = H.HP_PER_STR * str;
   let damage = H.DMG_PER_STR * str;
@@ -112,23 +97,9 @@ export class Hero {
   attackCooldown = 0;
   /** 액티브 스킬 재사용 대기 */
   skillCooldown = 0;
-  /** 레벨업이 적립한 스탯 포인트 (2안 개편 — 골드 구매 아님) */
-  bought: BoughtStats = NO_STATS;
-
-  /** 마지막으로 고른 스탯 — 다음 선택 카드의 기본 강조 */
-  focus: H.StatId = 'str';
-
-  /** 아직 배분하지 않은 레벨업 포인트 큐 — 하나씩 증강처럼 일시정지 선택한다 */
-  pendingStatPoints: number[] = [];
-
   /** 가스로 산 스킬 개조 횟수 */
   gasSkillDamage = 0;
   gasSkillCdr = 0;
-
-  /** bought가 곧 포인트다 (환산 없음) */
-  get points(): BoughtStats {
-    return this.bought;
-  }
 
   readonly augments: AugmentCard[] = [];
   /** 아직 고르지 않은 증강 선택 횟수 */
@@ -149,16 +120,7 @@ export class Hero {
   }
 
   get stats(): HeroStats {
-    return computeStats(this.level, this.augments, this.points);
-  }
-
-  /** 레벨업 보상 배분 — 고른 스탯에 포인트 적립. 체력이 늘면 증가분을 채워준다. */
-  grantStatPoints(stat: H.StatId, points: number): void {
-    this.focus = stat;
-    const before = this.stats.maxHp;
-    this.bought = { ...this.bought, [stat]: this.bought[stat] + points };
-    const after = this.stats.maxHp;
-    if (after > before) this.hp += after - before;
+    return computeStats(this.level, this.augments);
   }
 
   get xpNeeded(): number {
@@ -217,8 +179,6 @@ export class Hero {
       this.xp -= this.xpNeeded;
       this.level++;
       gained++;
-      // 레벨업 = 스탯 선택 대기 (증강처럼 일시정지 카드 — Game.chooseStat이 배분)
-      this.pendingStatPoints.push(H.levelStatPoints(this.level));
       if (H.grantsAugment(this.level)) this.pendingAugmentPicks++;
     }
     if (gained > 0) this.hp = this.stats.maxHp; // 레벨업 시 완전 회복

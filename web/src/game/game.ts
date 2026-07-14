@@ -85,23 +85,9 @@ export class Game {
     this.hero = new Hero();
   }
 
-  /** 스탯·증강 선택 중에는 시간이 흐르지 않는다. 스탯 선택이 먼저 뜬다. */
+  /** 증강 선택 중에는 시간이 흐르지 않는다. */
   get paused(): boolean {
-    return this.hero.pendingStatPoints.length > 0 || this.augmentChoices.length > 0;
-  }
-
-  /** 배분 대기 중인 레벨업 포인트 (0이면 스탯 선택 카드 없음) */
-  get pendingStatPoints(): number {
-    return this.hero.pendingStatPoints[0] ?? 0;
-  }
-
-  /** 레벨업 포인트를 스탯에 배분한다 — 증강 선택과 같은 일시정지 카드 */
-  chooseStat(stat: H.StatId): boolean {
-    const points = this.hero.pendingStatPoints.shift();
-    if (points === undefined) return false;
-    this.hero.grantStatPoints(stat, points);
-    this.message = `${H.STAT_LABEL[stat]} +${points} (${this.hero.bought[stat]}pt)`;
-    return true;
+    return this.augmentChoices.length > 0;
   }
 
   // ── 제단 · 영웅 ──

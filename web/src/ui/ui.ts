@@ -41,9 +41,6 @@ export interface Elements {
   readonly skill: HTMLElement;
   readonly skillCd: HTMLElement;
   readonly skillText: HTMLElement;
-  readonly statOverlay: HTMLElement;
-  readonly statSub: HTMLElement;
-  readonly statCards: HTMLElement;
   readonly augOverlay: HTMLElement;
   readonly augSub: HTMLElement;
   readonly augCards: HTMLElement;
@@ -97,9 +94,6 @@ export function bindElements(): Elements {
     skill: $('skill'),
     skillCd: $('skillCd'),
     skillText: $('skillText'),
-    statOverlay: $('statOverlay'),
-    statSub: $('statSub'),
-    statCards: $('statCards'),
     augOverlay: $('augOverlay'),
     augSub: $('augSub'),
     augCards: $('augCards'),
@@ -205,10 +199,10 @@ function refreshHero(el: Elements, game: Game): void {
   ].filter(Boolean);
   el.heroStats.textContent = parts.join(' · ');
 
-  // 스탯은 레벨업 카드로 배분한다 — 여기는 보유 포인트 표시 전용
+  const attributes = HD.attributesByLevel(hero.level);
   for (const stat of HD.STAT_IDS) {
     const button = el.statButtons[stat];
-    button.textContent = `${HD.STAT_LABEL[stat]} ${hero.bought[stat]}pt`;
+    button.textContent = `${HD.STAT_LABEL[stat]} ${attributes[stat].toFixed(1)}`;
     button.disabled = true;
   }
   el.buyXp.textContent = `XP +${HD.XP_BUY_AMOUNT} (${HD.XP_BUY_GOLD})`;
@@ -255,39 +249,7 @@ function refreshHero(el: Elements, game: Game): void {
   }
 }
 
-const STAT_CARD_DESC: Record<HD.StatId, string> = {
-  str: `공격력 +${HD.DMG_PER_STR} · 체력 +${HD.HP_PER_STR} (포인트당)`,
-  agi: `공격 속도 +${HD.AS_PER_AGI * 100}% (포인트당)`,
-  int: `스킬 피해 +${HD.SKILL_PER_INT * 100}% (포인트당)`,
-};
-
-function refreshStatOverlay(el: Elements, game: Game): void {
-  const points = game.pendingStatPoints;
-  if (points === 0) {
-    el.statOverlay.style.display = 'none';
-    return;
-  }
-  el.statOverlay.style.display = 'flex';
-  const queued = game.hero.pendingStatPoints.length;
-  el.statSub.textContent =
-    `영웅 Lv${game.hero.level} — 스탯 하나에 +${points}포인트` +
-    (queued > 1 ? ` (대기 ${queued}회)` : '');
-  el.statCards.innerHTML = HD.STAT_IDS.map((stat) => {
-    const last = game.hero.focus === stat ? ' <span class="chip">직전 선택</span>' : '';
-    return `
-    <button class="augcard" data-stat="${stat}">
-      <div class="name">${HD.STAT_LABEL[stat]} +${points}${last}</div>
-      <div class="dim">${STAT_CARD_DESC[stat]} · 보유 ${game.hero.bought[stat]}pt</div>
-    </button>`;
-  }).join('');
-}
-
 function refreshAugmentOverlay(el: Elements, game: Game): void {
-  // 스탯 선택이 대기 중이면 증강 카드는 그 뒤에 뜬다
-  if (game.pendingStatPoints > 0) {
-    el.augOverlay.style.display = 'none';
-    return;
-  }
   if (game.augmentChoices.length === 0) {
     el.augOverlay.style.display = 'none';
     return;
@@ -350,7 +312,6 @@ export function refresh(el: Elements, game: Game): void {
   });
 
   refreshHero(el, game);
-  refreshStatOverlay(el, game);
   refreshAugmentOverlay(el, game);
   refreshMissions(el, game);
   el.info.innerHTML = selectionInfo(game);

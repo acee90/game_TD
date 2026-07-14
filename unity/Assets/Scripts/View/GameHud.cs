@@ -2,7 +2,7 @@
 // ───────── 서비스 룩 HUD: 모서리 패널 ─────────
 // 상단 얇은 자원 바 + 좌하단 '정보' 카드 + 우하단 3×3 커맨드 카드 (스타/워크 모서리식).
 // 하단 전폭 바를 없애 보드가 화면 대부분을 차지한다. 두 카드는 그림자를 깔고 떠 있다.
-// 스탯·증강·게임오버는 전면 오버레이. 프리팹 없음 — UiTheme·UiKit으로 코드 조립.
+// 증강·게임오버는 전면 오버레이. 프리팹 없음 — UiTheme·UiKit으로 코드 조립.
 
 using System.Collections.Generic;
 using GodTD.Core;
@@ -414,7 +414,8 @@ namespace GodTD.View
                 }
                 selBody.text =
                     $"공격력 <color=#E8ECF6>{stats.Damage:0}</color> · DPS <color=#E8ECF6>{dps:0}</color>" +
-                    $" · 사거리 {stats.Range:0} · 힘 {hero.Bought.Str} 민첩 {hero.Bought.Agi} 지능 {hero.Bought.Int}" +
+                    $" · 사거리 {stats.Range:0} · 힘 {HeroData.StatValue(hero.Level, StatId.Str):0.0}" +
+                    $" 민첩 {HeroData.StatValue(hero.Level, StatId.Agi):0.0} 지능 {HeroData.StatValue(hero.Level, StatId.Int):0.0}" +
                     $"\n{augs}{skillLine}";
             }
             else if (sel.IsTower && sel.Slot?.Tower != null)
@@ -478,16 +479,15 @@ namespace GodTD.View
             }
         }
 
-        // ───────── 오버레이 (스탯 / 증강 / 게임오버) ─────────
+        // ───────── 오버레이 (증강 / 게임오버) ─────────
 
-        enum OverlayMode { None, Stat, Augment, GameOver }
+        enum OverlayMode { None, Augment, GameOver }
         OverlayMode overlayMode;
 
         void RefreshOverlay(Game game)
         {
             OverlayMode mode =
                 game.Over ? OverlayMode.GameOver
-                : game.PendingStatPoints > 0 ? OverlayMode.Stat
                 : game.AugmentChoices.Count > 0 ? OverlayMode.Augment
                 : OverlayMode.None;
 
@@ -497,36 +497,9 @@ namespace GodTD.View
 
             switch (mode)
             {
-                case OverlayMode.Stat: RefreshStatOverlay(game); break;
                 case OverlayMode.Augment: RefreshAugmentOverlay(game); break;
                 case OverlayMode.GameOver: RefreshGameOver(game); break;
             }
-        }
-
-        void RefreshStatOverlay(Game game)
-        {
-            int points = game.PendingStatPoints;
-            int queued = game.Hero.PendingStatPoints.Count;
-            overlayTitle.text = "레벨 업!";
-            overlaySub.text = $"스탯 하나에 +{points}포인트" + (queued > 1 ? $"  (대기 {queued}회)" : "");
-
-            string[] desc =
-            {
-                $"공격력 +{HeroData.DMG_PER_STR} · 체력 +{HeroData.HP_PER_STR}",
-                $"공격 속도 +{HeroData.AS_PER_AGI * 100f:0}%",
-                $"스킬 피해 +{HeroData.SKILL_PER_INT * 100f:0.#}%",
-            };
-            for (int i = 0; i < 3; i++)
-            {
-                var stat = HeroData.STAT_IDS[i];
-                var btn = overlayCards[i];
-                btn.gameObject.SetActive(true);
-                string last = game.Hero.Focus == stat ? " <color=#FFD23F>●</color>" : "";
-                btn.Label.text = $"{HeroData.StatLabel(stat)} +{points}{last}";
-                btn.Detail.text = $"{desc[i]}\n보유 {game.Hero.Bought.Of(stat)}pt";
-                btn.Interactable = true;
-            }
-            overlayAction.gameObject.SetActive(false);
         }
 
         void RefreshAugmentOverlay(Game game)
@@ -571,8 +544,7 @@ namespace GodTD.View
         void ClickOverlayCard(int index)
         {
             var game = view.Game;
-            if (overlayMode == OverlayMode.Stat) game.ChooseStat(HeroData.STAT_IDS[index]);
-            else if (overlayMode == OverlayMode.Augment) game.ChooseAugment(index);
+            if (overlayMode == OverlayMode.Augment) game.ChooseAugment(index);
         }
 
         void ClickOverlayAction()

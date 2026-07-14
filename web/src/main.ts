@@ -39,20 +39,12 @@ canvas.addEventListener('pointerdown', (event) => {
 el.spawn.addEventListener('click', () => game.spawnUnitAnywhere());
 el.probe.addEventListener('click', () => game.buyProbe());
 el.sell.addEventListener('click', () => game.sellSelected());
-el.statButtons.str.addEventListener('click', () => game.chooseStat('str'));
-el.statButtons.agi.addEventListener('click', () => game.chooseStat('agi'));
-el.statButtons.int.addEventListener('click', () => game.chooseStat('int'));
 el.buyXp.addEventListener('click', () => game.buyXp());
 el.reroll.addEventListener('click', () => game.rerollAugments());
 el.gasSkillDmg.addEventListener('click', () => game.buyGasSkill('damage'));
 el.gasSkillCdr.addEventListener('click', () => game.buyGasSkill('cdr'));
 el.bossLevels.forEach((button, i) => button.addEventListener('click', () => game.summonBoss(i + 1)));
 el.upgrades.forEach((button, i) => button.addEventListener('click', () => game.upgrade(i as Race)));
-el.statCards.addEventListener('click', (event) => {
-  const card = (event.target as HTMLElement).closest<HTMLElement>('.augcard');
-  const stat = card?.dataset.stat as 'str' | 'agi' | 'int' | undefined;
-  if (stat) game.chooseStat(stat);
-});
 el.augCards.addEventListener('click', (event) => {
   const card = (event.target as HTMLElement).closest<HTMLElement>('.augcard');
   if (card?.dataset.index) game.chooseAugment(Number(card.dataset.index));
@@ -63,9 +55,6 @@ const KEYS: Record<string, () => void> = {
   b: () => game.summonBoss(),
   r: () => game.buyProbe(),
   x: () => game.sellSelected(),
-  '5': () => game.chooseStat('str'),
-  '6': () => game.chooseStat('agi'),
-  '7': () => game.chooseStat('int'),
   e: () => game.buyXp(),
   '1': () => game.upgrade(0),
   '2': () => game.upgrade(1),

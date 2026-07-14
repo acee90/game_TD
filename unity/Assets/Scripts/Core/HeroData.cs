@@ -10,7 +10,7 @@ using System;
 
 namespace GodTD.Core
 {
-    /// <summary>골드로 사는 영웅 스탯 — 힘(공격·체력) / 민첩(공속) / 지능(스킬 피해)</summary>
+    /// <summary>레벨에 따라 자동 성장하는 영웅 스탯 — 힘(공격·체력) / 민첩(공속) / 지능(스킬 피해)</summary>
     public enum StatId { Str, Agi, Int }
 
     public static class HeroData
@@ -30,16 +30,9 @@ namespace GodTD.Core
         /// <summary>제단은 게임 시작과 함께 주어진다. 십자 중앙 타일을 차지한다. (MapData.SLOT_POS[0])</summary>
         public const int ALTAR_SLOT = 0;
 
-        // ── 파워 커브 ──
-        // 초반에는 타워가 주력이고 영웅은 거들 뿐이다. 영웅 1레벨 DPS는 Lv1 타워 한 기 수준이다.
-        //
-        // ───────── 세 개의 곱연산 축 ─────────
-        // 영웅 파워 = 스탯(골드) × 레벨 배수(경험치) × 증강 배수(선택).
-        // 자원마다 축이 하나씩이다 — 골드는 스탯 포인트를 사고, 경험치는 그 스탯을
-        // 배수로 키우고, 증강은 그 위에 또 곱해지거나 특수능력(스킬·광역·시너지)을 얹는다.
-        //
-        // 레벨 배수는 레벨에 **선형**(1 + g×(L-1))이다. 지수로 두면 아무 증강이나 골라도
-        // 저절로 세져서 선택이 결과를 못 바꾼다. 후반 역전은 여전히 증강 시너지 몫이다.
+        // ── 파워 커브 (2026-07-13 3안) ──
+        // 영웅 파워 = 스탯(레벨업 자동 균등 성장) × 증강 배수(선택).
+        // 레벨 배수와 스탯 직접 구매는 없다. 골드의 영웅 성장 창구는 XP 구매 하나다.
 
         public const float HERO_BASE_RANGE = 130f;
         public const float HERO_ATTACK_INTERVAL = 0.8f;
@@ -48,7 +41,7 @@ namespace GodTD.Core
         public const float HERO_ARRIVE_EPSILON = 2f;
         public const float HERO_RADIUS = 11f;
 
-        // ───────── 스탯 — 골드로 산다 ─────────
+        // ───────── 스탯 — 레벨업마다 자동으로 골고루 오른다 ─────────
         // 힘: 기본 공격력과 체력.  민첩: 공격 속도.  지능: 스킬 피해.
         //
         // 포인트당 효과는 **선형**이지만 약해지지 않는다 — 레벨 배수와 증강 배수가
@@ -72,12 +65,31 @@ namespace GodTD.Core
         public const float SKILL_PER_INT = 0.035f;
 
         /// <summary>
-        /// 2026-07-11 2안 개편 ← web/src/data/hero.ts:
-        /// 골드 → XP → 레벨업 → focus 스탯 택1 한 축. 레벨 배수(×2.4/레벨)와
-        /// 스탯 골드 구매는 폐지 — 파워커브 과속(Lv17 DPS 985)의 근본 제거.
+        /// 2026-07-13 3안 개편 ← web/src/data/hero.ts:
+        /// 골드 → XP → 레벨업 → 세 스탯 자동 균등 성장. 기존 레벨업 총 포인트 예산을
+        /// 3등분해 파워 총량을 보존하면서 중간 빌드 전환 비용을 없앤다.
         /// </summary>
-        /// <summary>레벨업이 focus 스탯에 주는 포인트 — 후반 레벨일수록 굵게</summary>
+        /// <summary>레벨업이 세 스탯에 나눠 주는 총 포인트 — 후반 레벨일수록 굵게</summary>
         public static int LevelStatPoints(int level) => 2 + level / 10;
+
+        /// <summary>해당 레벨까지 각 스탯이 공통으로 받은 자연 성장치.</summary>
+        public static float StatBonusByLevel(int level)
+        {
+            int total = 0;
+            for (int l = 2; l <= level; l++) total += LevelStatPoints(l);
+            return total / (float)STAT_IDS.Length;
+        }
+
+        public static float StatValue(int level, StatId stat)
+        {
+            float bonus = StatBonusByLevel(level);
+            switch (stat)
+            {
+                case StatId.Str: return HERO_BASE_STR + bonus;
+                case StatId.Agi: return HERO_BASE_AGI + bonus;
+                default: return HERO_BASE_INT + bonus;
+            }
+        }
 
         /// <summary>XP 골드 구매 (TFT식) — 1골드 = 1XP, 버튼 한 번에 20</summary>
         public const int XP_BUY_GOLD = 20;

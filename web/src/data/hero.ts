@@ -10,8 +10,8 @@ import type { SkillId, SkillModPatch } from './skills';
 /** 제단은 게임 시작과 함께 주어진다. 십자 중앙 타일을 차지한다. (core/map.ts SLOT_POS[0]) */
 export const ALTAR_SLOT = 0;
 
-// ── 파워 커브 (2026-07-11 2안 개편) ──
-// 영웅 파워 = 스탯(레벨업 택1이 적립, XP는 골드 구매+킬) × 증강 배수(선택).
+// ── 파워 커브 (2026-07-13 3안 개편) ──
+// 영웅 파워 = 스탯(레벨업 자동 균등 성장, XP는 골드 구매+킬) × 증강 배수(선택).
 // 두 축뿐이다 — 레벨 배수는 폐지됐다. 초반 영웅은 Lv1 타워 몇 기 수준에서 시작한다.
 
 export const HERO_BASE_RANGE = 130;
@@ -21,12 +21,12 @@ export const HERO_SPEED = 88;
 export const HERO_ARRIVE_EPSILON = 2;
 export const HERO_RADIUS = 11;
 
-// ───────── 스탯 — 레벨업마다 고른다 (2026-07-11 2안 개편) ─────────
+// ───────── 스탯 — 레벨업마다 자동으로 골고루 오른다 ─────────
 // 힘: 기본 공격력과 체력.  민첩: 공격 속도.  지능: 스킬 피해.
 //
 // 이전에는 골드로 스탯을 직접 사고 XP는 킬에서 공짜로 왔다 — 레벨 배수(×2.4/레벨)가
 // 골드 없이 올라 영웅 파워커브가 과속했다(명세 §12 0.5, Lv17 DPS 985).
-// 이제 골드 → XP → 레벨업 → 힘/민/지 택1(focus) 한 축이다. 레벨 배수는 폐지.
+// 이제 골드 → XP → 레벨업 → 힘/민/지 자동 균등 성장 한 축이다. 레벨 배수는 폐지.
 // 파워는 전부 골드 비용을 가지므로 income-curve.csv에서 타워와 같은 저울에 오른다.
 export type StatId = 'str' | 'agi' | 'int';
 export const STAT_IDS: readonly StatId[] = ['str', 'agi', 'int'];
@@ -47,8 +47,31 @@ export const MIN_ATTACK_INTERVAL = 0.25;
 /** 지능 1당 스킬 피해 +3.5% */
 export const SKILL_PER_INT = 0.035;
 
-/** 레벨업이 focus 스탯에 주는 포인트 — 후반 레벨일수록 굵게 */
+/** 레벨업이 세 스탯에 나눠 주는 총 포인트 — 후반 레벨일수록 굵게 */
 export const levelStatPoints = (level: number): number => 2 + Math.floor(level / 10);
+
+/** 해당 레벨까지 각 스탯이 공통으로 받은 자연 성장치. 총 예산을 3등분해 기존 파워 총량을 보존한다. */
+export function statBonusByLevel(level: number): number {
+  let total = 0;
+  for (let l = 2; l <= level; l++) total += levelStatPoints(l);
+  return total / STAT_IDS.length;
+}
+
+export interface HeroAttributes {
+  readonly str: number;
+  readonly agi: number;
+  readonly int: number;
+}
+
+/** UI와 전투 계산이 공유하는 레벨별 실제 능력치. */
+export function attributesByLevel(level: number): HeroAttributes {
+  const bonus = statBonusByLevel(level);
+  return {
+    str: HERO_BASE_STR + bonus,
+    agi: HERO_BASE_AGI + bonus,
+    int: HERO_BASE_INT + bonus,
+  };
+}
 
 /** XP 골드 구매 (TFT식) — 1골드 = 1XP, 버튼 한 번에 20 */
 export const XP_BUY_GOLD = 20;

@@ -76,23 +76,8 @@ namespace GodTD.Core
             foreach (var p in MapData.SLOT_POS) Slots.Add(new Slot(p.X, p.Y));
         }
 
-        /// <summary>스탯·증강 선택 중에는 시간이 흐르지 않는다. 스탯 선택이 먼저 뜬다.</summary>
-        public bool Paused => Hero.PendingStatPoints.Count > 0 || AugmentChoices.Count > 0;
-
-        /// <summary>배분 대기 중인 레벨업 포인트 (0이면 스탯 카드 없음)</summary>
-        public int PendingStatPoints =>
-            Hero.PendingStatPoints.Count > 0 ? Hero.PendingStatPoints[0] : 0;
-
-        /// <summary>레벨업 포인트를 스탯에 배분 — 증강 선택과 같은 일시정지 카드</summary>
-        public bool ChooseStat(StatId stat)
-        {
-            if (Hero.PendingStatPoints.Count == 0) return false;
-            int points = Hero.PendingStatPoints[0];
-            Hero.PendingStatPoints.RemoveAt(0);
-            Hero.GrantStatPoints(stat, points);
-            Message = $"{HeroData.StatLabel(stat)} +{points} ({Hero.Bought.Of(stat)}pt)";
-            return true;
-        }
+        /// <summary>증강 선택 중에는 시간이 흐르지 않는다.</summary>
+        public bool Paused => AugmentChoices.Count > 0;
 
         // ── 제단 · 영웅 ──
         /// <summary>제단은 게임 시작과 함께 십자 중앙 타일에 주어진다. 그 자리에는 타워를 놓을 수 없다.</summary>
@@ -351,7 +336,7 @@ namespace GodTD.Core
 
         public int UpgradeCost(Race race) => Balance.UpgradeGasCost(Upgrades[race]);
 
-        // ── 영웅 성장 (2안): 골드 → XP → 레벨업 스탯 선택 ──
+        // ── 영웅 성장 (3안): 골드 → XP → 레벨업 자동 균등 스탯 성장 ──
         public bool CanBuyXp => !Over && Hero.Alive && Mineral >= HeroData.XP_BUY_GOLD;
 
         /// <summary>골드로 XP 구매 (TFT식) — 영웅 성장의 주 연료</summary>
