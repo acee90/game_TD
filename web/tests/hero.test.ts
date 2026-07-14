@@ -425,12 +425,13 @@ describe('적이 영웅을 때린다', () => {
   });
 });
 
-describe('빌드 정체성 — 탱커는 버티고 원거리는 때린다', () => {
+describe('빌드 정체성 — 방어는 버티고 강화는 때린다', () => {
   const aug = (id: string) => AUGMENTS.find((a) => a.id === id)!;
   const build = (ids: string[]) =>
     computeStats(30, ids.map((id) => H.makeCard(aug(id), 'silver')));
 
-  const TANK = ['bulwark', 'bulwark', 'plating'];
+  // 계열 기능축 재편(2026-07-14) 후: 방어 3 = 불굴 특화 / 강화 3 = 완숙 특화
+  const TANK = ['plating', 'fortress', 'aegis'];
   const RANGED = ['might', 'might', 'might'];
 
   /** 시뮬레이션에서 관측된 라운드별 전형적 영웅 레벨 */
@@ -448,12 +449,12 @@ describe('빌드 정체성 — 탱커는 버티고 원거리는 때린다', () =
     return s.damage / s.attackInterval;
   };
 
-  test('탱커가 원거리보다 두 배 넘게 오래 막는다', () => {
+  test('방어가 강화보다 두 배 넘게 오래 막는다', () => {
     const ratio = blockSeconds(TANK, 30) / blockSeconds(RANGED, 30);
     expect(ratio).toBeGreaterThan(2);
   });
 
-  test('원거리가 탱커보다 두 배 넘게 세게 때린다', () => {
+  test('강화가 방어보다 두 배 넘게 세게 때린다', () => {
     expect(dps(RANGED) / dps(TANK)).toBeGreaterThan(2);
   });
 
@@ -467,8 +468,8 @@ describe('빌드 정체성 — 탱커는 버티고 원거리는 때린다', () =
     }
   });
 
-  test('탱커 증강이 막는 시간을 압도적으로 늘린다', () => {
-    // 원거리(완력×3)도 스탯 특화(체력 +30%)로 체력이 붙지만 탱커에 비하면 미미하다
+  test('방어 증강이 막는 시간을 압도적으로 늘린다', () => {
+    // 강화(완력×3)도 완숙 특화(체력 +30%)로 체력이 붙지만 방어에 비하면 미미하다
     expect(blockSeconds(TANK, 30)).toBeGreaterThan(blockSeconds([], 30) * 2);
     expect(blockSeconds(RANGED, 30)).toBeLessThanOrEqual(blockSeconds([], 30) * 1.35);
     expect(blockSeconds(TANK, 30)).toBeGreaterThan(blockSeconds(RANGED, 30) * 2);
@@ -552,7 +553,7 @@ describe('특화 시너지 — 같은 계열을 모으면 터진다', () => {
   });
 
   test('같은 계열 세 개면 특화가 붙는다', () => {
-    const cards = ['might', 'vigor', 'swift'].map((id) => H.makeCard(augment(id), 'silver'));
+    const cards = ['might', 'vigor', 'rapid'].map((id) => H.makeCard(augment(id), 'silver'));
     const synergies = H.activeSynergies(cards);
     expect(synergies).toHaveLength(1);
     expect(synergies[0]).toBe(H.SYNERGIES.stat.specialist);

@@ -212,11 +212,18 @@ const ARCHETYPES: Record<string, Genome> = {
 };
 
 // ── 실행 ──
+// 탐색 깊이는 인자로 덮어쓴다: --pop=40 --gens=40 --seeds=8 --final=40
+const argNum = (name: string, fallback: number): number => {
+  const hit = process.argv.find((a) => a.startsWith(`--${name}=`));
+  const v = hit ? Number(hit.split('=')[1]) : NaN;
+  return Number.isFinite(v) && v > 0 ? Math.floor(v) : fallback;
+};
 const quick = process.argv.includes('--quick');
-const POP = quick ? 10 : 20;
-const GENS = quick ? 4 : 12;
-const SEEDS_PER_GEN = quick ? 3 : 5;
-const FINAL_SEEDS = quick ? 8 : 20;
+const POP = argNum('pop', quick ? 10 : 20);
+const GENS = argNum('gens', quick ? 4 : 12);
+const SEEDS_PER_GEN = argNum('seeds', quick ? 3 : 5);
+const FINAL_SEEDS = argNum('final', quick ? 8 : 20);
+console.log(`탐색 깊이: 개체 ${POP} × 세대 ${GENS} × 시드 ${SEEDS_PER_GEN} (최종 검증 시드 ${FINAL_SEEDS})`);
 
 const gaRand = lcg(777);
 
