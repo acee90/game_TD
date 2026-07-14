@@ -30,15 +30,16 @@ export interface HeroStats {
   readonly critChance: number;
   readonly critMult: number;
   readonly executeBelow: number;
-  /** 화상 — **스택 1개당** 초당 영웅 공격력의 이 배수 */
-  readonly burnMult: number;
-  /** 화상 최대 중첩 */
-  readonly burnMaxStacks: number;
-  /** 점화 — 최대 중첩에서 스택을 태워 터뜨린다 (0이면 안 터진다) */
-  readonly igniteMult: number;
-  readonly igniteRadius: number;
+  /** 화상 — 겹 1개당 초당 **고정** 피해 (공격력 계수 없음). 평타로는 안 붙는다 */
+  readonly burnDamage: number;
+  /** 화상 지속 시간(초) */
+  readonly burnSeconds: number;
+  /** 화염 피해 배수 — 화상 겹당 피해와 불바다 장판에 곱해진다 */
+  readonly fireDamageMult: number;
   /** 화상 걸린 적이 영웅 피해를 더 받는 비율 */
   readonly burnAmp: number;
+  /** 적 방어력 감소 (맹독) */
+  readonly armorShred: number;
   readonly slowOnHit: number;
   readonly thorns: number;
   readonly deathBlast: number;
@@ -55,17 +56,25 @@ export interface HeroStats {
 
   // ── 스킬 개조 (증강 효과에서 온 것 — skillMod와 별개로 접힌다)
   readonly skillDamageMult: number;
-  readonly skillCooldownMult: number;
+  /** 최대 마나 배수 (낮을수록 자주 쓴다) */
+  readonly manaMaxMult: number;
+  /** 마나 획득 배수 */
+  readonly manaGainMult: number;
+  /** 피격 시 추가 마나 */
+  readonly manaOnDamaged: number;
+  /** 시전 후 남는 마나 (선충전) */
+  readonly startingMana: number;
 
   /** 체력이 낮을 때만 켜지는 공격력 배수. 평상시엔 1 */
   readonly lowHpDamageMult: number;
 
-  /** 피격 시 스킬 쿨타임 감소(초) */
-  readonly skillCdrOnHit: number;
+
   /** 사망 시 폭발 (영웅 공격력 배수) */
   readonly deathNova: number;
   /** 부활 시 폭발 */
   readonly reviveNova: number;
+  /** 사망·부활 폭발의 최대 체력 계수 — 초신성은 탱커의 마지막 한 방이다 */
+  readonly novaHpMult: number;
   readonly novaRadius: number;
   /** 타워 복제 기본 티어 상한 (0이면 복제 못 한다) */
   readonly towerCopyTier: number;
@@ -110,11 +119,12 @@ export function computeStats(
   let critChance = 0;
   let critMultAdd = 0;
   let executeBelow = 0;
-  let burnMult = 0;
-  let burnStacksAdd = 0;
-  let igniteMult = 0;
-  let igniteRadius = 0;
+  let burnDamage = 0;
+  let burnSecondsAdd = 0;
+  let fireDamageBonus = 0;
   let burnAmp = 0;
+  let armorShred = 0;
+  let novaHpMult = 0;
   let slowOnHit = 0;
   let thorns = 0;
   let deathBlast = 0;
@@ -123,7 +133,8 @@ export function computeStats(
   let killStackCap = 0;
   let waveStackDamage = 0;
   let waveStackHp = 0;
-  let skillCdrOnHit = 0;
+  let manaOnDamaged = 0;
+  let startingMana = 0;
   let deathNova = 0;
   let reviveNova = 0;
   let novaRadius = 0;
@@ -139,7 +150,7 @@ export function computeStats(
   const bonus = {
     hp: 0, damage: 0, range: 0, attackSpeed: 0, moveSpeed: 0,
     towerDamage: 0, towerRange: 0, xp: 0, aggro: 0, lowHp: 0,
-    growth: 0, skillDamage: 0, skillCooldown: 0, waveReward: 0,
+    growth: 0, skillDamage: 0, manaMax: 0, manaGain: 0, waveReward: 0,
   };
   /** 곱연산 증강만 여기에 곱해진다 */
   const compound = { damage: 1, hp: 1, growth: 1, skillDamage: 1 };
@@ -176,7 +187,8 @@ export function computeStats(
     if (e.lowHpDamageMult) bonus.lowHp += e.lowHpDamageMult - 1;
     if (e.growthMult) bonus.growth += e.growthMult - 1;
     if (e.skillDamageMult) bonus.skillDamage += e.skillDamageMult - 1;
-    if (e.skillCooldownMult) bonus.skillCooldown += e.skillCooldownMult - 1;
+    if (e.manaMaxMult) bonus.manaMax += e.manaMaxMult - 1;
+    if (e.manaGainMult) bonus.manaGain += e.manaGainMult - 1;
     if (e.waveRewardMult) bonus.waveReward += e.waveRewardMult - 1;
 
     if (e.regen) regen += e.regen;
@@ -191,11 +203,12 @@ export function computeStats(
     if (e.critChance) critChance += e.critChance;
     if (e.critMultAdd) critMultAdd += e.critMultAdd;
     if (e.executeBelow) executeBelow += e.executeBelow;
-    if (e.burnMult) burnMult += e.burnMult;
-    if (e.burnStacksAdd) burnStacksAdd += e.burnStacksAdd;
-    if (e.igniteMult) igniteMult += e.igniteMult;
-    if (e.igniteRadius) igniteRadius += e.igniteRadius;
+    if (e.burnDamage) burnDamage += e.burnDamage;
+    if (e.burnSecondsAdd) burnSecondsAdd += e.burnSecondsAdd;
+    if (e.fireDamageMult) fireDamageBonus += e.fireDamageMult - 1;
     if (e.burnAmp) burnAmp += e.burnAmp;
+    if (e.armorShred) armorShred += e.armorShred;
+    if (e.novaHpMult) novaHpMult += e.novaHpMult;
     if (e.slowOnHit) slowOnHit += e.slowOnHit;
     if (e.thorns) thorns += e.thorns;
     if (e.deathBlast) deathBlast += e.deathBlast;
@@ -204,7 +217,8 @@ export function computeStats(
     if (e.killStackCap) killStackCap += e.killStackCap;
     if (e.waveStackDamage) waveStackDamage += e.waveStackDamage;
     if (e.waveStackHp) waveStackHp += e.waveStackHp;
-    if (e.skillCdrOnHit) skillCdrOnHit += e.skillCdrOnHit;
+    if (e.manaOnDamaged) manaOnDamaged += e.manaOnDamaged;
+    if (e.startingMana) startingMana += e.startingMana;
     if (e.deathNova) deathNova += e.deathNova;
     if (e.reviveNova) reviveNova += e.reviveNova;
     if (e.novaRadius) novaRadius += e.novaRadius;
@@ -247,11 +261,11 @@ export function computeStats(
     critChance: Math.min(H.CRIT_CHANCE_CAP, critChance),
     critMult: H.CRIT_BASE_MULT + critMultAdd,
     executeBelow: Math.min(H.EXECUTE_CAP, executeBelow),
-    burnMult,
-    burnMaxStacks: H.BURN_BASE_MAX_STACKS + burnStacksAdd,
-    igniteMult,
-    igniteRadius,
+    burnDamage,
+    burnSeconds: H.BURN_SECONDS + burnSecondsAdd,
+    fireDamageMult: Math.max(0.1, 1 + fireDamageBonus),
     burnAmp,
+    armorShred,
     slowOnHit: Math.min(0.8, slowOnHit),
     thorns,
     deathBlast,
@@ -265,13 +279,16 @@ export function computeStats(
     aggroRange: H.HERO_AGGRO_RANGE * Math.max(0.2, 1 + bonus.aggro),
 
     skillDamageMult: Math.max(0.1, 1 + bonus.skillDamage) * compound.skillDamage,
-    // 쿨감은 가산이지만 바닥이 있다 — 0에 닿으면 스킬이 상시 발동이 된다
-    skillCooldownMult: Math.max(0.35, 1 + bonus.skillCooldown),
+    // 최대 마나 하한 — 모으면 스킬 난사가 성립한다
+    manaMaxMult: Math.max(K.MANA_MAX_FLOOR, 1 + bonus.manaMax),
+    manaGainMult: Math.max(0.1, 1 + bonus.manaGain),
+    manaOnDamaged,
+    startingMana,
     lowHpDamageMult: Math.max(1, 1 + bonus.lowHp),
 
-    skillCdrOnHit,
     deathNova,
     reviveNova,
+    novaHpMult,
     novaRadius,
     towerCopyTier,
   };
@@ -293,8 +310,11 @@ export class Hero {
   alive = true;
   respawnTimer = 0;
   attackCooldown = 0;
-  /** 액티브 스킬 재사용 대기 */
-  skillCooldown = 0;
+  /**
+   * 마나 (TFT식). 평타를 칠 때와 맞을 때 찬다. 가득 차면 스킬이 나가고 0으로 돌아간다.
+   * 쿨타임은 없다 — 그래서 **공속이 곧 스킬 회전**이고 탱커도 스킬을 자주 쓴다.
+   */
+  mana = 0;
   /** 가스로 산 스킬 개조 횟수 */
   gasSkillDamage = 0;
   gasSkillCdr = 0;
@@ -366,21 +386,37 @@ export class Hero {
       .filter((m): m is NonNullable<typeof m> => m !== undefined);
     // 스킬 계열 증강·시너지가 주는 배수 (skillMod가 아니라 AugmentEffect로 온 것)
     const stats = this.stats;
-    if (stats.skillDamageMult !== 1 || stats.skillCooldownMult !== 1) {
-      patches.push({ damageMult: stats.skillDamageMult, cooldownMult: stats.skillCooldownMult });
+    if (stats.skillDamageMult !== 1 || stats.manaMaxMult !== 1) {
+      patches.push({ damageMult: stats.skillDamageMult, manaMaxMult: stats.manaMaxMult });
     }
     const gas: SkillModPatch[] = [];
     if (this.gasSkillDamage > 0)
       gas.push({ damageMult: Math.pow(K.GAS_SKILL_DAMAGE_MULT, this.gasSkillDamage) });
     if (this.gasSkillCdr > 0)
-      gas.push({ cooldownMult: Math.pow(K.GAS_SKILL_CDR_MULT, this.gasSkillCdr) });
+      gas.push({ manaMaxMult: Math.pow(K.GAS_SKILL_CDR_MULT, this.gasSkillCdr) });
     // 허수아비·처형은 손이 빠를수록 자주 나간다 — 공속이 쿨을 깎는다
     const attackSpeedRatio = H.HERO_ATTACK_INTERVAL / stats.attackInterval;
     return resolveSkill(id, foldMods([...patches, ...gas]), attackSpeedRatio);
   }
 
+  /** 시전에 필요한 마나 (개조 반영) */
+  get manaMax(): number {
+    return this.skill?.manaMax ?? Infinity;
+  }
+
   get skillReady(): boolean {
-    return this.alive && this.skillId !== null && this.skillCooldown <= 0;
+    return this.alive && this.skillId !== null && this.mana >= this.manaMax;
+  }
+
+  /** 마나를 채운다. 스킬이 없으면 안 찬다. */
+  gainMana(amount: number): void {
+    if (!this.alive || this.skillId === null || amount <= 0) return;
+    this.mana = Math.min(this.manaMax, this.mana + amount * this.stats.manaGainMult);
+  }
+
+  /** 시전 — 마나를 비운다 (시작 마나가 있으면 그만큼 남긴다) */
+  spendMana(): void {
+    this.mana = this.stats.startingMana;
   }
 
   /** 클릭 좌표를 경로에 투영해서 목적지로 삼는다 */
@@ -419,10 +455,8 @@ export class Hero {
     const stats = this.stats;
     this.hp -= raw * (1 - stats.damageReduction);
 
-    // '반격 집중' — 맞을수록 스킬이 빨리 돌아온다 ('마나 회복'의 번역)
-    if (stats.skillCdrOnHit > 0 && this.skillCooldown > 0) {
-      this.skillCooldown = Math.max(0, this.skillCooldown - stats.skillCdrOnHit);
-    }
+    // 맞으면 마나가 찬다 (TFT식) — 탱커가 스킬을 자주 쓰는 이유
+    this.gainMana(K.MANA_ON_DAMAGED + stats.manaOnDamaged);
 
     if (this.hp <= 0) {
       this.hp = 0;
@@ -452,7 +486,6 @@ export class Hero {
     }
 
     this.attackCooldown -= dt;
-    if (this.skillCooldown > 0) this.skillCooldown = Math.max(0, this.skillCooldown - dt);
 
     const { moveSpeed, regen, maxHp } = this.stats;
     if (regen > 0) this.hp = Math.min(maxHp, this.hp + regen * dt);
@@ -466,7 +499,7 @@ export class Hero {
 
   private respawn(): void {
     this.alive = true;
-    this.skillCooldown = 0;
+    this.mana = this.stats.startingMana;
     this.hp = this.stats.maxHp;
     this.distance = this.altarDistance;
     this.targetDistance = this.altarDistance;

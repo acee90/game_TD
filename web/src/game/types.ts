@@ -47,8 +47,10 @@ export interface Enemy extends EnemySpec {
   burnTimer?: number;
   /** 화상 초당 피해 — **스택 1개당**이다. 실제 피해는 burnDps × burnStacks */
   burnDps?: number;
-  /** 화상 중첩 수. 때릴 때마다 쌓이고, 점화 증강은 최대 스택에서 터뜨린다 */
+  /** 화상 중첩 수. 스킬·도트가 쌓고, 상한이 없다. 점화는 화상이 꺼질 때 터뜨린다 */
   burnStacks?: number;
+  /** 깎인 방어력 (맹독). 실제 장갑 = armor - armorShred */
+  armorShred?: number;
   /** 이번 프레임에 영웅/허수아비에게 붙잡혀 있는가 — 탱킹 기여 집계용 */
   held?: boolean;
 }

@@ -133,7 +133,8 @@ export class Game {
 
   // ── 액티브 스킬 (자동 시전) ──
   get canUseSkill(): boolean {
-    return !this.over && !this.paused && this.hero.skillReady;
+    // 채널링 중에는 다시 못 쓴다 (빔이 나가는 동안)
+    return !this.over && !this.paused && this.beam === null && this.hero.skillReady;
   }
 
   /**
@@ -192,6 +193,9 @@ export class Game {
         );
       case 'execution':
         return live.filter((e) => Math.abs(e.distance - hero.distance) <= hero.stats.range).length;
+      case 'chain':
+        // 튕김은 몹이 많아야 값어치가 있다 — 사거리 안 적 수를 그대로 센다
+        return live.filter((e) => Math.abs(e.distance - hero.distance) <= hero.stats.range).length;
     }
   }
 
@@ -216,16 +220,21 @@ export class Game {
         break;
       case 'laser':
         this.castLaser(skill);
-        break;
+        hero.spendMana();
+        // 채널링 — 빔이 나가는 동안은 마나가 차지 않는다 (tickBeam/stepHero가 막는다)
+        return true;
       case 'firearrow':
       case 'icearrow':
         this.castZoneArrow(skill);
         break;
       case 'execution':
         this.castExecution(skill);
-        return true; // 쿨은 castExecution이 정한다 (처치하면 초기화)
+        return true; // 마나는 castExecution이 정한다 (처치하면 마나가 안 든다)
+      case 'chain':
+        this.castChain(skill);
+        break;
     }
-    hero.skillCooldown = skill.cooldown;
+    hero.spendMana();
     return true;
   }
 
@@ -268,7 +277,9 @@ export class Game {
       radius: skill.zoneRadius,
       remaining: skill.zoneSeconds,
       // 장판 피해는 영웅 공격력에 비례한다 — 고정값은 레벨을 못 따라간다
-      dps: skill.zoneDps * hero.stats.skillPower,
+      // 불바다는 화염이다 — '점화'의 화염 배수를 함께 받는다
+      dps: skill.zoneDps * hero.stats.skillPower *
+        (skill.def.id === 'firearrow' ? hero.stats.fireDamageMult : 1),
       slow: skill.zoneSlow,
       color: skill.def.id === 'icearrow' ? '#7ce7ff' : '#ff8a3c',
     });
@@ -295,16 +306,20 @@ export class Game {
       this.shots.push({ x: hero.x, y: hero.y, tx, ty, life: 0.12, color: '#ff5a3c' });
     }
 
-    // 처치하면 쿨타임 초기화 — 잘 고르면 연쇄 처형이 된다
-    hero.skillCooldown = killed ? 0 : skill.cooldown;
-    if (killed) this.float(hero.x, hero.y, '처형!', '#ff5a3c');
+    // 처치하면 마나가 그대로 남는다 — 잘 고르면 연쇄 처형이 된다
+    if (!killed) hero.spendMana();
+    else this.float(hero.x, hero.y, '처형!', '#ff5a3c');
   }
 
   /** 스킬 피해 한 방 */
   private skillHit(enemy: Enemy, skill: K.ResolvedSkill, rawOverride?: number): void {
+    const stats = this.hero.stats;
     const raw =
-      rawOverride ?? this.hero.attackDamage * skill.damageMult * this.hero.stats.skillPower;
-    const dealt = B.effectiveDamage(this.burnAmped(enemy, raw), enemy.armor);
+      rawOverride ?? this.hero.attackDamage * skill.damageMult * stats.skillPower;
+    const dealt = B.effectiveDamage(this.burnAmped(enemy, raw), this.armorOf(enemy));
+
+    // 불은 스킬이 붙인다 (평타가 아니라)
+    this.applyBurn(enemy, stats);
     enemy.hp -= dealt;
     this.heroDamageDealt += dealt;
     enemy.lastHitByHero = true;
@@ -1111,6 +1126,8 @@ export class Game {
         }
         if (crit) this.float(tx, ty, 'CRIT!', '#ffd23f');
         hero.attackCooldown = stats.attackInterval;
+        // 평타가 마나를 채운다 (TFT식) — 채널링 중에는 안 찬다
+        if (this.beam === null) hero.gainMana(K.MANA_PER_ATTACK);
       }
     }
 
@@ -1160,6 +1177,49 @@ export class Game {
    * 화상 증폭 — 불타는 적은 영웅의 **모든** 피해를 더 받는다.
    * 평타·스킬·장판·레이저·폭사가 전부 이득을 본다. 도트끼리 시너지가 나는 지점이다.
    */
+  /**
+   * 튕기는 사격 — 가장 가까운 적을 맞히고 다음 적으로 넘어간다. **넘어갈 때마다 세진다.**
+   * 그래서 몹이 적으면 첫 타에서 끝나 가장 약한 스킬이고, 뭉쳤을 때 가장 강하다.
+   */
+  private castChain(skill: K.ResolvedSkill): void {
+    const hero = this.hero;
+    const hit = new Set<Enemy>();
+    let current = this.nearestEnemy(hero.x, hero.y, hero.stats.range);
+    if (!current) return;
+
+    let raw = hero.attackDamage * skill.damageMult * hero.stats.skillPower;
+    let from: [number, number] = [hero.x, hero.y];
+
+    for (let bounce = 0; bounce <= skill.bounces && current; bounce++) {
+      hit.add(current);
+      this.skillHit(current, skill, raw);
+
+      const [tx, ty] = pathPos(current.distance);
+      this.shots.push({ x: from[0], y: from[1], tx, ty, life: 0.12, color: '#7ce7ff' });
+      if (bounce > 0) this.float(tx, ty, `×${bounce + 1}`, '#7ce7ff');
+      from = [tx, ty];
+
+      // 다음 대상 — 아직 안 맞은 가장 가까운 적
+      let next: Enemy | null = null;
+      let best = skill.bounceRange;
+      for (const enemy of this.enemies) {
+        if (enemy.dead || hit.has(enemy)) continue;
+        const gap = Math.abs(enemy.distance - current.distance);
+        if (gap <= best) {
+          best = gap;
+          next = enemy;
+        }
+      }
+      current = next;
+      raw *= skill.bounceGrowth; // 튕길수록 세진다
+    }
+  }
+
+  /** 방깎이 반영된 실제 장갑 */
+  private armorOf(enemy: Enemy): number {
+    return Math.max(0, enemy.armor - (enemy.armorShred ?? 0));
+  }
+
   private burnAmped(enemy: Enemy, raw: number): number {
     const amp = this.hero.stats.burnAmp;
     if (amp <= 0 || !enemy.burnTimer || enemy.burnTimer <= 0) return raw;
@@ -1171,7 +1231,7 @@ export class Game {
    * 광역이면 대상마다 불린다.
    */
   private heroHitEnemy(enemy: Enemy, raw: number, stats: HeroStats): void {
-    const dealt = B.effectiveDamage(this.burnAmped(enemy, raw), enemy.armor);
+    const dealt = B.effectiveDamage(this.burnAmped(enemy, raw), this.armorOf(enemy));
     enemy.hp -= dealt;
     this.heroDamageDealt += dealt;
     enemy.lastHitByHero = true;
@@ -1179,7 +1239,8 @@ export class Game {
     if (stats.lifesteal > 0 && this.hero.alive) {
       this.hero.heal(dealt * stats.lifesteal);
     }
-    if (stats.burnMult > 0) this.applyBurn(enemy, stats);
+    // 평타는 불을 붙이지 않는다 (2026-07-14) — 화상은 스킬·도트의 것이다.
+    if (stats.armorShred > 0) this.shredArmor(enemy, stats.armorShred);
     if (stats.slowOnHit > 0) {
       const factor = 1 - stats.slowOnHit;
       // 이미 더 센 감속이 걸려 있으면 덮어쓰지 않는다
@@ -1197,41 +1258,22 @@ export class Game {
   }
 
   /**
-   * 화상을 한 겹 얹는다. 평타·불바다 장판·레이저 틱이 모두 이걸 부른다 —
-   * 도트를 얹는 것끼리 서로를 키워 준다.
+   * 화상을 한 겹 얹는다. **스킬 적중과 도트 틱만** 이걸 부른다 — 평타는 불을 못 붙인다.
+   *
+   * 상한이 없다. 겹당 피해는 공격력과 무관한 고정값이라, 화염의 스케일링은
+   * "얼마나 세게"가 아니라 **"얼마나 여러 겹"**에서 온다 — 도트가 빠를수록 두꺼워진다.
    */
   private applyBurn(enemy: Enemy, stats: HeroStats): void {
-    // 스택 1개당 피해는 **붙이는 순간의** 영웅 공격력으로 고정된다
-    enemy.burnDps = this.hero.attackDamage * stats.burnMult;
-    enemy.burnTimer = H.BURN_SECONDS;
-    enemy.burnStacks = Math.min(stats.burnMaxStacks, (enemy.burnStacks ?? 0) + 1);
-
-    // 점화 — 최대 중첩에 닿으면 스택을 통째로 태워 터뜨린다
-    if (stats.igniteMult > 0 && enemy.burnStacks >= stats.burnMaxStacks) {
-      this.ignite(enemy, stats);
-    }
+    if (stats.burnDamage <= 0) return;
+    // 겹당 고정 피해 (공격력 계수 없음) × 화염 배수('점화')
+    enemy.burnDps = stats.burnDamage * stats.fireDamageMult;
+    enemy.burnTimer = stats.burnSeconds;
+    enemy.burnStacks = (enemy.burnStacks ?? 0) + 1; // 상한 없음
   }
 
-  /** 점화 — 쌓인 화상 스택을 소진해 광역 폭발. 화상이 '터뜨릴 자원'이 되는 지점이다. */
-  private ignite(enemy: Enemy, stats: HeroStats): void {
-    const stacks = enemy.burnStacks ?? 0;
-    if (stacks <= 0) return;
-
-    const raw = this.hero.attackDamage * stats.igniteMult * stacks;
-    const [x, y] = pathPos(enemy.distance);
-    for (const other of this.enemies) {
-      if (other.dead || Math.abs(other.distance - enemy.distance) > stats.igniteRadius) continue;
-      // 점화도 화상이므로 방어력을 무시한다
-      other.hp -= raw;
-      this.heroDamageDealt += raw;
-      other.lastHitByHero = true;
-    }
-    enemy.burnStacks = 0;
-    enemy.burnTimer = undefined;
-    enemy.burnDps = undefined;
-
-    this.shots.push({ x, y, tx: x, ty: y, life: 0.2, color: '#ff8a3c', splashRadius: stats.igniteRadius });
-    this.float(x, y, `점화 ×${stacks}`, '#ff8a3c');
+  /** 방어력을 깎는다 (맹독). 0 밑으로는 안 내려간다 — 타워 피해도 같이 이득을 본다. */
+  private shredArmor(enemy: Enemy, amount: number): void {
+    enemy.armorShred = Math.min(enemy.armor, (enemy.armorShred ?? 0) + amount);
   }
 
   /**
@@ -1279,7 +1321,6 @@ export class Game {
 
     if (beam.tickTimer <= 0) {
       beam.tickTimer = beam.skill.tickInterval;
-      const stats = hero.stats;
       const raw = hero.attackDamage * beam.skill.damageMult * hero.stats.skillPower;
       for (const enemy of this.enemies) {
         if (enemy.dead) continue;
@@ -1287,14 +1328,13 @@ export class Game {
         // 앞쪽 beamLength 안 + 경로에서 벗어난 레인은 beamWidth 안
         if (gap < -H.ENEMY_TOUCH_RANGE || gap > beam.skill.beamLength) continue;
         if (Math.abs((enemy.lane ?? 0) * 12) > beam.skill.beamWidth) continue;
-        this.skillHit(enemy, beam.skill, raw);
-        // 레이저 틱도 화상을 쌓는다 — 도트끼리 맞물린다
-        if (stats.burnMult > 0) this.applyBurn(enemy, stats);
+        this.skillHit(enemy, beam.skill, raw); // 틱마다 화상 한 겹 (skillHit 안에서)
       }
       const [tx, ty] = pathPos(Math.min(PATH_LENGTH, hero.distance + beam.skill.beamLength));
       this.shots.push({ x: hero.x, y: hero.y, tx, ty, life: beam.skill.tickInterval, color: '#c065e0' });
     }
 
+    // 채널이 끝나면 그때부터 다시 마나가 찬다 (빔 중에는 안 찬다)
     if (beam.remaining <= 0) this.beam = null;
   }
 
@@ -1305,14 +1345,14 @@ export class Game {
       const wasWhole = Math.ceil(zone.remaining);
       zone.remaining -= dt;
       // 불바다는 1초에 한 번 화상을 얹는다 — 불화살 + 화염 부착이 한 빌드가 된다
-      const burnTick = zone.dps > 0 && stats.burnMult > 0 && Math.ceil(zone.remaining) < wasWhole;
+      const burnTick = zone.dps > 0 && stats.burnDamage > 0 && Math.ceil(zone.remaining) < wasWhole;
 
       for (const enemy of this.enemies) {
         if (enemy.dead) continue;
         if (Math.abs(enemy.distance - zone.distance) > zone.radius) continue;
 
         if (zone.dps > 0) {
-          const dealt = B.effectiveDamage(this.burnAmped(enemy, zone.dps * dt), enemy.armor);
+          const dealt = B.effectiveDamage(this.burnAmped(enemy, zone.dps * dt), this.armorOf(enemy));
           enemy.hp -= dealt;
           this.heroDamageDealt += dealt;
           enemy.lastHitByHero = true;
@@ -1335,13 +1375,20 @@ export class Game {
     const hero = this.hero;
     const stats = hero.stats;
 
+    // 초신성은 탱커의 마지막 한 방이다 — 체력 계수가 공격력 계수보다 크다
+    const novaBase = (mult: number) => stats.damage * mult + stats.maxHp * stats.novaHpMult;
+
     if (hero.justDied) {
       hero.justDied = false;
-      if (stats.deathNova > 0) this.novaAt(hero.distance, stats.damage * stats.deathNova, stats.novaRadius, '초신성!');
+      if (stats.deathNova > 0 || stats.novaHpMult > 0) {
+        this.novaAt(hero.distance, novaBase(stats.deathNova), stats.novaRadius, '초신성!');
+      }
     }
     if (hero.justRevived) {
       hero.justRevived = false;
-      if (stats.reviveNova > 0) this.novaAt(hero.distance, stats.damage * stats.reviveNova, stats.novaRadius, '재림!');
+      if (stats.reviveNova > 0 || stats.novaHpMult > 0) {
+        this.novaAt(hero.distance, novaBase(stats.reviveNova), stats.novaRadius, '재림!');
+      }
     }
   }
 
@@ -1349,7 +1396,7 @@ export class Game {
     const [x, y] = pathPos(distance);
     for (const enemy of this.enemies) {
       if (enemy.dead || Math.abs(enemy.distance - distance) > radius) continue;
-      const dealt = B.effectiveDamage(raw, enemy.armor);
+      const dealt = B.effectiveDamage(raw, this.armorOf(enemy));
       enemy.hp -= dealt;
       this.heroDamageDealt += dealt;
       enemy.lastHitByHero = true;

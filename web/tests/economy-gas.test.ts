@@ -92,15 +92,15 @@ describe('가스 스킬 개조 — 업그레이드와 같은 지갑', () => {
     expect(game.hero.skill!.damageMult).toBeCloseTo(before * K.GAS_SKILL_DAMAGE_MULT, 5);
   });
 
-  test('쿨감 개조는 쿨타임을 줄이되 1초 밑으로는 못 간다', () => {
+  test('가스 개조는 필요 마나를 줄이되 바닥 밑으로는 못 간다', () => {
     const game = new Game(() => 0.5);
     game.gas = 100000;
     game.hero.addAugment(card('skill_volley'));
-    const before = game.hero.skill!.cooldown;
+    const before = game.hero.skill!.manaMax;
     game.buyGasSkill('cdr');
-    expect(game.hero.skill!.cooldown).toBeCloseTo(before * K.GAS_SKILL_CDR_MULT, 5);
+    expect(game.hero.skill!.manaMax).toBeCloseTo(before * K.GAS_SKILL_CDR_MULT, 5);
     for (let i = 0; i < 60; i++) game.buyGasSkill('cdr');
-    expect(game.hero.skill!.cooldown).toBeGreaterThanOrEqual(1);
+    expect(game.hero.skill!.manaMax).toBeGreaterThanOrEqual(10);
   });
 
   test('비용은 지수로 오른다 — 무한 스케일링 방지', () => {

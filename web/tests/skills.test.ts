@@ -14,6 +14,12 @@ const augment = (id: string) => AUGMENTS.find((a) => a.id === id)!;
 const card = (id: string, rarity: H.Rarity = 'silver') => H.makeCard(augment(id), rarity);
 
 /** 영웅 사거리 안에 잡몹 하나 */
+/** 마나를 채우고 시전한다 — 마나 전환(TFT식) 후 스킬은 0마나로 시작한다 */
+const castNow = (game: Game): boolean => {
+  game.hero.mana = game.hero.manaMax;
+  return game.useSkill();
+};
+
 const mob = (distance: number, hp = 1e9, speed = 40): Enemy => ({
   kind: 'mob', name: 'x', maxHp: hp, hp, armor: 0,
   speed, radius: 9, distance,
@@ -33,6 +39,10 @@ describe('스킬 획득 — 하나만 든다', () => {
 
     expect(hero.skillId).toBe('volley');
     expect(hero.skill!.def.name).toBe('일제 사격');
+
+    // 마나 전환(TFT식) — 갓 얻은 스킬은 0마나라 아직 못 쓴다. 평타로 채워야 나간다.
+    expect(hero.skillReady).toBe(false);
+    hero.gainMana(hero.manaMax);
     expect(hero.skillReady).toBe(true);
   });
 
@@ -96,16 +106,18 @@ describe('스킬 획득 — 하나만 든다', () => {
 });
 
 describe('스킬 개조 — 수치가 아니라 관계다', () => {
-  test('냉각은 쿨타임을 줄이되 1초 밑으로는 안 내려간다', () => {
+  test('집중 수련은 필요 마나를 줄이되 바닥이 있다', () => {
     const hero = new Hero();
     hero.addAugment(card('skill_volley'));
-    const base = hero.skill!.cooldown;
+    const base = hero.skill!.manaMax;
 
     hero.addAugment(card('skill_cdr'));
-    expect(hero.skill!.cooldown).toBeCloseTo(base * 0.8, 5);
+    expect(hero.skill!.manaMax).toBeCloseTo(base * 0.85, 5);
 
+    // 아무리 쌓아도 바닥 밑으로는 안 내려간다 (스킬이 상시 발동이 되면 안 된다)
     for (let i = 0; i < 10; i++) hero.addAugment(card('skill_cdr'));
-    expect(hero.skill!.cooldown).toBeGreaterThanOrEqual(1);
+    expect(hero.skill!.manaMax).toBeGreaterThanOrEqual(base * K.MANA_MAX_FLOOR - 0.001);
+    expect(hero.skill!.manaMax).toBeGreaterThanOrEqual(10);
   });
 
   test('증폭은 스킬 피해를 곱한다', () => {
@@ -172,19 +184,21 @@ describe('스킬 시전', () => {
   test('스킬이 없으면 못 쓴다', () => {
     const game = new Game();
     expect(game.canUseSkill).toBe(false);
-    expect(game.useSkill()).toBe(false);
+    expect(castNow(game)).toBe(false);
   });
 
-  test('쓰면 쿨타임이 돈다', () => {
+  test('쓰면 마나가 비고, 평타로 다시 찬다 (TFT식)', () => {
     const game = new Game();
     game.hero.addAugment(card('skill_whirlwind'));
+    game.hero.mana = game.hero.manaMax; // 가득 채워 시전 가능 상태로
     game.enemies.push(mob(game.hero.distance));
 
-    expect(game.useSkill()).toBe(true);
-    expect(game.hero.skillCooldown).toBeCloseTo(game.hero.skill!.cooldown, 5);
+    expect(castNow(game)).toBe(true);
+    expect(game.hero.mana).toBe(0); // 시전하면 마나가 빈다
     expect(game.canUseSkill).toBe(false);
 
-    game.update(game.hero.skill!.cooldown + 0.1);
+    // 평타를 치면 마나가 다시 찬다 — 공속이 곧 스킬 회전이다
+    for (let i = 0; i < 600 && !game.canUseSkill; i++) game.update(1 / 60);
     expect(game.canUseSkill).toBe(true);
   });
 
@@ -194,7 +208,7 @@ describe('스킬 시전', () => {
     game.hero.takeDamage(1e9);
 
     expect(game.canUseSkill).toBe(false);
-    expect(game.useSkill()).toBe(false);
+    expect(castNow(game)).toBe(false);
   });
 
   test('소용돌이는 주변 적 전체를 때린다', () => {
@@ -204,7 +218,7 @@ describe('스킬 시전', () => {
 
     game.enemies.push(mob(d - 20), mob(d + 20), mob(d + 500));
     const before = game.enemies.map((e) => e.hp);
-    game.useSkill();
+    castNow(game);
 
     expect(game.enemies[0].hp).toBeLessThan(before[0]);
     expect(game.enemies[1].hp).toBeLessThan(before[1]);
@@ -218,7 +232,7 @@ describe('스킬 시전', () => {
     const enemy = mob(game.hero.distance - 20);
     game.enemies.push(enemy);
 
-    game.useSkill();
+    castNow(game);
     expect(enemy.slowFactor).toBeLessThan(1);
     expect(enemy.slowTimer).toBeGreaterThan(0);
 
@@ -233,7 +247,7 @@ describe('스킬 시전', () => {
     const d = game.hero.distance;
     for (let i = 0; i < 8; i++) game.enemies.push(mob(d + i * 2));
 
-    game.useSkill();
+    castNow(game);
     const hit = game.enemies.filter((e) => e.hp < e.maxHp).length;
     expect(hit).toBe(game.hero.skill!.targets);
   });
@@ -248,7 +262,7 @@ describe('스킬 시전', () => {
     for (const game of [plain, explosive]) {
       const d = game.hero.distance;
       for (let i = 0; i < 10; i++) game.enemies.push(mob(d + i * 6));
-      game.useSkill();
+      castNow(game);
     }
 
     const hitCount = (game: Game) => game.enemies.filter((e) => e.hp < e.maxHp).length;
@@ -264,7 +278,7 @@ describe('스킬 시전', () => {
     const far = [0, 5, 10, 15, 20].map((o) => mob(700 + o));
     game.enemies.push(near, ...far);
 
-    game.useSkill();
+    castNow(game);
     expect(far.every((e) => e.hp < e.maxHp)).toBe(true);
     expect(near.hp).toBe(near.maxHp);
   });
@@ -272,7 +286,7 @@ describe('스킬 시전', () => {
   test('적이 없으면 유성은 헛돌지 않는다', () => {
     const game = new Game();
     game.hero.addAugment(card('skill_meteor'));
-    expect(() => game.useSkill()).not.toThrow();
+    expect(() => castNow(game)).not.toThrow();
   });
 });
 
@@ -280,7 +294,7 @@ describe('허수아비 — 원거리 영웅의 탱커', () => {
   test('영웅 앞쪽(몹이 오는 쪽)에 선다', () => {
     const game = new Game();
     game.hero.addAugment(card('skill_decoy'));
-    game.useSkill();
+    castNow(game);
 
     expect(game.decoy).not.toBeNull();
     expect(game.decoy!.distance).toBeLessThan(game.hero.distance);
@@ -289,7 +303,7 @@ describe('허수아비 — 원거리 영웅의 탱커', () => {
   test('몹이 허수아비에 붙잡힌다', () => {
     const game = new Game();
     game.hero.addAugment(card('skill_decoy'));
-    game.useSkill();
+    castNow(game);
 
     const decoy = game.decoy!;
     const enemy = mob(decoy.distance - 30);
@@ -302,7 +316,7 @@ describe('허수아비 — 원거리 영웅의 탱커', () => {
   test('허수아비에 붙은 몹은 영웅을 때리지 않는다', () => {
     const game = new Game();
     game.hero.addAugment(card('skill_decoy'));
-    game.useSkill();
+    castNow(game);
 
     // 허수아비 자리에 몹을 둔다 — 영웅과도 가깝다
     const enemy = mob(game.decoy!.distance, 1e9, 0);
@@ -318,7 +332,7 @@ describe('허수아비 — 원거리 영웅의 탱커', () => {
   test('체력이 다하면 사라진다', () => {
     const game = new Game();
     game.hero.addAugment(card('skill_decoy'));
-    game.useSkill();
+    castNow(game);
     game.decoy!.hp = 1;
 
     const enemy = mob(game.decoy!.distance, 1e9, 0);
@@ -331,7 +345,7 @@ describe('허수아비 — 원거리 영웅의 탱커', () => {
   test('수명이 다하면 사라진다', () => {
     const game = new Game();
     game.hero.addAugment(card('skill_decoy'));
-    game.useSkill();
+    castNow(game);
 
     game.update(K.DECOY_LIFETIME + 0.1);
     expect(game.decoy).toBeNull();
@@ -340,12 +354,12 @@ describe('허수아비 — 원거리 영웅의 탱커', () => {
   test('도발 인형은 체력이 두 배다', () => {
     const plain = new Game();
     plain.hero.addAugment(card('skill_decoy'));
-    plain.useSkill();
+    castNow(plain);
 
     const taunting = new Game();
     taunting.hero.addAugment(card('skill_decoy'));
     taunting.hero.addAugment(card('taunt_dummy'));
-    taunting.useSkill();
+    castNow(taunting);
 
     // 반올림이 한 번(최종값)만 들어가므로 ±1 오차를 허용한다
     expect(taunting.decoy!.maxHp).toBeCloseTo(plain.decoy!.maxHp * 2, -1);
@@ -357,7 +371,7 @@ describe('허수아비 — 원거리 영웅의 탱커', () => {
   const decoyOnly = (augments: string[]) => {
     const game = new Game();
     for (const id of augments) game.hero.addAugment(card(id));
-    game.useSkill();
+    castNow(game);
     game.hero.takeDamage(1e9);
     return game;
   };
@@ -388,9 +402,16 @@ describe('허수아비 — 원거리 영웅의 탱커', () => {
 });
 
 describe('자동 시전 — 플레이어는 무엇을 들지만 고른다', () => {
-  test('쿨타임이 차도 조건을 못 채우면 안 쏜다', () => {
+  /** 마나를 가득 채운다 (TFT식 — 스킬은 0마나로 시작한다) */
+  const charged = (game: Game): Game => {
+    game.hero.mana = game.hero.manaMax;
+    return game;
+  };
+
+  test('마나가 차도 조건을 못 채우면 안 쏜다', () => {
     const game = new Game();
     game.hero.addAugment(card('skill_whirlwind')); // 최소 2기 필요
+    charged(game);
 
     expect(game.canUseSkill).toBe(true);
     expect(game.shouldAutoCastSkill).toBe(false);
@@ -405,13 +426,14 @@ describe('자동 시전 — 플레이어는 무엇을 들지만 고른다', () =
   test('조건을 채우면 update가 알아서 쏜다', () => {
     const game = new Game();
     game.hero.addAugment(card('skill_whirlwind'));
+    charged(game);
     const a = mob(game.hero.distance, 1e9, 0);
     const b = mob(game.hero.distance + 10, 1e9, 0);
     game.enemies.push(a, b);
 
     game.update(0.016);
 
-    expect(game.hero.skillCooldown).toBeGreaterThan(0);
+    expect(game.hero.mana).toBeLessThan(game.hero.manaMax); // 시전에 마나를 썼다
     expect(a.hp).toBeLessThan(a.maxHp);
     expect(b.hp).toBeLessThan(b.maxHp);
   });
@@ -419,6 +441,7 @@ describe('자동 시전 — 플레이어는 무엇을 들지만 고른다', () =
   test('유성은 뭉쳤을 때만 떨어진다', () => {
     const game = new Game();
     game.hero.addAugment(card('skill_meteor')); // 최소 3기
+    charged(game);
 
     game.enemies.push(mob(500, 1e9, 0), mob(900, 1e9, 0));
     expect(game.shouldAutoCastSkill).toBe(false); // 흩어져 있다
@@ -430,6 +453,7 @@ describe('자동 시전 — 플레이어는 무엇을 들지만 고른다', () =
   test('일제 사격은 한 기만 있어도 쏜다', () => {
     const game = new Game();
     game.hero.addAugment(card('skill_volley'));
+    charged(game);
     expect(game.shouldAutoCastSkill).toBe(false);
 
     game.enemies.push(mob(game.hero.distance + 20, 1e9, 0));
@@ -439,11 +463,12 @@ describe('자동 시전 — 플레이어는 무엇을 들지만 고른다', () =
   test('허수아비는 이미 서 있으면 다시 안 세운다', () => {
     const game = new Game();
     game.hero.addAugment(card('skill_decoy'));
+    charged(game);
     game.enemies.push(mob(game.hero.distance - 40, 1e9, 0), mob(game.hero.distance - 60, 1e9, 0));
 
     expect(game.shouldAutoCastSkill).toBe(true);
-    game.useSkill();
-    game.hero.skillCooldown = 0;
+    castNow(game);
+    game.hero.mana = game.hero.manaMax;
 
     expect(game.decoy).not.toBeNull();
     expect(game.shouldAutoCastSkill).toBe(false);
@@ -452,6 +477,7 @@ describe('자동 시전 — 플레이어는 무엇을 들지만 고른다', () =
   test('허수아비는 뒤쪽 몹에는 반응하지 않는다 — 이미 지나간 몹이다', () => {
     const game = new Game();
     game.hero.addAugment(card('skill_decoy'));
+    charged(game);
     game.enemies.push(mob(game.hero.distance + 40, 1e9, 0), mob(game.hero.distance + 60, 1e9, 0));
 
     expect(game.shouldAutoCastSkill).toBe(false);
@@ -460,6 +486,7 @@ describe('자동 시전 — 플레이어는 무엇을 들지만 고른다', () =
   test('죽어 있으면 자동 시전도 없다', () => {
     const game = new Game();
     game.hero.addAugment(card('skill_whirlwind'));
+    charged(game);
     game.enemies.push(mob(game.hero.distance, 1e9, 0), mob(game.hero.distance + 5, 1e9, 0));
     game.hero.takeDamage(1e9);
 
@@ -469,6 +496,7 @@ describe('자동 시전 — 플레이어는 무엇을 들지만 고른다', () =
   test('증강 선택 중에는 시전하지 않는다', () => {
     const game = new Game();
     game.hero.addAugment(card('skill_whirlwind'));
+    charged(game);
     game.enemies.push(mob(game.hero.distance, 1e9, 0), mob(game.hero.distance + 5, 1e9, 0));
     game.hero.pendingAugmentPicks = 1;
     game.update(0.016); // 선택지를 띄운다
@@ -484,7 +512,7 @@ describe('스킬은 막타 경험치를 준다', () => {
     game.hero.addAugment(card('skill_whirlwind'));
     game.enemies.push({ ...mob(game.hero.distance, 1), hp: 1 });
 
-    game.useSkill();
+    castNow(game);
     game.update(0.016);
 
     expect(game.kills).toBe(1);

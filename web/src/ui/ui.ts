@@ -269,8 +269,8 @@ function refreshHero(el: Elements, game: Game): void {
   el.skill.hidden = skill === null;
   if (skill === null) el.gasSkillRow.hidden = true;
   if (skill) {
-    const remain = Math.max(0, hero.skillCooldown);
-    const charged = 1 - remain / skill.cooldown;
+    // 마나 게이지 (TFT식) — 평타·피격으로 찬다
+    const charged = Math.min(1, hero.mana / skill.manaMax);
     el.skill.classList.toggle('ready', game.canUseSkill);
     el.skillCd.style.transform = `scaleX(${charged.toFixed(3)})`;
 
@@ -280,13 +280,13 @@ function refreshHero(el: Elements, game: Game): void {
     const targets = skill.targets > 0 ? ` · ${skill.targets}발` : '';
     const state = game.canUseSkill
       ? game.shouldAutoCastSkill ? '시전!' : '대기 중'
-      : `${remain.toFixed(1)}s`;
+      : `마나 ${Math.floor(hero.mana)}/${Math.round(skill.manaMax)}`;
     el.skillText.textContent = `${skill.def.name}${damage}${targets} · ${state}`;
 
     el.gasSkillRow.hidden = false;
     el.gasSkillDmg.textContent = `스킬 피해 +8% · ${game.gasSkillCost('damage')}가스 (${hero.gasSkillDamage})`;
     el.gasSkillDmg.disabled = !game.canBuyGasSkill('damage');
-    el.gasSkillCdr.textContent = `쿨타임 -6% · ${game.gasSkillCost('cdr')}가스 (${hero.gasSkillCdr})`;
+    el.gasSkillCdr.textContent = `필요 마나 -6% · ${game.gasSkillCost('cdr')}가스 (${hero.gasSkillCdr})`;
     el.gasSkillCdr.disabled = !game.canBuyGasSkill('cdr');
   }
 

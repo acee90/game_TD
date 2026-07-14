@@ -212,13 +212,16 @@ export const AUGMENT_KIND_COLOR: Record<AugmentKind, string> = {
 /** 화상 지속 시간 — 공격할 때마다 새로 덧씌운다 */
 export const BURN_SECONDS = 3;
 /**
- * 화상 기본 최대 중첩.
+ * 화상 — **평타로는 안 붙는다. 스킬과 도트만 불을 붙인다** (2026-07-14 재설계).
  *
- * 화상은 처음엔 "때리면 초당 고정 피해"였고, 그래서 아무 선택도 만들지 않는 죽은 카드였다.
- * 이제 **때릴수록 쌓인다** — 공속·다단히트가 화상과 맞물리고, 최대 스택은 '점화'로
- * 터뜨릴 자원이 된다. 도트를 얹는 다른 것들(불바다 장판·레이저 틱)도 스택을 쌓는다.
+ * 그래서 화염은 평타 빌드의 부록이 아니라 **스킬·도트 빌드의 심장**이 된다:
+ * 레이저는 틱마다, 불바다 장판은 초마다 중첩을 얹는다 — 도트 하나하나가 연료다.
+ *
+ * **중첩 상한이 없다.** 대신 중첩당 피해는 **공격력과 무관한 고정값**이다.
+ * 화염의 성장축은 "얼마나 세게 때리나"가 아니라 **"얼마나 오래, 얼마나 여러 겹 지지나"**다.
+ * 오래 사는 대상(보스)일수록 겹이 두꺼워진다.
  */
-export const BURN_BASE_MAX_STACKS = 3;
+export const BURN_SECONDS_BASE = BURN_SECONDS;
 /** 공격 감속 지속 시간 */
 export const SLOW_ON_HIT_SECONDS = 1.5;
 /** 이 비율 밑이면 '위기' — 위기 증강이 켜진다 */
@@ -255,8 +258,10 @@ export interface AugmentEffect {
   readonly growthMult?: number;
   /** 스킬 피해 배수 */
   readonly skillDamageMult?: number;
-  /** 스킬 쿨타임 배수 */
-  readonly skillCooldownMult?: number;
+  /** 최대 마나 배수 (낮을수록 스킬을 자주 쓴다 — 옛 쿨감의 자리) */
+  readonly manaMaxMult?: number;
+  /** 마나 획득 배수 */
+  readonly manaGainMult?: number;
 
   // ── 가산형 (값 자체를 등급이 키운다)
   /** 초당 체력 재생 */
@@ -274,22 +279,22 @@ export interface AugmentEffect {
   /** 대상 최대 체력의 이 비율 밑이면 즉사시킨다 */
   readonly executeBelow?: number;
   /**
-   * 공격에 화상을 붙인다 — **초당 영웅 공격력의 이 배수**.
+   * 화상 — **중첩 1겹당 초당 고정 피해**. 공격력 계수가 없다.
    *
-   * 처음엔 고정값(초당 8)이었다. 측정해 보니 Lv30 영웅 공격력이 614인데 초당 8이라
-   * 사실상 0이었다. 고정 수치는 레벨을 못 따라간다 — 발동 효과는 전부 영웅 파워에
-   * 비례해야 강화 계열(곱연산)과 같은 저울에 오른다.
+   * 스킬 적중과 도트 틱(레이저·불바다)이 겹을 얹는다. 평타는 불을 붙이지 않는다.
+   * 상한이 없으므로 화염의 스케일링은 **겹 수**에서 온다 — 도트가 빠를수록,
+   * 화상이 오래 갈수록 두꺼워진다.
    */
-  readonly burnMult?: number;
-  /** 화상 최대 중첩을 늘린다 */
-  readonly burnStacksAdd?: number;
+  readonly burnDamage?: number;
+  /** 화상 지속 시간 가산(초) — 겹이 더 오래 살아남는다 */
+  readonly burnSecondsAdd?: number;
+  /** 적의 방어력을 깎는다 (중첩되며, 0 밑으로는 안 내려간다) */
+  readonly armorShred?: number;
   /**
-   * 점화 — 화상이 최대 중첩에 닿으면 스택을 태워 터뜨린다.
-   * 폭발 피해 = 영웅 공격력 × 이 배수 × 터진 스택 수.
+   * 화염 피해 배수 — **화상 겹당 피해와 불바다 장판 피해에 곱해진다.**
+   * (전역 공격력이 아니라 '불'에만 걸리는 곱이다 — 화염 빌드의 성장축.)
    */
-  readonly igniteMult?: number;
-  /** 점화 폭발 반경 */
-  readonly igniteRadius?: number;
+  readonly fireDamageMult?: number;
   /**
    * 화상에 걸린 적이 **모든 영웅 피해**를 이만큼 더 받는다 (0.25 = +25%).
    * 평타·스킬·장판·레이저가 전부 이득을 본다 — 도트끼리 시너지가 나는 지점이다.
@@ -326,12 +331,19 @@ export interface AugmentEffect {
   /** 라운드마다 최대 체력 +이 값 (영구 누적) */
   readonly waveStackHp?: number;
 
-  /** 영웅이 피격당할 때마다 스킬 쿨타임이 이만큼(초) 줄어든다 ('마나 회복'의 번역) */
-  readonly skillCdrOnHit?: number;
+  /** 피격 시 추가로 차는 마나 */
+  readonly manaOnDamaged?: number;
+  /** 시전 후 남는 마나 (선충전) — 다음 시전이 그만큼 빨라진다 */
+  readonly startingMana?: number;
   /** 영웅이 죽을 때 터진다 — 영웅 공격력의 이 배수만큼 광역 피해 */
   readonly deathNova?: number;
   /** 영웅이 부활할 때 제단에서 터진다 */
   readonly reviveNova?: number;
+  /**
+   * 사망·부활 폭발의 **최대 체력 계수**. 폭발 피해 = 공격력×deathNova + 최대체력×이 값.
+   * 체력 쪽 계수가 더 크다 — 초신성은 딜러가 아니라 **탱커의 마지막 한 방**이다.
+   */
+  readonly novaHpMult?: number;
   /** 사망·부활 폭발의 반경 */
   readonly novaRadius?: number;
 
@@ -445,7 +457,8 @@ export function scaleEffect(effect: AugmentEffect, power: number): AugmentEffect
     lowHpDamageMult: mult(effect.lowHpDamageMult),
     growthMult: mult(effect.growthMult),
     skillDamageMult: mult(effect.skillDamageMult),
-    skillCooldownMult: mult(effect.skillCooldownMult),
+    manaMaxMult: mult(effect.manaMaxMult),
+    manaGainMult: mult(effect.manaGainMult),
 
     regen: add(effect.regen),
     // 증강 하나가 등급빨로 과보호되지 않게 자른다. 합산 상한은 computeStats가 따로 건다.
@@ -458,19 +471,20 @@ export function scaleEffect(effect: AugmentEffect, power: number): AugmentEffect
     critChance: add(effect.critChance),
     critMultAdd: add(effect.critMultAdd),
     executeBelow: add(effect.executeBelow),
-    burnMult: add(effect.burnMult),
-    burnStacksAdd:
-      effect.burnStacksAdd === undefined ? undefined : Math.round(add(effect.burnStacksAdd)!),
-    igniteMult: add(effect.igniteMult),
-    igniteRadius: add(effect.igniteRadius),
+    burnDamage: add(effect.burnDamage),
+    burnSecondsAdd: add(effect.burnSecondsAdd),
+    armorShred: add(effect.armorShred),
+    fireDamageMult: mult(effect.fireDamageMult),
     burnAmp: add(effect.burnAmp),
     slowOnHit: add(effect.slowOnHit),
     thorns: add(effect.thorns),
     deathBlast: add(effect.deathBlast),
     deathBlastRadius: add(effect.deathBlastRadius),
-    skillCdrOnHit: add(effect.skillCdrOnHit),
+    manaOnDamaged: add(effect.manaOnDamaged),
+    startingMana: add(effect.startingMana),
     deathNova: add(effect.deathNova),
     reviveNova: add(effect.reviveNova),
+    novaHpMult: add(effect.novaHpMult),
     novaRadius: add(effect.novaRadius),
     // 복제 티어 상한은 등급으로 커진다 — 플래티넘 복제 장치는 더 좋은 타워를 베낀다
     towerCopyTier:
@@ -580,28 +594,32 @@ export const AUGMENTS: readonly Augment[] = [
   { id: 'ruthless', kind: 'combat', name: '무자비', description: '공격력 +35%, 체력 7% 이하의 적을 즉사시킨다',
     maxStacks: 2, effect: { damageMult: 1.35, executeBelow: 0.07 } },
   // 아레나 '개척자/고문자' — 무한 중첩 화상
-  // ── 화염 계열 — 중첩 → 점화 → 증폭으로 맞물린다.
-  // 화상은 **방어력을 무시한다(트루 피해).** 몹 장갑은 라운드마다 계단식으로 오르므로
-  // (floor(R/5)×3), 후반에 유일하게 감산되지 않는 피해가 된다. 그게 화염 빌드의 정체성이다.
+  // ── 화염 계열 — **평타로는 안 붙는다. 스킬과 도트만 불을 붙인다.**
+  // 중첩 상한이 없고 중첩당 피해는 고정값이다(공격력 계수 없음). 성장축은 '겹 수'다 —
+  // 레이저 틱·불바다 장판이 겹을 얹으므로 도트가 빠를수록 두꺼워진다.
+  // 화상은 **방어력을 무시한다(트루 피해).** 장갑이 라운드마다 계단식으로 오르므로
+  // 후반에 유일하게 감산되지 않는 피해가 된다.
   { id: 'burn', kind: 'combat', name: '화염 부착',
-    description: '공격이 화상을 중첩시킨다 — 중첩당 초당 공격력 12% (방어력 무시), 최대 3중첩',
-    maxStacks: 3, effect: { burnMult: 0.12 } },
+    description: '스킬·도트가 화상을 중첩시킨다 — 겹당 초당 12 고정 피해(방어력 무시), 상한 없음',
+    maxStacks: 3, effect: { burnDamage: 12 } },
   { id: 'kindling', kind: 'combat', name: '불쏘시개',
-    description: '화상 최대 중첩 +3, 화상 걸린 적이 받는 피해 +15%', maxStacks: 2,
-    effect: { burnStacksAdd: 3, burnAmp: 0.15 } },
-  // 점화 — 쌓인 화상을 터뜨릴 자원으로 바꾼다
+    description: '화상 지속 +3초 (겹이 오래 살아 더 두껍게 쌓인다), 화상 걸린 적이 받는 피해 +15%',
+    maxStacks: 2, effect: { burnSecondsAdd: 3, burnAmp: 0.15 } },
+  // 점화 — 폭발이 아니라 **불의 화력 자체**를 키운다. 화상 겹당 피해와 불바다 피해에 곱해진다.
   { id: 'ignite', kind: 'combat', name: '점화',
-    description: '화상이 최대 중첩에 닿으면 중첩을 태워 폭발 (중첩당 공격력 35%, 반경 55, 방어력 무시)',
-    maxStacks: 2, effect: { igniteMult: 0.35, igniteRadius: 55 } },
+    description: '모든 화염 피해 +60% (화상 겹당 피해 · 불바다 장판)',
+    maxStacks: 3, effect: { fireDamageMult: 1.6 } },
   // 도트끼리의 시너지 — 불바다 장판·레이저 틱도 화상을 쌓는다
   { id: 'pyromancy', kind: 'combat', name: '발화술',
     description: '화상 걸린 적이 받는 모든 피해 +30% (평타·스킬·장판·레이저 전부)', maxStacks: 2,
     effect: { burnAmp: 0.3 } },
   { id: 'frost', kind: 'combat', name: '서리 일격', description: '공격이 적을 35% 감속시킨다', maxStacks: 2,
     effect: { slowOnHit: 0.35 } },
+  // 맹독 — 딜이 아니라 **약화**다. 느리게 만들고 갑옷을 녹인다.
+  // 방깎은 타워에게도 이득이다(장갑은 모든 피해에서 감산되므로) — 영웅이 보드를 돕는 축.
   { id: 'venom', kind: 'combat', name: '맹독',
-    description: '화상 중첩당 초당 공격력 8% (방어력 무시) · 20% 감속', maxStacks: 2,
-    effect: { burnMult: 0.08, slowOnHit: 0.2 } },
+    description: '공격이 25% 감속시키고 방어력을 6 깎는다 (중첩)', maxStacks: 3,
+    effect: { slowOnHit: 0.25, armorShred: 6 } },
   // 아레나 '연쇄 폭발' — 죽은 적이 터진다
   { id: 'deathblast', kind: 'combat', name: '폭사', description: '처치한 적이 반경 50에 공격력 3배로 폭발',
     maxStacks: 2, effect: { deathBlast: 3, deathBlastRadius: 50 } },
@@ -610,9 +628,10 @@ export const AUGMENTS: readonly Augment[] = [
   { id: 'berserk', kind: 'combat', name: '광폭화', description: '공격 속도 +30%, 가한 피해의 8% 회복',
     maxStacks: 2, effect: { attackSpeedMult: 1.3, lifesteal: 0.08 } },
   // 사망도 자원으로 쓴다 — 죽는 순간과 돌아오는 순간이 둘 다 폭발이다
+  // 초신성 — 딜러가 아니라 **탱커의 마지막 한 방**이다. 체력 계수가 공격력 계수보다 크다.
   { id: 'supernova', kind: 'combat', name: '초신성',
-    description: '사망 시 공격력 8배, 부활 시 5배로 반경 90 폭발', maxStacks: 2,
-    effect: { deathNova: 8, reviveNova: 5, novaRadius: 90 } },
+    description: '사망·부활 시 반경 90 폭발 — 공격력 2배 + 최대 체력 40%', maxStacks: 2,
+    effect: { deathNova: 2, reviveNova: 1.2, novaHpMult: 0.4, novaRadius: 90 } },
 
   // ══ 스킬 (skill) — 획득과 개조. 영웅은 스킬을 하나만 든다.
   { id: 'skill_whirlwind', kind: 'skill', name: '소용돌이', maxStacks: 1,
@@ -627,20 +646,31 @@ export const AUGMENTS: readonly Augment[] = [
   { id: 'skill_decoy', kind: 'skill', name: '허수아비', maxStacks: 1,
     description: '[스킬] 앞쪽에 미끼를 세워 몹을 붙잡는다 · 쿨 18초',
     effect: {}, grantsSkill: 'decoy' },
-  { id: 'skill_cdr', kind: 'skill', name: '냉각', maxStacks: 3,
-    description: '스킬 쿨타임 20% 감소',
-    effect: {}, skillMod: { cooldownMult: 0.8 }, requiresSkill: 'any' },
+  { id: 'skill_cdr', kind: 'skill', name: '집중 수련', maxStacks: 3,
+    description: '필요 마나 15% 감소',
+    effect: {}, skillMod: { manaMaxMult: 0.85 }, requiresSkill: 'any' },
   { id: 'skill_amp', kind: 'skill', name: '증폭', maxStacks: 3,
     description: '스킬 피해 +45%',
     effect: {}, skillMod: { damageMult: 1.45 }, requiresSkill: 'any' },
   // 대가형 개조 — 세게 때리는 대신 자주 못 쓴다
   // [곱연산] 스킬 피해에 통째로 곱해진다 — 대신 쿨이 길어진다
   { id: 'skill_overload', kind: 'skill', name: '과부하', maxStacks: 1,
-    description: '[곱] 스킬 피해 ×1.6 · 스킬 쿨타임 +25%',
-    effect: { skillDamageMult: 1.6 }, skillMod: { cooldownMult: 1.25 }, requiresSkill: 'any' },
+    description: '[곱] 스킬 피해 ×1.6 · 필요 마나 +25%',
+    effect: { skillDamageMult: 1.6 }, skillMod: { manaMaxMult: 1.25 }, requiresSkill: 'any' },
+  // ── 쿨감 트랙 — 모으면 **스킬 난사**가 된다. 난사는 화염(겹 쌓기)의 연료이기도 하다.
+  // ── 마나 트랙 — 모으면 **스킬 난사**가 된다 (난사는 화염 겹 쌓기의 연료다)
+  { id: 'skill_haste', kind: 'skill', name: '마나 순환', maxStacks: 3,
+    description: '마나 획득 +18% (평타·피격 모두)',
+    effect: { manaGainMult: 1.18 }, requiresSkill: 'any' },
+  { id: 'skill_overclock', kind: 'skill', name: '오버클럭', maxStacks: 2,
+    description: '필요 마나 18% 감소 · 스킬 피해 -12%',
+    effect: { manaMaxMult: 0.82 }, penalty: { skillDamageMult: 0.88 }, requiresSkill: 'any' },
+  { id: 'skill_battery', kind: 'skill', name: '축전지', maxStacks: 3,
+    description: '시전 후 마나 25가 남는다 (다음 스킬이 그만큼 빨라진다)',
+    effect: { startingMana: 25 }, requiresSkill: 'any' },
   { id: 'skill_focus', kind: 'skill', name: '집중', maxStacks: 2,
-    description: '스킬 피해 +25%, 스킬 쿨타임 10% 감소',
-    effect: { skillDamageMult: 1.25, skillCooldownMult: 0.9 }, requiresSkill: 'any' },
+    description: '스킬 피해 +25%, 필요 마나 10% 감소',
+    effect: { skillDamageMult: 1.25, manaMaxMult: 0.9 }, requiresSkill: 'any' },
   { id: 'explosive_arrow', kind: 'skill', name: '폭발 화살', maxStacks: 2,
     description: '일제 사격의 화살마다 반경 32의 폭발',
     effect: {}, skillMod: { explosiveRadius: 32 }, requiresSkill: 'volley' },
@@ -667,6 +697,9 @@ export const AUGMENTS: readonly Augment[] = [
   { id: 'skill_icearrow', kind: 'skill', name: '얼음화살', maxStacks: 1,
     description: '[스킬] 바닥에 빙판을 깐다 — 55% 감속, 7초 · 쿨 14초',
     effect: {}, grantsSkill: 'icearrow' },
+  { id: 'skill_chain', kind: 'skill', name: '튕기는 사격', maxStacks: 1,
+    description: '[스킬] 적을 맞히고 튕겨 나간다 — 튕길 때마다 피해 ×1.45 (몹이 적으면 약하다) · 쿨 10초',
+    effect: {}, grantsSkill: 'chain' },
   { id: 'skill_execution', kind: 'skill', name: '처형자의 일격', maxStacks: 1,
     description: '[스킬] 체력이 가장 낮은 적에게 공격력 8배 — 처치 시 쿨 초기화 · 쿨 9초',
     effect: {}, grantsSkill: 'execution' },
@@ -695,12 +728,12 @@ export const AUGMENTS: readonly Augment[] = [
     description: '스킬에 맞은 적을 3초간 45% 감속 (모든 스킬)',
     effect: {}, skillMod: { slowFactor: 0.55, slowSeconds: 3 }, requiresSkill: 'any' },
   { id: 'skill_barrage', kind: 'skill', name: '다중 투사', maxStacks: 2,
-    description: '스킬이 때리는 대상 +2 (일제 사격·처형처럼 대상을 세는 스킬)',
+    description: '스킬 대상 +2 (일제 사격·처형) · 튕김 +2회 (튕기는 사격)',
     effect: {}, skillMod: { extraTargets: 2 }, requiresSkill: 'any' },
-  // '맞을 때 마나 회복'의 번역 — 우리는 마나가 없으니 쿨타임으로 갚는다
+  // 맞으면 마나가 찬다 — 탱커가 스킬을 난사하는 축
   { id: 'skill_riposte', kind: 'skill', name: '반격 집중', maxStacks: 3,
-    description: '피격당할 때마다 스킬 쿨타임 1.5초 감소',
-    effect: { skillCdrOnHit: 1.5 }, requiresSkill: 'any' },
+    description: '피격 시 마나 +12 (기본 8에 더해)',
+    effect: { manaOnDamaged: 12 }, requiresSkill: 'any' },
 
   // ══ 성장 (growth) — 누적. 아레나 9% / TFT 5%였고 우리는 0%였다.
   // 처치 스택은 **영웅이 막타를 친 몹**만 센다 (타워 막타는 안 센다).
@@ -848,16 +881,16 @@ export const SYNERGIES: Record<AugmentKind, { readonly specialist: SynergyBonus;
       effect: { damageReduction: 0.3, regen: 20, hpMult: 1.4 } },
   },
   combat: {
-    specialist: { name: '연쇄', description: '광역 반경 +25, 치명타 +25%, 화상 최대 중첩 +2',
-      effect: { splashRadius: 25, critChance: 0.25, burnStacksAdd: 2 } },
+    specialist: { name: '연쇄', description: '광역 반경 +25, 치명타 +25%, 화상 지속 +2초',
+      effect: { splashRadius: 25, critChance: 0.25, burnSecondsAdd: 2 } },
     master: { name: '파멸', description: '광역 반경 +50, 체력 10% 이하 즉사, 공격력 +80%, 화상 대상 피해 +25%',
       effect: { splashRadius: 50, executeBelow: 0.1, damageMult: 1.8, burnAmp: 0.25 } },
   },
   skill: {
-    specialist: { name: '각성', description: '스킬 피해 +40%, 스킬 쿨타임 15% 감소',
-      effect: { skillDamageMult: 1.4, skillCooldownMult: 0.85 } },
-    master: { name: '초월 시전', description: '스킬 피해 +100%, 스킬 쿨타임 30% 감소',
-      effect: { skillDamageMult: 2, skillCooldownMult: 0.7 } },
+    specialist: { name: '각성', description: '스킬 피해 +40%, 마나 획득 +25%',
+      effect: { skillDamageMult: 1.4, manaGainMult: 1.25 } },
+    master: { name: '초월 시전', description: '스킬 피해 +100%, 필요 마나 30% 감소, 마나 획득 +40%',
+      effect: { skillDamageMult: 2, manaMaxMult: 0.7, manaGainMult: 1.4 } },
   },
   growth: {
     specialist: { name: '폭주', description: '모든 성장 증강의 누적치 +50%',

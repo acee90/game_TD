@@ -139,10 +139,10 @@ write(
 write(
   'skills.csv',
   toCsv(
-    ['id', 'name', 'description', 'cooldown', 'damageMult', 'radius', 'targets', 'autoCastMinTargets'],
+    ['id', 'name', 'description', 'manaMax', 'damageMult', 'radius', 'targets', 'autoCastMinTargets'],
     K.SKILL_IDS.map((id) => {
       const s = K.SKILLS[id];
-      return [s.id, s.name, s.description, s.cooldown, s.damageMult, s.radius, s.targets, s.autoCastMinTargets];
+      return [s.id, s.name, s.description, s.manaMax, s.damageMult, s.radius, s.targets, s.autoCastMinTargets];
     }),
   ),
 );
@@ -219,8 +219,8 @@ write(
 // ── 라운드별 수입 저점·고점 — 영웅/타워/몬스터 밸런스의 공통 기준
 //
 // 웨이브 보상·킬 마일스톤은 사실상 결정론이라, 수입 격차는 **보스 레벨 선택**에서 나온다.
-// 저점: 쿨타임(45초)마다 부르되 **Lv1만** — 항상 성공하는 안전 운영 (+5씩).
-// 고점: 쿨타임마다 **항상 최고 해금 레벨**을 부르고 전부 잡는 상한 —
+// 저점: 필요마나(45초)마다 부르되 **Lv1만** — 항상 성공하는 안전 운영 (+5씩).
+// 고점: 필요마나마다 **항상 최고 해금 레벨**을 부르고 전부 잡는 상한 —
 //   k번째 소환 = Lv min(k, 6). 소환은 t=0부터 가능하므로 floor(t/45)+1회.
 // 제외: 증강 mineralPerKill(빌드 의존), 누출 보너스(킬 마일스톤과 대략 상쇄).
 // 주의: 수입의 결정 축이 보스 하나뿐이다 — 원작의 미션류(빙고) 같은 두 번째 축은 백로그.

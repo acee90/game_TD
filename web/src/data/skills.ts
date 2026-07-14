@@ -18,14 +18,35 @@ export type SkillId =
   | 'laser'      // 마법 — 관통 지속 빔
   | 'firearrow'  // 원거리 — 지형에 불바다(도트 장판)
   | 'icearrow'   // 원거리 — 지형에 빙판(감속 장판)
-  | 'execution'; // 근접 — 마무리 일격 (처치 시 쿨 초기화)
+  | 'execution'  // 근접 — 마무리 일격 (처치 시 쿨 초기화)
+  | 'chain';     // 원거리 — 튕기는 사격 (튕길수록 강해진다)
+
+/**
+ * 시전 방식 — **쿨감의 값어치가 여기서 갈린다.**
+ *
+ * - `burst` 단발: 쿨이 짧아진 만큼 그대로 더 자주 터진다. 쿨감이 선형으로 이득이다.
+ * - `channel` 채널링: 효과가 `channelSeconds` 동안 **지속**된다. 쿨이 그 밑으로 내려가도
+ *   앞의 시전이 아직 안 끝나 겹칠 수 없다 — **그 이상의 쿨감은 버려진다.**
+ *   대신 채널링은 지속 시간·틱 간격을 키우는 개조가 이득이다.
+ *
+ * 그래서 "냉각(쿨감)을 몇 장 집을 것인가"가 스킬마다 다른 답을 갖는다.
+ */
+export type CastType = 'burst' | 'channel';
+
+/** 허수아비가 서 있는 시간 — SKILLS 정의보다 먼저 필요하다 (채널링 길이) */
+export const DECOY_LIFETIME_SECONDS = 9;
 
 export interface SkillDef {
   readonly id: SkillId;
   readonly name: string;
   readonly description: string;
-  /** 쿨타임(초) */
-  readonly cooldown: number;
+  /**
+   * 시전에 필요한 마나 (TFT식). **쿨타임은 없다.**
+   *
+   * 마나는 평타를 칠 때와 맞을 때 찬다. 그래서 공격 속도가 곧 스킬 회전이고,
+   * 탱커(맞는 역할)도 스킬을 자주 쓴다 — 스탯이 스킬과 직접 맞물린다.
+   */
+  readonly manaMax: number;
   /** 영웅 공격력 대비 피해 배수. 0이면 피해가 없는 스킬. */
   readonly damageMult: number;
   /** 효과 반경 (0이면 반경 개념 없음) */
@@ -34,6 +55,18 @@ export interface SkillDef {
   readonly targets: number;
   /** 자동 시전 조건: 유효 사거리 안에 적이 이만큼 있어야 쏜다 */
   readonly autoCastMinTargets: number;
+  /** 단발인가 채널링인가 — 쿨감의 값어치가 갈린다 */
+  readonly castType: CastType;
+  /** 채널링 지속 시간(초). 쿨타임이 이 밑으로 내려가도 이득이 없다 */
+  readonly channelSeconds?: number;
+
+  // ── 튕기는 사격 (chain) 전용
+  /** 몇 번 튕기는가 */
+  readonly bounces?: number;
+  /** 튕길 때마다 피해 배수 (1.4면 튕길수록 40%씩 세진다) */
+  readonly bounceGrowth?: number;
+  /** 다음 대상을 찾는 거리 */
+  readonly bounceRange?: number;
 
   // ── 지속 빔(레이저) 전용. 없으면 즉발 스킬이다.
   /** 빔 지속 시간(초). 0/미설정이면 즉발 */
@@ -66,9 +99,10 @@ export interface SkillDef {
 export const SKILLS: Record<SkillId, SkillDef> = {
   whirlwind: {
     id: 'whirlwind',
+    castType: 'burst',
     name: '소용돌이',
     description: '주변의 적 전체에 공격력 3배 피해',
-    cooldown: 8,
+    manaMax: 100,
     damageMult: 3,
     radius: 70,
     targets: 0,
@@ -76,9 +110,10 @@ export const SKILLS: Record<SkillId, SkillDef> = {
   },
   volley: {
     id: 'volley',
+    castType: 'burst',
     name: '일제 사격',
     description: '사거리 안 적 4명에게 각각 공격력 2배 피해',
-    cooldown: 7,
+    manaMax: 90,
     damageMult: 2,
     radius: 0, // 영웅 사거리를 쓴다
     targets: 4,
@@ -86,9 +121,10 @@ export const SKILLS: Record<SkillId, SkillDef> = {
   },
   meteor: {
     id: 'meteor',
+    castType: 'burst',
     name: '유성',
     description: '적이 가장 많은 곳에 공격력 6배 광역 피해',
-    cooldown: 13,
+    manaMax: 160,
     damageMult: 6,
     radius: 85,
     targets: 0,
@@ -96,9 +132,11 @@ export const SKILLS: Record<SkillId, SkillDef> = {
   },
   decoy: {
     id: 'decoy',
+    castType: 'channel',
+    channelSeconds: DECOY_LIFETIME_SECONDS, // 미끼가 살아 있는 동안은 다시 못 세운다
     name: '허수아비',
     description: '앞쪽에 미끼를 세워 몹을 붙잡는다 (영웅 체력의 60%로 버틴다)',
-    cooldown: 18,
+    manaMax: 220,
     damageMult: 0,
     radius: 0,
     targets: 0,
@@ -113,10 +151,12 @@ export const SKILLS: Record<SkillId, SkillDef> = {
    */
   laser: {
     id: 'laser',
+    castType: 'channel',
+    channelSeconds: 3, // 빔이 3초 나간다 — 쿨이 3초 밑으로 내려가도 이득이 없다
     name: '레이저',
-    description: '앞쪽 직선을 관통해 지속 피해 (0.5초마다 공격력 0.8배)',
-    cooldown: 11,
-    damageMult: 0.8, // 틱당 배수 — 즉발이 아니라 도트다
+    description: '앞쪽 직선을 관통해 지속 피해 (0.5초마다 공격력 0.55배)',
+    manaMax: 160,
+    damageMult: 0.55, // 틱당 배수 — 즉발이 아니라 도트다 (난사 빌드가 과했다 → 하향)
     radius: 0,
     targets: 0,
     autoCastMinTargets: 2,
@@ -131,9 +171,10 @@ export const SKILLS: Record<SkillId, SkillDef> = {
    */
   firearrow: {
     id: 'firearrow',
+    castType: 'burst',
     name: '불화살',
     description: '적이 뭉친 곳에 불바다를 깐다 — 초당 공격력 1.2배, 6초',
-    cooldown: 12,
+    manaMax: 150,
     damageMult: 1.5, // 착탄 즉발 피해
     radius: 45,
     targets: 0,
@@ -148,9 +189,10 @@ export const SKILLS: Record<SkillId, SkillDef> = {
    */
   icearrow: {
     id: 'icearrow',
+    castType: 'burst',
     name: '얼음화살',
     description: '적이 뭉친 곳에 빙판을 깐다 — 55% 감속, 7초',
-    cooldown: 14,
+    manaMax: 175,
     damageMult: 0.5,
     radius: 45,
     targets: 0,
@@ -166,9 +208,10 @@ export const SKILLS: Record<SkillId, SkillDef> = {
    */
   execution: {
     id: 'execution',
+    castType: 'burst',
     name: '처형자의 일격',
     description: '체력이 가장 낮은 적에게 공격력 8배 — 처치하면 쿨타임 초기화',
-    cooldown: 9,
+    manaMax: 110,
     damageMult: 8,
     radius: 0,
     targets: 1,
@@ -177,16 +220,39 @@ export const SKILLS: Record<SkillId, SkillDef> = {
     resetOnKill: true,
     cooldownScalesWithAttackSpeed: true,
   },
+  /**
+   * 튕기는 사격 — **튕길수록 강해진다.** 대상을 맞히고 가까운 다음 적으로 넘어가며,
+   * 넘어갈 때마다 피해가 커진다.
+   *
+   * 그래서 이 스킬은 **몹이 많을 때만 값어치가 있다** — 한두 기밖에 없으면 첫 타격에서
+   * 끝나 가장 약한 스킬이 된다. "언제 쏘는가"가 곧 실력인 스킬이다.
+   */
+  chain: {
+    id: 'chain',
+    castType: 'burst',
+    name: '튕기는 사격',
+    description: '적을 맞히고 튕겨 나간다 — 튕길 때마다 피해 ×1.3 (기본 5회, 몹이 적으면 약하다)',
+    manaMax: 165,
+    damageMult: 1.3, // 첫 타는 약하다. 값어치는 튕김에서 나온다
+    radius: 0,
+    targets: 0,
+    autoCastMinTargets: 3, // 뭉쳤을 때만 쏜다 — 혼자 있는 적에겐 낭비다
+    bounces: 5,
+    // 몹이 많으면 최강 — 5번 튕기면 마지막 타가 첫 타의 3.7배.
+    // (1.7이었을 땐 24배가 되어 마나 난사와 곱해지며 기준 ×43까지 갔다 — 측정 후 하향)
+    bounceGrowth: 1.3,
+    bounceRange: 95,
+  },
 };
 
 export const SKILL_IDS: readonly SkillId[] = [
-  'whirlwind', 'volley', 'meteor', 'decoy', 'laser', 'firearrow', 'icearrow', 'execution',
+  'whirlwind', 'volley', 'meteor', 'decoy', 'laser', 'firearrow', 'icearrow', 'execution', 'chain',
 ];
 
 // ── 허수아비 ──
 /** 영웅 앞쪽 이 거리에 세운다 */
 export const DECOY_AHEAD = 55;
-export const DECOY_LIFETIME = 9;
+export const DECOY_LIFETIME = DECOY_LIFETIME_SECONDS;
 /** 영웅 최대 체력의 이 비율만큼 버틴다 */
 export const DECOY_HP_RATIO = 0.6;
 export const DECOY_RADIUS = 10;
@@ -195,9 +261,20 @@ export const DECOY_AGGRO_RANGE = 62;
 /** 허수아비를 세울 만한가 — 영웅 앞쪽 이 거리 안에 몹이 있으면 세운다 */
 export const DECOY_AUTOCAST_RANGE = 170;
 
+// ───────── 마나 ─────────
+/** 평타 한 방이 채우는 마나 */
+export const MANA_PER_ATTACK = 10;
+/** 맞을 때 차는 마나 — 탱커도 스킬을 쓴다 (TFT식) */
+export const MANA_ON_DAMAGED = 8;
+/**
+ * 최대 마나 감소의 하한. 0.25 → 0.4 (측정 후 하향).
+ * 0.25면 마나 증강을 모은 '난사' 빌드가 같은 장수의 강화 빌드를 10~40배로 압도했다.
+ */
+export const MANA_MAX_FLOOR = 0.4;
+
 // ───────── 가스 스킬 개조 트랙 ─────────
 // 가스의 두 번째 소비처 — "타워 업그레이드냐 영웅 스킬이냐"가 선택이 되도록.
-// 트랙은 둘: 스킬 피해 +8%/구매(곱), 쿨타임 -6%/구매(곱, 하한은 resolveSkill의 1초).
+// 트랙은 둘: 스킬 피해 +8%/구매, 최대 마나 -6%/구매.
 export const GAS_SKILL_DAMAGE_MULT = 1.08;
 export const GAS_SKILL_CDR_MULT = 0.94;
 export const GAS_SKILL_BASE_COST = 30;
@@ -210,7 +287,8 @@ export const gasSkillCost = (bought: number): number =>
  * 곱셈형은 1에서, 덧셈형은 0에서 출발한다.
  */
 export interface SkillMods {
-  readonly cooldownMult: number;
+  /** 최대 마나 배수 (낮을수록 자주 쓴다 — 옛 쿨감의 자리) */
+  readonly manaMaxMult: number;
   readonly damageMult: number;
   readonly radiusAdd: number;
   readonly extraTargets: number;
@@ -244,7 +322,7 @@ export interface SkillMods {
 }
 
 export const NO_MODS: SkillMods = {
-  cooldownMult: 1,
+  manaMaxMult: 1,
   damageMult: 1,
   radiusAdd: 0,
   extraTargets: 0,
@@ -275,9 +353,9 @@ export type SkillModPatch = Partial<SkillMods>;
 export function foldMods(patches: readonly SkillModPatch[]): SkillMods {
   const out = { ...NO_MODS } as { -readonly [K in keyof SkillMods]: SkillMods[K] };
   let damageBonus = 0;
-  let cooldownBonus = 0;
+  let manaBonus = 0;
   for (const p of patches) {
-    if (p.cooldownMult) cooldownBonus += p.cooldownMult - 1;
+    if (p.manaMaxMult) manaBonus += p.manaMaxMult - 1;
     if (p.damageMult) damageBonus += p.damageMult - 1;
     if (p.radiusAdd) out.radiusAdd += p.radiusAdd;
     if (p.extraTargets) out.extraTargets += p.extraTargets;
@@ -295,15 +373,16 @@ export function foldMods(patches: readonly SkillModPatch[]): SkillMods {
     if (p.zoneDpsAdd) out.zoneDpsAdd += p.zoneDpsAdd;
   }
   out.damageMult = Math.max(0.1, 1 + damageBonus);
-  // 쿨감 바닥 — 0에 닿으면 스킬이 상시 발동이 된다
-  out.cooldownMult = Math.max(0.35, 1 + cooldownBonus);
+  // 최대 마나 하한 — 모으면 **스킬 난사**가 성립해야 한다 (난사는 화염 빌드의 연료다)
+  out.manaMaxMult = Math.max(MANA_MAX_FLOOR, 1 + manaBonus);
   return out;
 }
 
 /** 개조를 반영한 최종 스킬 수치 */
 export interface ResolvedSkill {
   readonly def: SkillDef;
-  readonly cooldown: number;
+  /** 시전에 필요한 마나 (개조 반영) */
+  readonly manaMax: number;
   readonly damageMult: number;
   readonly radius: number;
   readonly targets: number;
@@ -320,6 +399,12 @@ export interface ResolvedSkill {
   readonly zoneRadius: number;
   readonly zoneDps: number;
   readonly zoneSlow: number;
+
+  // ── 튕기는 사격
+  readonly bounces: number;
+  readonly bounceGrowth: number;
+  readonly bounceRange: number;
+
 }
 
 /** 도트 간격 하한 — 이 밑으로 내려가면 프레임마다 때리는 것과 같아진다 */
@@ -331,11 +416,21 @@ export const MIN_TICK_INTERVAL = 0.1;
  */
 export function resolveSkill(id: SkillId, mods: SkillMods, attackSpeedRatio = 1): ResolvedSkill {
   const def = SKILLS[id];
-  const asCut = def.cooldownScalesWithAttackSpeed ? Math.max(0.35, 1 / Math.max(0.01, attackSpeedRatio)) : 1;
+  const asCut = def.cooldownScalesWithAttackSpeed ? Math.max(0.3, 1 / Math.max(0.01, attackSpeedRatio)) : 1;
+
+  /**
+   * 필요 마나. **채널링은 채널이 끝난 뒤부터 마나가 찬다** (Game이 그렇게 막는다) —
+   * 빔이 나가는 동안은 마나가 안 차므로 가동률에 천장이 생긴다.
+   * 단발은 마나가 차는 대로 계속 터진다.
+   *
+   * `cooldownScalesWithAttackSpeed`인 스킬(허수아비·처형)은 필요 마나가 더 낮다 —
+   * 다만 평타 마나 자체가 공속을 따라가므로 이 보정은 덤이다.
+   */
+  const manaMax = Math.max(10, def.manaMax * mods.manaMaxMult * asCut);
+
   return {
     def,
-    // 쿨타임은 1초 밑으로 내려가지 않는다
-    cooldown: Math.max(1, def.cooldown * mods.cooldownMult * asCut),
+    manaMax,
     damageMult: def.damageMult * mods.damageMult,
     radius: def.radius + (def.radius > 0 ? mods.radiusAdd : 0),
     targets: def.targets + (def.targets > 0 ? mods.extraTargets : 0),
@@ -350,5 +445,9 @@ export function resolveSkill(id: SkillId, mods: SkillMods, attackSpeedRatio = 1)
     zoneRadius: (def.zoneRadius ?? 0) + (def.zoneRadius ? mods.zoneRadiusAdd : 0),
     zoneDps: (def.zoneDps ?? 0) + (def.zoneDps ? mods.zoneDpsAdd : 0),
     zoneSlow: def.zoneSlow ?? 1,
+
+    bounces: (def.bounces ?? 0) + (def.bounces ? mods.extraTargets : 0),
+    bounceGrowth: def.bounceGrowth ?? 1,
+    bounceRange: def.bounceRange ?? 0,
   };
 }
