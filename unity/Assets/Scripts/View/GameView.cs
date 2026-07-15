@@ -68,6 +68,7 @@ namespace GodTD.View
         float camDistance = 54f; // 시작은 살짝 멀리서 줌인
 
         GameObject[] tiles;
+        MeshRenderer[] tileRenderers; // Kenney 타일 색조(occupied/altar) MPB 적용용
         GameObject[] towerObjects;
         UnitDef[] towerDefs;   // 캐시 — def/tier가 바뀌면 다시 만든다
         int[] towerTiers;
@@ -111,9 +112,6 @@ namespace GodTD.View
         static readonly Color PATH_OUTER = Hex("#333c66");
         static readonly Color PATH_INNER = Hex("#171d33");
         static readonly Color CROSS_FILL = Hex("#1a2036");
-        static readonly Color TILE_EMPTY = Hex("#161c30");
-        static readonly Color TILE_TOWER = Hex("#232a44");
-        static readonly Color TILE_BASE = Hex("#0b0f1d");
         // 제단 — 성주가 부활하는 사당. 보라 마법진(#2a2140/#b08cff)에서 흙·금동으로 바꿨다 (세계관 §8).
         static readonly Color ALTAR = Hex("#2b2418");
         static readonly Color ALTAR_EDGE = Hex("#c8a24a");
@@ -500,45 +498,60 @@ namespace GodTD.View
             go.AddComponent<MeshRenderer>().sharedMaterial = TransMat(Color.white);
         }
 
+        static readonly int BaseColorId = Shader.PropertyToID("_BaseColor");
+
         void BuildTiles()
         {
             int count = MapData.SLOT_POS.Length;
             tiles = new GameObject[count];
+            tileRenderers = new MeshRenderer[count];
             towerObjects = new GameObject[count];
             towerDefs = new UnitDef[count];
             towerTiers = new int[count];
+
+            // Kenney Tower Defense Kit — 풀밭 타일. 제단만 크리스탈 타일로 구분.
+            var grassPrefab = Resources.Load<GameObject>("Kenney/tile");
+            var altarPrefab = Resources.Load<GameObject>("Kenney/tile-crystal");
+            float side = MapData.TILE * SCALE * 0.98f; // 살짝 틈 두고 격자로 맞물림
+
             for (int i = 0; i < count; i++)
             {
                 towerTiers[i] = -1;
                 var p = MapData.SLOT_POS[i];
-                float side = (MapData.TILE - 5f) * SCALE;
+                bool isAltar = i == HeroData.ALTAR_SLOT;
+                var prefab = isAltar && altarPrefab != null ? altarPrefab : grassPrefab;
 
-                // 받침 — 한 둘레 큰 어두운 판. 타일이 살짝 떠 있는 베벨 느낌을 만든다.
-                var basePlate = GameObject.CreatePrimitive(PrimitiveType.Cube);
-                basePlate.name = $"TileBase{i}";
-                Destroy(basePlate.GetComponent<Collider>());
-                basePlate.transform.SetParent(staticRoot, false);
-                basePlate.transform.position = W(p.X, p.Y, 0.10f);
-                basePlate.transform.localScale = new Vector3(side + 0.18f, 0.10f, side + 0.18f);
-                Paint(basePlate, LitMat(TILE_BASE));
-
-                // 본체 — 클릭 판정 콜라이더 포함
-                var tile = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                var tile = Instantiate(prefab);
                 tile.name = $"Tile{i}";
                 tile.transform.SetParent(staticRoot, false);
-                tile.transform.position = W(p.X, p.Y, 0.26f);
-                tile.transform.localScale = new Vector3(side, 0.22f, side);
+                tile.transform.position = W(p.X, p.Y, 0f);       // 피벗이 바닥 — 지면에서 솟는다
+                tile.transform.localScale = new Vector3(side, side * 0.5f, side); // 윗면 ≈ 0.35 높이
+
+                // 클릭 판정 — Kenney 메시엔 콜라이더가 없다. 슬롯을 덮는 박스로 판정.
+                var box = tile.AddComponent<BoxCollider>();
+                box.center = new Vector3(0f, 0.1f, 0f);
+                box.size = new Vector3(1f, 0.35f, 1f);
                 tile.AddComponent<TileMarker>().Index = i;
+
                 tiles[i] = tile;
+                tileRenderers[i] = tile.GetComponentInChildren<MeshRenderer>();
                 PaintTile(i, false);
             }
         }
 
         void PaintTile(int index, bool occupied)
         {
+            var r = tileRenderers[index];
+            if (r == null) return;
             bool isAltar = index == HeroData.ALTAR_SLOT;
-            var color = isAltar ? ALTAR : occupied ? TILE_TOWER : TILE_EMPTY;
-            Paint(tiles[index], isAltar ? GlowMat(ALTAR_EDGE, 0.25f, ALTAR) : LitMat(color));
+            // 컬러맵 아틀라스는 공유하므로 색은 _BaseColor 틴트로만 준다 (MPB — 머티리얼 오염 없음).
+            Color tint = isAltar ? new Color(1.25f, 1.0f, 0.55f) // 제단 — 금빛(블룸으로 은은히 발광)
+                       : occupied ? new Color(0.72f, 0.74f, 0.82f) // 세워진 자리 — 살짝 눌러 어둡게
+                       : Color.white;                                // 빈 타일 — 자연 풀색 그대로
+            var mpb = new MaterialPropertyBlock();
+            r.GetPropertyBlock(mpb);
+            mpb.SetColor(BaseColorId, tint);
+            r.SetPropertyBlock(mpb);
         }
 
         void MakePathLine(string name, float width, Color color, float h)
