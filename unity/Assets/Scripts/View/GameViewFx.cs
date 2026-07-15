@@ -54,6 +54,23 @@ namespace GodTD.View
         // ── 파티클 ──
         ParticleSystem burstPs;
 
+        // 스킬 시그니처 — Core 판정은 색만 넘긴다. 종족색이 스킬색과 겹치므로(테란=일제사격 등)
+        // 원소 구분은 "제자리 AoE인가 + 색"으로 판별한다. 이동 투사체는 흰색=평타(둥근 pip),
+        // 그 외=화살/볼트(진행 방향으로 길쭉하게 정렬).
+        enum FxKind { Basic, Bolt, Fire, Arcane, Wind, Generic }
+
+        static FxKind Classify(string hex)
+        {
+            switch (hex)
+            {
+                case "#ff8a3c": return FxKind.Fire;   // 폭발 화살
+                case "#c065e0": return FxKind.Arcane;  // 유성 · 광역 평타
+                case "#6fdc8c": return FxKind.Wind;    // 소용돌이
+                case "#ffffff": return FxKind.Basic;   // 영웅 평타(단일)
+                default: return FxKind.Bolt;           // 타워·일제사격 화살 — 방향 정렬 볼트
+            }
+        }
+
         // ── 투사체 풀 ──
         sealed class Projectile
         {
@@ -66,6 +83,7 @@ namespace GodTD.View
             public float Duration;
             public Color Color;
             public float SplashRadiusPx;
+            public FxKind Kind;
             public bool Active;
         }
 
@@ -200,6 +218,80 @@ namespace GodTD.View
             }
         }
 
+        /// <summary>위로 솟구쳐 사그라드는 불티 — 화염 착탄용. 중력에 살짝 끌려 아치를 그린다.</summary>
+        void EmberBurst(Vector3 at, Color color, int count)
+        {
+            for (int i = 0; i < count; i++)
+            {
+                var dir = Random.insideUnitSphere;
+                dir.y = Mathf.Abs(dir.y) * 1.6f + 0.8f; // 강하게 위로
+                var ep = new ParticleSystem.EmitParams
+                {
+                    position = at + Vector3.up * 0.1f,
+                    velocity = dir.normalized * (2.2f + Random.value * 2.6f),
+                    startColor = Color.Lerp(color, Color.white, Random.value * 0.5f),
+                    startSize = 0.08f + Random.value * 0.12f,
+                    startLifetime = 0.4f + Random.value * 0.5f,
+                };
+                burstPs.Emit(ep, 1);
+            }
+        }
+
+        /// <summary>중심 둘레를 도는 접선 방향 파티클 — 바람/소용돌이 착탄용.</summary>
+        void SwirlBurst(Vector3 at, Color color, int count)
+        {
+            for (int i = 0; i < count; i++)
+            {
+                float a = i / (float)count * Mathf.PI * 2f;
+                var radial = new Vector3(Mathf.Cos(a), 0f, Mathf.Sin(a));
+                var tangent = new Vector3(-radial.z, 0f, radial.x); // 시계방향 접선
+                var vel = (tangent * 3.4f + radial * 1.1f + Vector3.up * 0.6f);
+                var ep = new ParticleSystem.EmitParams
+                {
+                    position = at + radial * 0.3f + Vector3.up * 0.15f,
+                    velocity = vel,
+                    startColor = color,
+                    startSize = 0.1f + Random.value * 0.1f,
+                    startLifetime = 0.3f + Random.value * 0.25f,
+                };
+                burstPs.Emit(ep, 1);
+            }
+        }
+
+        /// <summary>착탄 지점 위에서 내리꽂히는 섬광 — 유성. 볼트 하나를 하늘에서 떨어뜨린다.</summary>
+        void MeteorStreak(Vector3 at, Color color)
+        {
+            var from = at + new Vector3(0.6f, 9f, 0.6f); // 살짝 비스듬히 위
+            Launch(from, at, Color.Lerp(color, Color.white, 0.3f), 0f, FxKind.Bolt);
+        }
+
+        /// <summary>스킬 착탄 시그니처 — 원소별로 다른 연출. at·radiusWorld는 월드 단위.</summary>
+        void SignatureLand(Vector3 at, Color color, float radiusWorld, FxKind kind)
+        {
+            switch (kind)
+            {
+                case FxKind.Fire:
+                    Pulse(at, color, radiusWorld * 0.7f);
+                    Ring(at, color, radiusWorld);
+                    EmberBurst(at, color, 18);
+                    break;
+                case FxKind.Arcane:
+                    MeteorStreak(at, color);
+                    Ring(at, color, radiusWorld * 1.1f);
+                    Pulse(at, color, radiusWorld * 0.6f);
+                    Burst(at, Color.Lerp(color, Color.white, 0.4f), 16, 3.2f, 0.14f);
+                    break;
+                case FxKind.Wind:
+                    Ring(at, color, radiusWorld);
+                    SwirlBurst(at, color, 22);
+                    break;
+                default:
+                    Pulse(at, color, radiusWorld * 0.6f);
+                    Burst(at, color, 10, 2.6f, 0.12f);
+                    break;
+            }
+        }
+
         // ───────── 펄스 (바닥에 퍼지는 원반) ─────────
         /// <summary>radius = 월드 유닛. 광역 타격·보스 폭발의 바닥 파문.</summary>
         public void Pulse(Vector3 at, Color color, float radius)
@@ -312,17 +404,16 @@ namespace GodTD.View
                 var from = GameView.W(shot.X, shot.Y, 1.5f);
                 var to = GameView.W(shot.Tx, shot.Ty, 0.9f);
 
+                var kind = Classify(shot.Color);
+
                 if ((from - to).magnitude < 0.05f)
                 {
-                    // 소용돌이·유성·폭발 화살 — 그 자리 파문
+                    // 제자리 광역 = 스킬 착탄 — 원소별 시그니처(화염 불티·유성 낙하·바람 소용돌이)
                     if (shot.SplashRadius > 0f)
-                    {
-                        Pulse(to, color, shot.SplashRadius * SCALE * 0.6f);
-                        Burst(to, color, 8, 2.6f, 0.14f);
-                    }
+                        SignatureLand(to, color, shot.SplashRadius * SCALE * 0.6f, kind);
                     continue;
                 }
-                Launch(from, to, color, shot.SplashRadius);
+                Launch(from, to, color, shot.SplashRadius, kind);
             }
             seenShots.IntersectWith(game.Shots); // Core가 지운 샷은 잊는다
 
@@ -335,15 +426,15 @@ namespace GodTD.View
                 p.Go.transform.position = Vector3.Lerp(p.From, p.To, k);
                 if (k >= 1f)
                 {
-                    var hot = Color.Lerp(p.Color, Color.white, 0.35f);
                     if (p.SplashRadiusPx > 0f)
                     {
-                        Pulse(p.To, p.Color, p.SplashRadiusPx * SCALE * 0.5f);
-                        Burst(p.To, hot, 12, 2.8f, 0.13f);
+                        // 이동 광역(타워 스플래시 등) — 착탄 시그니처
+                        SignatureLand(p.To, p.Color, p.SplashRadiusPx * SCALE * 0.5f, p.Kind);
                     }
                     else
                     {
                         // 단일 타격도 작은 불꽃 — 명중이 '느껴지게'
+                        var hot = Color.Lerp(p.Color, Color.white, 0.35f);
                         Burst(p.To, hot, 5, 2.2f, 0.1f);
                     }
                     Deactivate(p);
@@ -351,7 +442,7 @@ namespace GodTD.View
             }
         }
 
-        void Launch(Vector3 from, Vector3 to, Color color, float splashRadiusPx)
+        void Launch(Vector3 from, Vector3 to, Color color, float splashRadiusPx, FxKind kind)
         {
             var p = projectiles.Find(x => !x.Active);
             if (p == null)
@@ -361,7 +452,6 @@ namespace GodTD.View
                 orb.name = "Projectile";
                 Destroy(orb.GetComponent<Collider>());
                 orb.transform.SetParent(root, false);
-                orb.transform.localScale = new Vector3(0.24f, 0.24f, 0.24f);
                 var trail = orb.AddComponent<TrailRenderer>();
                 trail.time = 0.18f;
                 trail.startWidth = 0.22f;
@@ -378,6 +468,22 @@ namespace GodTD.View
             }
             p.Go.SetActive(true);
             p.Go.transform.position = from;
+
+            // 형태 — 볼트(화살·타워탄)는 진행 방향으로 길쭉, 그 외는 둥근 탄
+            var dir = to - from;
+            if (dir.sqrMagnitude < 1e-4f) dir = Vector3.forward;
+            dir.Normalize();
+            if (kind == FxKind.Bolt)
+            {
+                p.Go.transform.rotation = Quaternion.LookRotation(dir);
+                p.Go.transform.localScale = new Vector3(0.12f, 0.12f, 0.5f);
+            }
+            else
+            {
+                p.Go.transform.rotation = Quaternion.identity;
+                p.Go.transform.localScale = new Vector3(0.22f, 0.22f, 0.22f);
+            }
+
             p.Trail.Clear();
             // 흰-핫 코어로 밝히고(가장자리는 본색), 트레일은 본색으로 꼬리를 남긴다
             var hot = Color.Lerp(color, Color.white, 0.35f);
@@ -390,6 +496,7 @@ namespace GodTD.View
             p.Duration = Mathf.Clamp((to - from).magnitude / PROJECTILE_SPEED, 0.05f, 0.35f);
             p.Color = color;
             p.SplashRadiusPx = splashRadiusPx;
+            p.Kind = kind;
             p.Active = true;
 
             // 총구 섬광 — 발사가 '터지듯' 시작
