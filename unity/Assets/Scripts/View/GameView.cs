@@ -12,6 +12,7 @@ using System.Collections.Generic;
 using GodTD.Core;
 using UnityEngine;
 using UnityEngine.Rendering;
+using UnityEngine.Rendering.Universal;
 
 namespace GodTD.View
 {
@@ -99,7 +100,7 @@ namespace GodTD.View
         readonly Dictionary<(Color, float), Material> glowMats = new Dictionary<(Color, float), Material>();
         readonly Dictionary<Color, Material> transMats = new Dictionary<Color, Material>();
         Material flashMat;
-        Shader standardShader;
+        Shader litShader;
         Shader spriteShader;
 
         // ── 색상 (웹 원본 render.ts 팔레트 유지) ──
@@ -139,9 +140,9 @@ namespace GodTD.View
 
         void Awake()
         {
-            standardShader = Shader.Find("Standard");
+            litShader = Shader.Find("Universal Render Pipeline/Lit");
             spriteShader = Shader.Find("Sprites/Default");
-            flashMat = new Material(standardShader) { color = Color.white };
+            flashMat = new Material(litShader) { color = Color.white };
             flashMat.EnableKeyword("_EMISSION");
             flashMat.SetColor("_EmissionColor", Color.white * 2.2f);
 
@@ -360,7 +361,9 @@ namespace GodTD.View
             cam.backgroundColor = BG;
             cam.nearClipPlane = 1f;
             cam.farClipPlane = 300f;
-            if (cam.GetComponent<BloomEffect>() == null) cam.gameObject.AddComponent<BloomEffect>();
+            // URP: 블룸은 Volume(Bloom override)이 처리한다 — 카메라 포스트프로세싱만 켠다.
+            var camData = cam.GetUniversalAdditionalCameraData();
+            camData.renderPostProcessing = true;
             ApplyViewport();
         }
 
@@ -938,9 +941,9 @@ namespace GodTD.View
         public Material LitMat(Color color)
         {
             if (litMats.TryGetValue(color, out var mat)) return mat;
-            mat = new Material(standardShader) { color = color };
+            mat = new Material(litShader) { color = color };
             mat.SetFloat("_Metallic", 0.03f);  // 0.15/0.45는 넓은 스펙큘러가 팔레트를 회색으로 씻었다 (캡처 검증)
-            mat.SetFloat("_Glossiness", 0.18f);
+            mat.SetFloat("_Smoothness", 0.18f);
             litMats[color] = mat;
             return mat;
         }
@@ -950,9 +953,9 @@ namespace GodTD.View
         {
             var key = (color, intensity);
             if (glowMats.TryGetValue(key, out var mat)) return mat;
-            mat = new Material(standardShader) { color = baseColor ?? color };
+            mat = new Material(litShader) { color = baseColor ?? color };
             mat.SetFloat("_Metallic", 0.2f);
-            mat.SetFloat("_Glossiness", 0.5f);
+            mat.SetFloat("_Smoothness", 0.5f);
             mat.EnableKeyword("_EMISSION");
             mat.SetColor("_EmissionColor", color * intensity);
             glowMats[key] = mat;
