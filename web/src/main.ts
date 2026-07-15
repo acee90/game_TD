@@ -57,6 +57,12 @@ el.buyXp.addEventListener('click', () => game.buyXp());
 el.reroll.addEventListener('click', () => game.rerollAugments());
 el.gasSkillDmg.addEventListener('click', () => game.buyGasSkill('damage'));
 el.gasSkillCdr.addEventListener('click', () => game.buyGasSkill('cdr'));
+// 보스 소환은 커맨드창이 아니라 독립 오버레이에서 — 열기/닫기/배경 클릭 닫기
+el.bossOpen.addEventListener('click', () => el.bossOverlay.classList.add('open'));
+el.bossClose.addEventListener('click', () => el.bossOverlay.classList.remove('open'));
+el.bossOverlay.addEventListener('click', (event) => {
+  if (event.target === el.bossOverlay) el.bossOverlay.classList.remove('open');
+});
 el.bossLevels.forEach((button, i) => button.addEventListener('click', () => game.summonBoss(i + 1)));
 el.upgrades.forEach((button, i) => button.addEventListener('click', () => game.upgrade(i as Race)));
 el.augCards.addEventListener('click', (event) => {
@@ -75,7 +81,10 @@ const KEYS: Record<string, () => void> = {
   '3': () => game.upgrade(2),
   '4': () => game.upgrade(3),
 };
-window.addEventListener('keydown', (event) => KEYS[event.key.toLowerCase()]?.());
+window.addEventListener('keydown', (event) => {
+  if (event.key === 'Escape') el.bossOverlay.classList.remove('open');
+  KEYS[event.key.toLowerCase()]?.();
+});
 
 let last = performance.now();
 function frame(now: number): void {

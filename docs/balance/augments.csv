@@ -50,7 +50,7 @@ skill_focus,skill,스킬,집중,"스킬 피해 +25%, 필요 마나 10% 감소",2
 explosive_arrow,skill,스킬,폭발 화살,일제 사격의 화살마다 반경 32의 폭발,2,FALSE,,volley,"{""explosiveRadius"":32}",,,,,,,,,,,
 multishot,skill,스킬,연사,일제 사격의 화살 +2발,3,FALSE,,volley,"{""extraTargets"":2}",,,,,,,,,,,
 cyclone,skill,스킬,회오리,"소용돌이 반경 +25, 맞은 적을 2초간 40% 감속",2,FALSE,,whirlwind,"{""radiusAdd"":25,""slowFactor"":0.6,""slowSeconds"":2}",,,,,,,,,,,
-cataclysm,skill,스킬,대재앙,"유성 반경 +35, 스킬 피해 +30%",2,FALSE,,meteor,"{""radiusAdd"":35,""damageMult"":1.3}",,,,,,,,,,,
+cataclysm,skill,스킬,대재앙,"유성 반경 +30, 스킬 피해 +15%",2,FALSE,,meteor,"{""radiusAdd"":30,""damageMult"":1.15}",,,,,,,,,,,
 taunt_dummy,skill,스킬,도발 인형,허수아비가 주변 몹을 강제로 끌어당기고 체력 2배,1,FALSE,,decoy,"{""decoyHpMult"":2,""decoyTaunts"":true}",,,,,,,,,,,
 skill_laser,skill,스킬,레이저,[스킬] 앞쪽 직선을 관통해 0.5초마다 지속 피해 · 쿨 11초,1,FALSE,laser,,,,,,,,,,,,,
 skill_firearrow,skill,스킬,불화살,"[스킬] 바닥에 불바다를 깐다 — 초당 공격력 1.2배, 6초 · 쿨 12초",1,FALSE,firearrow,,,,,,,,,,,,,

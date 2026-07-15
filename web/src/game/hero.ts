@@ -14,7 +14,10 @@ export interface HeroStats {
   readonly range: number;
   readonly attackInterval: number;
   readonly moveSpeed: number;
+  /** 증강이 주는 재생 — 전투 중에도 찬다 */
   readonly regen: number;
+  /** 비전투 재생 — 마지막 피격 후 HERO_OOC_REGEN_DELAY초가 지나야 찬다 (초당) */
+  readonly outOfCombatRegen: number;
   readonly damageReduction: number;
   /** 0이면 단일 공격 */
   readonly splashRadius: number;
@@ -249,6 +252,8 @@ export function computeStats(
     attackInterval: Math.max(H.MIN_ATTACK_INTERVAL, H.HERO_ATTACK_INTERVAL / attackSpeed),
     moveSpeed,
     regen,
+    // 최대 체력 비례 — 탱커일수록 물러났을 때 절대 회복량이 크다
+    outOfCombatRegen: Math.round(maxHp) * H.HERO_OOC_REGEN_RATIO,
     damageReduction: Math.min(H.DAMAGE_REDUCTION_CAP, 1 - damageTaken),
     splashRadius,
     mineralPerKill,
@@ -323,6 +328,12 @@ export class Hero {
   killStacks = 0;
   /** 성장 증강용 — 지나온 라운드 수 */
   waveStacks = 0;
+
+  /**
+   * 마지막으로 맞은 뒤 지난 시간(초). HERO_OOC_REGEN_DELAY를 넘기면 비전투 재생이 켜진다.
+   * 시작·부활 시점엔 만피이므로 넉넉히 지난 것으로 둔다.
+   */
+  secondsSinceDamaged = Infinity;
 
   readonly augments: AugmentCard[] = [];
   /** 아직 고르지 않은 증강 선택 횟수 */
@@ -454,6 +465,7 @@ export class Hero {
     if (!this.alive) return;
     const stats = this.stats;
     this.hp -= raw * (1 - stats.damageReduction);
+    this.secondsSinceDamaged = 0; // 비전투 재생이 끊긴다 — 물러나야 다시 찬다
 
     // 맞으면 마나가 찬다 (TFT식) — 탱커가 스킬을 자주 쓰는 이유
     this.gainMana(K.MANA_ON_DAMAGED + stats.manaOnDamaged);
@@ -486,9 +498,13 @@ export class Hero {
     }
 
     this.attackCooldown -= dt;
+    this.secondsSinceDamaged += dt;
 
-    const { moveSpeed, regen, maxHp } = this.stats;
-    if (regen > 0) this.hp = Math.min(maxHp, this.hp + regen * dt);
+    // 재생 증강은 맞는 중에도 찬다. 비전투 재생은 물러나 있어야 찬다.
+    const { moveSpeed, regen, outOfCombatRegen, maxHp } = this.stats;
+    const healing =
+      regen + (this.secondsSinceDamaged >= H.HERO_OOC_REGEN_DELAY ? outOfCombatRegen : 0);
+    if (healing > 0) this.hp = Math.min(maxHp, this.hp + healing * dt);
 
     const gap = this.targetDistance - this.distance;
     if (Math.abs(gap) <= H.HERO_ARRIVE_EPSILON) return;
@@ -501,6 +517,7 @@ export class Hero {
     this.alive = true;
     this.mana = this.stats.startingMana;
     this.hp = this.stats.maxHp;
+    this.secondsSinceDamaged = Infinity;
     this.distance = this.altarDistance;
     this.targetDistance = this.altarDistance;
     this.respawnTimer = 0;

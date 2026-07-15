@@ -3,88 +3,132 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-<title>갓타디 프로토 — 원본 맵파일 기반</title>
+<title>갓타디 프로토 — 중세 판타지</title>
 <style>
   :root{
-    --bg:#0e1220; --panel:#171c2e; --panel2:#1e2438; --line:#2a3150;
-    --text:#e8e6df; --dim:#8a8fa8;
-    --terran:#4ea3ff; --zerg:#c065e0; --toss:#ffd23f; --creature:#6fdc8c;
-    --gold:#ffd23f; --danger:#ff5a3c; --gas:#6fdc8c;
+    /* 중세 판타지 팔레트 — 차콜·짙은 갈색 바탕에 낡은 은색·이끼 회색, 강조는 금색 하나 */
+    --bg:#15110c; --bg2:#0d0a06;
+    --panel:#241d14; --panel2:#31271a;
+    --line:#4d3d28; --line2:#6b5638;
+    --text:#ece2cb; --dim:#9d8c6f;
+    --gold:#e3b23e; --silver:#c2c6cf;
+    --slate:#6d86ab; --moss:#8a9a5b; --rust:#c14a2c;
+    /* 계열 식별색 — 철·마법·금·야수의 물성 톤 */
+    --terran:#6d86ab; --zerg:#9a6ea6; --toss:#e3b23e; --creature:#8a9a5b;
+    --danger:#c14a2c; --gas:#8a9a5b;
+    --serif:'Iowan Old Style','Palatino Linotype','Nanum Myeongjo',Georgia,'Times New Roman',serif;
+    --leather:linear-gradient(180deg,#3a2e1d,#2b2115);
   }
   *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
-  body{background:var(--bg);color:var(--text);font-family:-apple-system,'Noto Sans KR',sans-serif;
+  body{color:var(--text);font-family:-apple-system,'Noto Sans KR',sans-serif;
+       background:
+         radial-gradient(130% 90% at 50% 0%, #241c12 0%, var(--bg) 46%, var(--bg2) 100%) fixed;
        display:flex;flex-direction:column;align-items:center;min-height:100vh;padding:8px}
   #wrap{width:100%;max-width:460px}
-  #hud{display:grid;grid-template-columns:repeat(6,1fr);gap:4px;padding:6px 2px;
-       font-variant-numeric:tabular-nums;font-size:11px;text-align:center;color:var(--dim)}
-  #hud b{display:block;font-size:15px;color:var(--text);font-weight:700}
-  #hud .m b{color:var(--gold)} #hud .g b{color:var(--gas)} #hud .l b{color:var(--danger)}
-  canvas{width:100%;display:block;background:#0a0e19;border:1px solid var(--line);
-         border-radius:8px;touch-action:manipulation;margin-top:4px}
+  #hud{display:grid;grid-template-columns:repeat(6,1fr);gap:4px;padding:8px 4px;
+       font-variant-numeric:tabular-nums;font-size:11px;text-align:center;color:var(--dim);
+       background:var(--panel);border:1px solid var(--line);border-radius:8px;
+       box-shadow:inset 0 1px 0 rgba(255,230,180,.06)}
+  #hud b{display:block;font-size:15px;color:var(--text);font-weight:700;font-family:var(--serif)}
+  #hud .m b{color:var(--gold)} #hud .g b{color:var(--moss)} #hud .l b{color:var(--danger)}
+  canvas{width:100%;display:block;background:var(--bg2);
+         border:1px solid var(--line2);border-radius:8px;
+         box-shadow:0 2px 10px rgba(0,0,0,.5),inset 0 0 0 3px rgba(20,15,9,.9);
+         touch-action:manipulation;margin-top:6px}
   #info{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:8px 10px;
-        margin-top:6px;min-height:56px;font-size:12.5px;line-height:1.6}
-  #info .name{font-weight:700;font-size:14px}
+        margin-top:6px;min-height:56px;font-size:12.5px;line-height:1.6;
+        box-shadow:inset 0 1px 0 rgba(255,230,180,.05)}
+  #info .name{font-weight:700;font-size:14px;font-family:var(--serif)}
   .chip{display:inline-block;padding:1px 7px;border-radius:9px;font-size:10.5px;margin-left:5px;
-        vertical-align:1px;background:var(--panel2);color:var(--text);font-weight:600}
+        vertical-align:1px;background:var(--panel2);color:var(--text);font-weight:600;
+        border:1px solid var(--line)}
   .dim{color:var(--dim)}
   #message{min-height:18px;font-size:12px;color:var(--dim);padding:5px;text-align:center}
   .row{display:grid;gap:6px;margin-top:6px}
-  .c2{grid-template-columns:1fr 1fr} .c4{grid-template-columns:repeat(4,1fr)}
-  .c6{grid-template-columns:repeat(6,1fr)}
-  button{background:var(--panel2);color:var(--text);border:1px solid var(--line);border-radius:8px;
-         padding:10px 4px;font-size:12.5px;font-family:inherit;cursor:pointer;line-height:1.4}
-  button:active{transform:translateY(1px)} button:disabled{opacity:.35;cursor:default}
-  .bossbtn{white-space:pre-line;font-size:11px;padding:8px 2px}
-  .bossbtn.ready{border-color:var(--gold)}
-  .bossbtn.top{background:#33324a}
-  #bossState:disabled{opacity:1;color:var(--dim);border-style:dashed}
-  #bossState{font-size:11.5px}
+  .c2{grid-template-columns:1fr 1fr} .c3{grid-template-columns:repeat(3,1fr)}
+  .c4{grid-template-columns:repeat(4,1fr)} .c6{grid-template-columns:repeat(6,1fr)}
+  button{background:var(--leather);color:var(--text);border:1px solid var(--line);border-radius:7px;
+         padding:10px 4px;font-size:12.5px;font-family:inherit;cursor:pointer;line-height:1.4;
+         box-shadow:inset 0 1px 0 rgba(255,230,180,.07),0 1px 2px rgba(0,0,0,.4)}
+  button:active{transform:translateY(1px);box-shadow:inset 0 1px 3px rgba(0,0,0,.4)}
+  button:disabled{opacity:.35;cursor:default;box-shadow:none}
   #spawn{border-color:var(--gold)}
   #up0{border-color:var(--terran)} #up1{border-color:var(--zerg)}
   #up2{border-color:var(--toss)} #up3{border-color:var(--creature)}
-  .note{font-size:11px;color:var(--dim);text-align:center;margin-top:8px;line-height:1.7}
-  #heroPanel{background:var(--panel);border:1px solid #3a2f5c;border-radius:8px;
-             padding:9px 10px;margin-top:6px;font-size:11.5px;display:grid;gap:7px}
+  .note{font-size:11px;color:var(--dim);text-align:center;margin-top:10px;line-height:1.7}
+
+  /* ── 보스 소환 — 커맨드창이 아닌 독립 소환 버튼 + 오버레이 ── */
+  #bossOpen{width:100%;margin-top:8px;padding:13px 8px;font-family:var(--serif);
+            font-size:15px;letter-spacing:.05em;color:var(--gold);border:1px solid var(--gold);
+            background:linear-gradient(180deg,#3d2e12,#291f0e);
+            box-shadow:inset 0 1px 0 rgba(255,220,150,.14),0 2px 8px rgba(0,0,0,.45)}
+  #bossOpen .sub{display:block;font-family:-apple-system,'Noto Sans KR',sans-serif;
+                 font-size:11px;letter-spacing:0;color:var(--dim);margin-top:3px;font-weight:400}
+  #bossOpen.ready{box-shadow:inset 0 1px 0 rgba(255,220,150,.18),
+                  0 0 0 1px var(--gold),0 0 14px rgba(227,178,62,.35)}
+  #bossOverlay{position:fixed;inset:0;z-index:30;display:none;padding:20px;
+               align-items:center;justify-content:center;
+               background:radial-gradient(120% 100% at 50% 0%,rgba(40,28,14,.92),rgba(8,6,3,.95))}
+  #bossOverlay.open{display:flex}
+  #bossOverlay .modal{width:100%;max-width:380px;background:var(--panel);
+                      border:1px solid var(--line2);border-radius:12px;padding:18px 16px;
+                      display:flex;flex-direction:column;gap:12px;
+                      box-shadow:0 16px 48px rgba(0,0,0,.6),inset 0 1px 0 rgba(255,230,180,.09)}
+  #bossOverlay h2{font-family:var(--serif);font-size:21px;color:var(--gold);
+                  text-align:center;letter-spacing:.05em}
+  #bossOverlay .sub{color:var(--dim);font-size:12px;text-align:center}
+  .bossgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+  .bossbtn{white-space:pre-line;font-size:11.5px;padding:12px 2px;font-variant-numeric:tabular-nums}
+  .bossbtn.ready{border-color:var(--gold);color:var(--gold)}
+  .bossbtn.top{background:linear-gradient(180deg,#4a3818,#33260f);border-color:var(--gold)}
+  #bossOverlay .modalnote{font-size:11px;color:var(--dim);line-height:1.65;text-align:center}
+  #bossClose{padding:10px;border-color:var(--line2);font-family:var(--serif);letter-spacing:.04em}
+
+  #heroPanel{background:var(--panel);border:1px solid var(--line);border-radius:8px;
+             padding:9px 10px;margin-top:6px;font-size:11.5px;display:grid;gap:7px;
+             box-shadow:inset 0 1px 0 rgba(255,230,180,.05)}
   .hrow{display:grid;grid-template-columns:70px 1fr auto;align-items:center;gap:8px}
-  .hname{color:#b08cff;font-weight:600}
-  .hbar{height:6px;background:var(--panel2);border-radius:3px;overflow:hidden}
+  .hname{color:var(--gold);font-weight:600;font-family:var(--serif)}
+  .hbar{height:6px;background:var(--bg2);border-radius:3px;overflow:hidden;
+        box-shadow:inset 0 1px 2px rgba(0,0,0,.5)}
   .hbar i{display:block;height:100%;width:0;transition:width .12s linear}
-  #heroHpBar{background:#6fdc8c} #heroXpBar{background:#b08cff}
+  #heroHpBar{background:var(--moss)} #heroXpBar{background:var(--gold)}
   .hval{font-variant-numeric:tabular-nums}
   .hstats{color:var(--dim);font-size:11px}
   .haugs{display:flex;flex-wrap:wrap;gap:4px}
-  #skill{position:relative;overflow:hidden;border:1px solid #b08cff;border-radius:8px;
+  #skill{position:relative;overflow:hidden;border:1px solid var(--slate);border-radius:8px;
          padding:7px 9px;font-size:11.5px;font-weight:600;background:var(--panel2)}
   #skill.ready{border-color:var(--gold)}
-  #skill i{position:absolute;inset:0;background:#4ea3ff;opacity:.28;
+  #skill i{position:absolute;inset:0;background:var(--slate);opacity:.30;
            transform-origin:left;transition:transform .1s linear}
   #skill span{position:relative}
-  .aug{padding:1px 7px;border-radius:9px;font-size:10.5px;font-weight:600;color:#0e1220}
-  #augOverlay{position:fixed;inset:0;background:rgba(10,14,25,.94);display:none;
-              flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:20px}
-  #augOverlay h2{font-size:19px}
+  .aug{padding:1px 7px;border-radius:9px;font-size:10.5px;font-weight:600;color:#1a130a}
+  #gasSkillRow{margin-top:6px} #gasSkillRow button{font-size:11.5px;padding:7px 4px;border-color:var(--moss)}
+
+  #augOverlay{position:fixed;inset:0;z-index:30;display:none;
+              flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:20px;
+              background:radial-gradient(120% 100% at 50% 0%,rgba(40,28,14,.92),rgba(8,6,3,.96))}
+  #augOverlay h2{font-size:20px;font-family:var(--serif);color:var(--gold);letter-spacing:.04em}
   #augOverlay .sub{color:var(--dim);font-size:12px;margin-bottom:4px}
-  #statRow{margin-top:6px} #statRow button{font-size:11.5px;padding:7px 4px}
-  #gasSkillRow{margin-top:6px} #gasSkillRow button{font-size:11.5px;padding:7px 4px;border-color:#3f7d5a}
-  #reroll{margin-top:4px;padding:9px 22px;border:1px solid #3f7d5a}
+  #reroll{margin-top:4px;padding:9px 22px;border:1px solid var(--moss);font-family:var(--serif)}
   .augcards{display:grid;gap:10px;width:100%;max-width:420px}
   .augcard{background:var(--panel);border:1px solid var(--line);border-radius:10px;
-           padding:12px 14px;text-align:left;cursor:pointer;font-family:inherit;color:var(--text)}
+           padding:12px 14px;text-align:left;cursor:pointer;font-family:inherit;color:var(--text);
+           box-shadow:inset 0 1px 0 rgba(255,230,180,.05)}
   .augcard:hover{border-color:var(--gold)}
   .augcard .k{font-size:10.5px;font-weight:700;letter-spacing:.03em;
               display:flex;justify-content:space-between}
-  .augcard .cost{font-size:11px;margin-top:6px;color:var(--danger);font-weight:600}
-  .augcard .cost.safe{color:var(--dim);font-weight:400}
   .augcard .risk{color:var(--danger);font-weight:700;margin-left:auto;margin-right:8px}
   .syn{padding:1px 7px;border-radius:9px;font-size:10.5px;font-weight:700;
-       background:#3a2f5c;color:#e8d9ff}
-  .augcard .n{font-size:15px;font-weight:700;margin:3px 0 2px}
+       background:#3a2f14;color:var(--gold);border:1px solid var(--line2)}
+  .augcard .n{font-size:15px;font-weight:700;margin:3px 0 2px;font-family:var(--serif)}
   .augcard .d{font-size:12px;color:var(--dim)}
+
   #scorebar{display:flex;align-items:baseline;gap:8px;justify-content:center;
-            padding:4px 0 2px;font-size:12px;font-variant-numeric:tabular-nums}
-  #scorebar b{font-size:20px;color:var(--gold);font-weight:800;letter-spacing:.02em}
+            padding:6px 0 2px;font-size:12px;font-variant-numeric:tabular-nums}
+  #scorebar b{font-size:20px;color:var(--gold);font-weight:800;letter-spacing:.02em;font-family:var(--serif)}
   #hallOfFame{width:100%;max-width:340px;font-size:12.5px;font-variant-numeric:tabular-nums}
-  #hallOfFame h3{font-size:13px;color:var(--dim);font-weight:600;margin-bottom:6px}
+  #hallOfFame h3{font-size:13px;color:var(--dim);font-weight:600;margin-bottom:6px;font-family:var(--serif)}
   #hallOfFame ol{list-style:none;display:grid;gap:4px}
   #hallOfFame li{display:grid;grid-template-columns:24px 1fr auto;gap:8px;
                  padding:5px 8px;background:var(--panel);border:1px solid var(--line);border-radius:6px}
@@ -92,18 +136,21 @@
   #hallOfFame .rank{color:var(--dim)}
   #hallOfFame .pts{color:var(--gold);font-weight:700}
   #missions{background:var(--panel);border:1px solid var(--line);border-radius:8px;
-            padding:9px 10px;font-size:11.5px;display:grid;gap:7px}
+            padding:9px 10px;font-size:11.5px;display:grid;gap:7px;
+            box-shadow:inset 0 1px 0 rgba(255,230,180,.05)}
   .mrow{display:grid;grid-template-columns:64px 1fr auto;align-items:center;gap:8px}
   .mlabel{color:var(--dim)}
-  .mbar{height:5px;background:var(--panel2);border-radius:3px;overflow:hidden}
+  .mbar{height:5px;background:var(--bg2);border-radius:3px;overflow:hidden;
+        box-shadow:inset 0 1px 2px rgba(0,0,0,.5)}
   .mbar i{display:block;height:100%;width:0;background:var(--gold);transition:width .15s linear}
   .mval{font-variant-numeric:tabular-nums;color:var(--gold);font-weight:600}
   .mnote{grid-column:2 / -1;color:var(--text);font-variant-numeric:tabular-nums}
-  #overlay{position:fixed;inset:0;background:rgba(10,14,25,.94);display:none;
+  #overlay{position:fixed;inset:0;z-index:30;display:none;
            flex-direction:column;align-items:center;justify-content:center;gap:14px;
-           text-align:center;padding:24px}
-  #overlay h1{font-size:26px}
-  #overlay button{padding:12px 28px;font-size:15px}
+           text-align:center;padding:24px;
+           background:radial-gradient(120% 100% at 50% 0%,rgba(40,28,14,.93),rgba(8,6,3,.97))}
+  #overlay h1{font-size:27px;font-family:var(--serif);color:var(--gold);letter-spacing:.04em}
+  #overlay button{padding:12px 28px;font-size:15px;font-family:var(--serif)}
 </style>
 </head>
 <body>
@@ -147,6 +194,8 @@
     </div>
   </section>
 
+  <button id="bossOpen">⚔️ 보스 소환<span class="sub"></span></button>
+
   <div class="row c2">
     <button id="spawn">유닛 생성</button>
     <button id="probe">프로브</button>
@@ -154,7 +203,6 @@
   <div class="row c2">
     <button id="sell">유닛 처분</button>
     <button id="copyTower" hidden>복제 예약</button>
-    <button id="bossState" disabled>보스 대기</button>
   </div>
 
   <section id="heroPanel" aria-label="영웅">
@@ -179,12 +227,6 @@
     </div>
   </section>
 
-  <p class="note">보스 소환 (쿨타임만, 비용 없음) — 열린 레벨은 언제든 다시 부를 수 있다</p>
-  <div class="row c6">
-    <button class="bossbtn" id="boss1">Lv1</button><button class="bossbtn" id="boss2">Lv2</button><button class="bossbtn" id="boss3">Lv3</button>
-    <button class="bossbtn" id="boss4">Lv4</button><button class="bossbtn" id="boss5">Lv5</button><button class="bossbtn" id="boss6">Lv6</button>
-  </div>
-
   <p class="note">파일런 업그레이드 (가스) — 종족별 공격력 +10% 복리</p>
   <div class="row c4">
     <button id="up0">테란</button><button id="up1">저그</button>
@@ -193,8 +235,7 @@
 
   <p class="note">
     몹은 북측 왼쪽 입구에서 나와 십자 외곽선을 반시계로 한 바퀴 돌고 북측 오른쪽 출구로 나간다.<br>
-    보스는 라운드와 무관하게 언제든 소환한다. Lv N을 처치해야 Lv N+1이 열리고,<br>
-    한번 열린 레벨은 계속 부를 수 있다 — 낮은 레벨은 안전하지만 보상(5·8·13·20·29·39)이 적다.<br>
+    보스는 라운드와 무관하게 <b>보스 소환</b> 버튼으로 언제든 부른다.<br>
     빈 곳을 클릭하면 영웅이 이동한다. 타일을 클릭하면 유닛 생성/선택.<br>
     스킬은 자동 시전 — 어떤 스킬을 들고 어떻게 개조할지만 고른다.<br>
     단축키 — P 생성 · B 최고레벨 보스 · R 프로브 · X 처분 · E XP 구매 · 1234 업그레이드
@@ -206,6 +247,23 @@
   <p class="sub" id="augSub"></p>
   <div class="augcards" id="augCards"></div>
   <button id="reroll">리롤</button>
+</div>
+
+<div id="bossOverlay">
+  <div class="modal">
+    <h2>보스 소환</h2>
+    <p class="sub" id="bossOverlayState"></p>
+    <div class="bossgrid">
+      <button class="bossbtn" id="boss1">Lv1</button><button class="bossbtn" id="boss2">Lv2</button><button class="bossbtn" id="boss3">Lv3</button>
+      <button class="bossbtn" id="boss4">Lv4</button><button class="bossbtn" id="boss5">Lv5</button><button class="bossbtn" id="boss6">Lv6</button>
+    </div>
+    <p class="modalnote">
+      비용 없이 쿨타임만 있다. Lv N을 처치해야 Lv N+1이 열리고,<br>
+      한번 열린 레벨은 계속 부를 수 있다 — 낮은 레벨은 안전하지만<br>
+      보상(5·8·13·20·29·39)이 적다.
+    </p>
+    <button id="bossClose">닫기</button>
+  </div>
 </div>
 
 <div id="overlay">

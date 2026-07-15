@@ -6,6 +6,9 @@
 //
 // [원본확정] = 맵파일에서 직접 읽은 것
 // [프로토]   = 원본에서 확인 불가라 프로토타입용으로 정한 것 (§11에 미확인으로 기록됨)
+//
+// 표시명은 중세 4 병과로 리네이밍(왕국군: 정규군/포병/마법대/소환대) — worldbuilding §4.
+// 각 유닛의 원본 SC명은 뒤 주석으로 보존한다. 이름은 플레이버라 밸런스(태그·티어·race)와 무관.
 
 export type Tag = 'power' | 'splash' | 'speed';
 export const TAG_LABEL: Record<Tag, string> = {
@@ -14,7 +17,7 @@ export const TAG_LABEL: Record<Tag, string> = {
   speed: '스피드',
 };
 
-export const RACES = ['테란', '저그', '플토', '크리쳐'] as const;
+export const RACES = ['정규군', '포병', '마법대', '소환대'] as const;
 export type Race = 0 | 1 | 2 | 3;
 export const CREATURE: Race = 3;
 export const RACE_COLOR = ['#4ea3ff', '#c065e0', '#ffd23f', '#6fdc8c'] as const;
@@ -37,44 +40,44 @@ export const TIER_LABEL = ['Lv1', 'Lv2', 'Lv3', 'Lv4', 'GOD'] as const;
 export const TIER_POOLS: readonly (readonly UnitDef[])[] = [
   // Lv1 — strings:321,322,323,324,527,567,516
   [
-    { name: '마린', race: 0, tags: ['speed'] },
-    { name: '메딕', race: 0, tags: ['speed'] },
-    { name: '히드라', race: 1, tags: ['power'] },
-    { name: '저글링', race: 1, tags: ['power'] },
-    { name: '질럿', race: 2, tags: ['splash'] },
-    { name: '다크템플러', race: 2, tags: ['splash'] },
-    { name: '벵갈라스', race: CREATURE, tags: ['power'] },
+    { name: '견습 궁병', race: 0, tags: ['speed'] }, // 마린
+    { name: '종자', race: 0, tags: ['speed'] }, // 메딕
+    { name: '소형 투석기', race: 1, tags: ['power'] }, // 히드라
+    { name: '소형 노포', race: 1, tags: ['power'] }, // 저글링
+    { name: '견습 마법사', race: 2, tags: ['splash'] }, // 질럿
+    { name: '견습 정령술사', race: 2, tags: ['splash'] }, // 다크템플러
+    { name: '미니 골렘', race: CREATURE, tags: ['power'] }, // 벵갈라스
   ],
   // Lv2 — trigger #496~#502, N=1..7 순서 그대로
   [
-    { name: '어사돈', race: CREATURE, tags: ['speed'] },
-    { name: '하이템플러', race: 2, tags: ['splash'] },
-    { name: '고스트', race: 0, tags: ['speed'] },
+    { name: '가고일', race: CREATURE, tags: ['speed'] }, // 어사돈
+    { name: '마법사', race: 2, tags: ['splash'] }, // 하이템플러
+    { name: '궁병', race: 0, tags: ['speed'] }, // 고스트
     // 디파일러의 태그 문자열만 원본 strings에서 확인되지 않는다(§11.4). 저그 파워로 채움. [프로토]
-    { name: '디파일러', race: 1, tags: ['power'] },
-    { name: '드라군', race: 2, tags: ['splash'] },
-    { name: '파이어벳', race: 0, tags: ['speed'] },
-    { name: '울트라리스크', race: 1, tags: ['power'] },
+    { name: '망고넬', race: 1, tags: ['power'] }, // 디파일러
+    { name: '원소술사', race: 2, tags: ['splash'] }, // 드라군
+    { name: '기사', race: 0, tags: ['speed'] }, // 파이어벳
+    { name: '발리스타', race: 1, tags: ['power'] }, // 울트라리스크
   ],
   // Lv3 — 태그는 [원본확정](strings:308/315/316/317/318/319/644), N 순서는 [프로토]
   [
-    { name: '골리앗', race: 0, tags: ['speed'] },
-    { name: '시저탱크', race: 0, tags: ['speed'] },
-    { name: '뮤탈리스크', race: 1, tags: ['power'] },
-    { name: '가디언', race: 1, tags: ['power'] },
-    { name: '라이나돈', race: CREATURE, tags: ['splash'] },
-    { name: '다크아칸', race: 2, tags: ['splash'] },
-    { name: '아칸', race: 2, tags: ['splash'] },
+    { name: '장궁병', race: 0, tags: ['speed'] }, // 골리앗
+    { name: '소드 엑스퍼트', race: 0, tags: ['speed'] }, // 시저탱크
+    { name: '트레뷰셋', race: 1, tags: ['power'] }, // 뮤탈리스크
+    { name: '중발리스타', race: 1, tags: ['power'] }, // 가디언
+    { name: '매그마 골렘', race: CREATURE, tags: ['splash'] }, // 라이나돈
+    { name: '마도사', race: 2, tags: ['splash'] }, // 다크아칸
+    { name: '원소 마도사', race: 2, tags: ['splash'] }, // 아칸
   ],
   // Lv4 — trigger #507~#513, N=1..7 순서 그대로
   [
-    { name: '럴커', race: 1, tags: ['power'] },
-    { name: '카카루', race: CREATURE, tags: ['power', 'speed'] },
-    { name: '캐리어', race: 2, tags: ['splash'] },
-    { name: '레이스', race: 0, tags: ['speed'] },
-    { name: '디바우러', race: 1, tags: ['power'] },
-    { name: '커세어', race: 2, tags: ['splash'] },
-    { name: '배틀크루져', race: 0, tags: ['speed'] },
+    { name: '거석 투석기', race: 1, tags: ['power'] }, // 럴커
+    { name: '룬 골렘', race: CREATURE, tags: ['power', 'speed'] }, // 카카루
+    { name: '아크메이지', race: 2, tags: ['splash'] }, // 캐리어
+    { name: '신궁', race: 0, tags: ['speed'] }, // 레이스
+    { name: '연발 발리스타', race: 1, tags: ['power'] }, // 디바우러
+    { name: '대원소술사', race: 2, tags: ['splash'] }, // 커세어
+    { name: '소드마스터', race: 0, tags: ['speed'] }, // 배틀크루져
   ],
 ];
 
@@ -86,21 +89,21 @@ export const TIER_POOLS: readonly (readonly UnitDef[])[] = [
  * 태그는 전부 [원본확정] (§4.3).
  */
 export const GOD_POOL_EARLY: readonly UnitDef[] = [
-  { name: '오버로드', race: 1, tags: ['power'] },
-  { name: '리버', race: 2, tags: ['splash'] },
-  { name: '발키리', race: 0, tags: ['speed'] },
-  { name: '라그나소어', race: CREATURE, tags: ['power'] },
+  { name: '공성 거탑', race: 1, tags: ['power'] }, // 오버로드
+  { name: '리치', race: 2, tags: ['splash'] }, // 리버
+  { name: '발키리', race: 0, tags: ['speed'] }, // 발키리
+  { name: '아이언 콜로서스', race: CREATURE, tags: ['power'] }, // 라그나소어
 ];
 
 export const GOD_POOL_LATE: readonly UnitDef[] = [
   ...GOD_POOL_EARLY,
-  { name: '사라 케리건', race: 1, tags: ['speed', 'power'] },
-  { name: '짐 레이너', race: 0, tags: ['speed', 'splash'] },
-  { name: '제라툴', race: 2, tags: ['splash', 'power'] },
-  { name: '인페스티드 케리건', race: 1, tags: ['power', 'speed'] },
-  { name: '헌터 킬러', race: 1, tags: ['power', 'splash'] },
-  { name: '테사다', race: 2, tags: ['splash', 'speed'] },
-  { name: '스칸티드', race: CREATURE, tags: ['splash'] },
+  { name: '왕립 대노포', race: 1, tags: ['speed', 'power'] }, // 사라 케리건
+  { name: '팔라딘', race: 0, tags: ['speed', 'splash'] }, // 짐 레이너
+  { name: '대현자', race: 2, tags: ['splash', 'power'] }, // 제라툴
+  { name: '파멸의 투석기', race: 1, tags: ['power', 'speed'] }, // 인페스티드 케리건
+  { name: '폭풍 노포', race: 1, tags: ['power', 'splash'] }, // 헌터 킬러
+  { name: '원소 군주', race: 2, tags: ['splash', 'speed'] }, // 테사다
+  { name: '미아즈마 로드', race: CREATURE, tags: ['splash'] }, // 스칸티드
 ];
 
 /** 확장 GOD 풀이 열리는 처치 보스 수. trigger #534의 `AtLeast, 6`. [원본확정] */
@@ -112,5 +115,5 @@ export function godPool(bossesKilled: number): readonly UnitDef[] {
 
 export function tagLabel(u: UnitDef): string {
   const base = u.tags.map((t) => TAG_LABEL[t]).join(' ');
-  return u.race === CREATURE ? `크리쳐 ${base}` : base;
+  return u.race === CREATURE ? `소환대 ${base}` : base;
 }

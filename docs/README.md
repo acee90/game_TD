@@ -1,6 +1,6 @@
 # docs — 문서 지도
 
-> 상태: **현행** (새 문서는 여기에 등록한다) · 최종 갱신: 2026-07-13
+> 상태: **현행** (새 문서는 여기에 등록한다) · 최종 갱신: 2026-07-14
 > 규칙: [documentation-rules.md](documentation-rules.md) · 상태가 **현행**인 문서만 기준으로 삼는다.
 
 ```
@@ -19,7 +19,7 @@ docs/
 | 문서 | 상태 | 역할 |
 |---|---|---|
 | [vision.md](design/vision.md) | 현행 | 한 줄 피치 · 판타지 · 타깃 · 하지 않을 것 · **코어 필러 4종** |
-| [worldbuilding.md](design/worldbuilding.md) | 현행 | 초한지 대체역사 · 병과 · 명장 · 아트/용어 기준 |
+| [worldbuilding.md](design/worldbuilding.md) | 현행 | 창작 중세 판타지 · 방랑기사 · 아트/용어 기준 |
 | [game-system-spec.md](design/game-system-spec.md) | 현행 | 코어 루프 + 시스템 명세 + 목표 지표 + 설계 결정 기록 |
 | [backlog.md](design/backlog.md) | 현행 | 미확정 아이디어 대기실 (기각 사유 포함) |
 
@@ -40,6 +40,9 @@ docs/
 | [god-td-x-vz056-map-analysis-v1.0.md](reference/god-td-x-vz056-map-analysis-v1.0.md) | 현행 (참조) | 원본 맵파일 리버스엔지니어링 — [원본확정] 수치의 1차 출처 |
 | [lol-arena-tft-augments-v1.0.md](reference/lol-arena-tft-augments-v1.0.md) | 현행 (참조) | LoL 아레나 226종 · TFT 세트17 275종 증강 전수 목록 (게임 클라이언트 데이터, 패치 16.13) |
 | [augment-taxonomy-v1.0.md](reference/augment-taxonomy-v1.0.md) | 현행 (참조) | 위 501종의 기능별 분류 (스탯/특수능력/경제/시너지…) — 우리가 붙인 해석 |
+| [kris-cooper-bran-the-breaker-kris-cooper.jpg](reference/kris-cooper-bran-the-breaker-kris-cooper.jpg) | 현행 (화풍 참조) | 외부 화풍 레퍼런스 — 선·면·팔레트만 참고, 출하 리소스 아님 |
+| [wandering-knight-concept-v1.png](reference/wandering-knight-concept-v1.png) | 현행 (아트 기준) | Meshy용 방랑기사 정면 콘셉트 v1 |
+| [wandering-archer-concept-v1.png](reference/wandering-archer-concept-v1.png) | 현행 (아트 기준) | Meshy용 방랑궁수 정면 콘셉트 v1 |
 | [god-td-system-notes-v0.1.md](reference/god-td-system-notes-v0.1.md) | 보관 | 초기 시스템 정리 (맵분석으로 대체) |
 | [god-td-ops-layer-analysis-v0.1.md](reference/god-td-ops-layer-analysis-v0.1.md) | 보관 | 운영 레이어 초기 분석 |
 

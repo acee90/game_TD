@@ -51,6 +51,23 @@ export const HP_PER_STR = 70;
  * 후반 밸런스(탱커 빌드의 존재 이유)는 거의 그대로다.
  */
 export const HERO_BASE_HP = 260;
+/**
+ * 비전투 재생 (2026-07-15).
+ *
+ * 그전까지 영웅의 회복 수단은 재생·흡혈 증강, 레벨업(완전 회복), 증강 획득(잃은 체력 50%)뿐이었다.
+ * 회복 증강을 안 뽑으면 한 번 깎인 체력이 **영영 안 돌아온다** — 결국 죽어서 부활하는 게
+ * 유일한 회복이 됐다. "죽는 게 회복"은 나쁜 루프다.
+ *
+ * 그래서 마지막 피격 후 HERO_OOC_REGEN_DELAY초가 지나면 저절로 찬다. 영웅은 경로 위에서만
+ * 움직이므로 이건 곧 **"물러나면 회복한다"**가 된다 — 이동이 유일한 직접 조작인 게임에서
+ * 후퇴·복귀가 전술이 된다. 회복률이 최대 체력 비례라 탱커 빌드일수록 절대량이 크다.
+ *
+ * 재생 증강은 여전히 값어치가 있다 — 그쪽은 **맞는 중에도** 찬다.
+ */
+export const HERO_OOC_REGEN_DELAY = 4;
+/** 비전투 재생 — 초당 최대 체력의 이 비율 (풀피까지 ~17초, 라운드 간격이 22초다) */
+export const HERO_OOC_REGEN_RATIO = 0.06;
+
 /** 민첩 1당 공격 속도 +4% */
 export const AS_PER_AGI = 0.04;
 /** 공격 간격 하한 — 민첩을 아무리 골라도 이 밑으로는 안 내려간다 */
@@ -680,9 +697,27 @@ export const AUGMENTS: readonly Augment[] = [
   { id: 'cyclone', kind: 'skill', name: '회오리', maxStacks: 2,
     description: '소용돌이 반경 +25, 맞은 적을 2초간 40% 감속',
     effect: {}, skillMod: { radiusAdd: 25, slowFactor: 0.6, slowSeconds: 2 }, requiresSkill: 'whirlwind' },
+  /**
+   * 대재앙 (2026-07-15 재설계).
+   *
+   * 이전 값(반경 +35, 스킬 피해 +30%)은 **한 카드가 두 곱셈 축을 동시에 키웠다** —
+   * 반경은 타격 수를(경로가 1차원이라 선형), damageMult는 한 방을 키운다. 둘이 곱해진다.
+   * 측정(아레나·Lv24·더미 40기): 2스택 유성 한 방이 기준의 **×3.14**. 같은 두 장인
+   * 증폭(×2.30)을 37% 웃돌았다. 곱연산은 소수 정예여야 한다는 COMPOUNDING_IDS 원칙과 충돌한다.
+   *
+   * 그래서 피해 배수를 깎는다 (1.3 → 1.15). 반경은 거의 그대로 둔다 — 광역이 넓어지는 건
+   * 유성의 정체성이고, 대상 수는 몹이 뭉쳐 있을 때만 늘어나 자기 제동이 걸리기 때문이다.
+   *
+   * 폭발력은 **스킬 계열을 더 모아야** 나온다 (각성 3장 / 초월 시전 5장). 재측정:
+   * 대재앙 2장만이면 완력 3장과 비슷한 수준(×0.92)이고, 스킬 5장을 채우면 크게 벌어진다.
+   *
+   * 화상 연계도 시도했다가 접었다 — 유성은 마나 160짜리 버스트라 8초에 한 번 나가는데
+   * 화상은 3초면 꺼진다. 겹이 쌓이질 않아 화상 기여도가 총딜의 3~6%에 그쳤다.
+   * 화염의 연료는 도트(레이저 틱·불바다 장판)여야 한다.
+   */
   { id: 'cataclysm', kind: 'skill', name: '대재앙', maxStacks: 2,
-    description: '유성 반경 +35, 스킬 피해 +30%',
-    effect: {}, skillMod: { radiusAdd: 35, damageMult: 1.3 }, requiresSkill: 'meteor' },
+    description: '유성 반경 +30, 스킬 피해 +15%',
+    effect: {}, skillMod: { radiusAdd: 30, damageMult: 1.15 }, requiresSkill: 'meteor' },
   { id: 'taunt_dummy', kind: 'skill', name: '도발 인형', maxStacks: 1,
     description: '허수아비가 주변 몹을 강제로 끌어당기고 체력 2배',
     effect: {}, skillMod: { decoyHpMult: 2, decoyTaunts: true }, requiresSkill: 'decoy' },
