@@ -155,6 +155,7 @@ namespace GodTD.View
 
             BuildCamera();
             BuildLights();
+            BuildPostFx();
             BuildStaticScene();
             dynamicRoot = new GameObject("Dynamic").transform;
             dynamicRoot.SetParent(transform, false);
@@ -398,6 +399,34 @@ namespace GodTD.View
             fill.color = new Color(0.55f, 0.65f, 1f);
             fill.intensity = 0.22f;
             fill.shadows = LightShadows.None;
+        }
+
+        // ───────── 포스트프로세싱 (URP Volume) ─────────
+        // 구형 BloomEffect(OnRenderImage)를 대체한다. emissive·가산 파티클이 '밝은 알베도'가
+        // 아니라 진짜 빛으로 읽히게 하는 게 핵심 — 감사가 지목한 "싸구려 느낌"의 최대 처방.
+        // 코드 생성(에셋 0) 원칙 유지: 프로파일도 런타임에 만든다.
+        void BuildPostFx()
+        {
+            var go = new GameObject("PostFx Volume");
+            go.transform.SetParent(transform, false);
+            var volume = go.AddComponent<Volume>();
+            volume.isGlobal = true;
+            volume.priority = 10f;
+
+            var profile = ScriptableObject.CreateInstance<VolumeProfile>();
+            volume.sharedProfile = profile;
+
+            // Bloom — 임계 위(HDR>threshold) 픽셀만 번진다. GOD 타워·보스·투사체·발광 눈이 빛난다.
+            var bloom = profile.Add<Bloom>(true);
+            bloom.threshold.Override(0.9f);
+            bloom.intensity.Override(1.1f);
+            bloom.scatter.Override(0.65f);
+            bloom.highQualityFiltering.Override(true);
+
+            // Tonemapping(Neutral) — HDR 발광값을 색 왜곡 최소로 눌러 담는다. 없으면 >1 값이 하얗게 클립.
+            // ACES는 딥네이비 팔레트를 데워 회청색으로 밀기에 Neutral을 쓴다.
+            var tone = profile.Add<Tonemapping>(true);
+            tone.mode.Override(TonemappingMode.Neutral);
         }
 
         // ───────── 정적 씬 (배경 · 보드 · 경로 · 십자 · 타일 · 문) ─────────
