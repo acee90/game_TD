@@ -44,7 +44,11 @@ export interface Elements {
   readonly augOverlay: HTMLElement;
   readonly augSub: HTMLElement;
   readonly augCards: HTMLElement;
-  readonly bossState: HTMLElement;
+  readonly bossOpen: HTMLButtonElement;
+  readonly bossOpenSub: HTMLElement;
+  readonly bossOverlay: HTMLElement;
+  readonly bossOverlayState: HTMLElement;
+  readonly bossClose: HTMLButtonElement;
   readonly bossLevels: readonly HTMLButtonElement[];
   readonly probe: HTMLButtonElement;
   readonly reroll: HTMLButtonElement;
@@ -98,7 +102,11 @@ export function bindElements(): Elements {
     augOverlay: $('augOverlay'),
     augSub: $('augSub'),
     augCards: $('augCards'),
-    bossState: $('bossState'),
+    bossOpen: $<HTMLButtonElement>('bossOpen'),
+    bossOpenSub: $('bossOpen').querySelector('.sub') as HTMLElement,
+    bossOverlay: $('bossOverlay'),
+    bossOverlayState: $('bossOverlayState'),
+    bossClose: $<HTMLButtonElement>('bossClose'),
     bossLevels: [1, 2, 3, 4, 5, 6].map((n) => $<HTMLButtonElement>(`boss${n}`)),
     probe: $<HTMLButtonElement>('probe'),
     reroll: $<HTMLButtonElement>('reroll'),
@@ -338,7 +346,10 @@ export function refresh(el: Elements, game: Game): void {
   el.lives.textContent = String(game.lives);
   el.kills.textContent = String(game.kills);
 
-  el.bossState.textContent = bossStateLabel(game);
+  const bossLabel = bossStateLabel(game);
+  el.bossOpenSub.textContent = bossLabel;
+  el.bossOpen.classList.toggle('ready', game.bossCooldown <= 0);
+  el.bossOverlayState.textContent = bossLabel;
   el.bossLevels.forEach((button, i) => {
     const level = i + 1;
     const open = level <= game.maxBossLevel;
