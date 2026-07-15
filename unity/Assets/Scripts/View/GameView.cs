@@ -84,6 +84,9 @@ namespace GodTD.View
         readonly Dictionary<Enemy, EnemyBody> enemyBodies = new Dictionary<Enemy, EnemyBody>();
         readonly List<Enemy> enemyRemoveBuffer = new List<Enemy>();
         GameObject heroObject;
+        Animator heroAnimator;
+        Vector3 heroLastPosition;
+        float heroLastAttackCooldown;
         int lastHeroLevel = 1;
         bool heroWasAlive = true;
         GameObject decoyObject;
@@ -803,15 +806,23 @@ namespace GodTD.View
                 // 성주 — 판 위에서 유일하게 <b>움직이는 사람</b>이다. 예전엔 "유일한 2족 보행"이
                 // 구분 단서였지만, 적이 군세가 되면서(세계관 §7) 그 단서가 사라졌다. 새 단서는
                 // 밝은 강철 갑주 + 청 망토 + <b>군기가 없다는 것</b>(명장은 등에 군기를 지고 정지해 있다).
-                // 콜라이더는 남긴다 (좌클릭 선택). 메시는 프리미티브가 아니므로 직접 붙인다.
-                heroObject = new GameObject("Hero", typeof(MeshFilter), typeof(MeshRenderer));
+                // Mixamo 휴머노이드 프리팹. 프리팹이 없을 때만 기존 코드 생성 메시로 폴백한다.
+                var heroPrefab = Resources.Load<GameObject>("Hero/WanderingArcherHero");
+                heroObject = heroPrefab != null
+                    ? Instantiate(heroPrefab)
+                    : new GameObject("Hero", typeof(MeshFilter), typeof(MeshRenderer));
+                heroObject.name = "Hero";
                 heroObject.AddComponent<SphereCollider>();
                 heroObject.AddComponent<HeroMarker>();
                 heroObject.transform.SetParent(dynamicRoot, false);
-                heroObject.GetComponent<MeshFilter>().sharedMesh = LowPoly.Hero(HERO);
-                float d = HeroData.HERO_RADIUS * 2f * SCALE;
-                heroObject.transform.localScale = new Vector3(d, d, d);
-                Paint(heroObject, LowPoly.Mat(0f)); // 재질은 빛나지 않는다 (세계관 §8)
+                heroAnimator = heroObject.GetComponent<Animator>();
+                if (heroPrefab == null)
+                {
+                    heroObject.GetComponent<MeshFilter>().sharedMesh = LowPoly.Hero(HERO);
+                    float d = HeroData.HERO_RADIUS * 2f * SCALE;
+                    heroObject.transform.localScale = new Vector3(d, d, d);
+                    Paint(heroObject, LowPoly.Mat(0f));
+                }
 
                 // 영웅 전용 포인트 라이트 — 갑주에 닿는 빛으로 위치를 알린다.
                 // 마법 오라가 아니라 <b>성주를 따르는 횃불</b>이라는 함의로 불빛을 쓴다.
@@ -832,7 +843,40 @@ namespace GodTD.View
             heroWasAlive = alive;
             heroObject.SetActive(alive);
             if (alive)
-                heroObject.transform.position = W(hero.X, hero.Y, 0.4f + HeroData.HERO_RADIUS * SCALE);
+            {
+                var nextPosition = W(hero.X, hero.Y, heroAnimator != null
+                    ? 0.4f
+                    : 0.4f + HeroData.HERO_RADIUS * SCALE);
+                var delta = nextPosition - heroLastPosition;
+                bool moving = delta.sqrMagnitude > 0.0001f;
+                heroObject.transform.position = nextPosition;
+                if (heroAnimator != null)
+                {
+                    heroAnimator.SetBool("Moving", moving);
+                    if (moving)
+                        heroObject.transform.rotation = Quaternion.LookRotation(delta.normalized, Vector3.up);
+                    if (hero.AttackCooldown > heroLastAttackCooldown + 0.01f)
+                    {
+                        // 코어가 이번 공격에 만든 실제 투사체를 사용한다. 막타로 대상이 이미
+                        // Enemies에서 제거됐더라도 Shot에는 발사 방향이 남아 있다.
+                        for (int i = Game.Shots.Count - 1; i >= 0; i--)
+                        {
+                            var shot = Game.Shots[i];
+                            if (Mathf.Abs(shot.X - hero.X) > 0.01f ||
+                                Mathf.Abs(shot.Y - hero.Y) > 0.01f) continue;
+                            var attackDirection = W(shot.Tx, shot.Ty, 0.4f) - nextPosition;
+                            attackDirection.y = 0f;
+                            if (attackDirection.sqrMagnitude > 0.0001f)
+                                heroObject.transform.rotation = Quaternion.LookRotation(
+                                    attackDirection.normalized, Vector3.up);
+                            break;
+                        }
+                        heroAnimator.SetTrigger("Attack");
+                    }
+                }
+                heroLastPosition = nextPosition;
+                heroLastAttackCooldown = hero.AttackCooldown;
+            }
 
             // 레벨업 — 확장 링 + 버스트
             if (hero.Level > lastHeroLevel)
