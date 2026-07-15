@@ -249,7 +249,7 @@ export const WAVE_TYPES: Record<WaveTypeId, WaveType> = {
   normal: { id: 'normal', label: '일반', contactDamageMult: 1, color: '#9aa2c0' },
   // 사냥꾼: 영웅 위협 전담. 기본 공격력을 1+0.6r로 낮춘 만큼 여기에 위임 —
   // ×6이면 R10 접촉 42/기, R30 접촉 114/기. 탱킹 빌드가 시험대에 오른다. [프로토]
-  hunter: { id: 'hunter', label: '사냥꾼', contactDamageMult: 6, color: '#ff5a3c' },
+  hunter: { id: 'hunter', label: '사냥꾼', contactDamageMult: 6, color: '#c14a2c' },
 };
 
 /** R10부터 5의 배수 라운드는 사냥꾼 웨이브 */
