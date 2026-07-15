@@ -253,6 +253,10 @@ function refreshHero(el: Elements, game: Game): void {
     stats.splashRadius > 0 ? `광역 ${stats.splashRadius.toFixed(0)}` : null,
     stats.damageReduction > 0 ? `피해감소 ${(stats.damageReduction * 100).toFixed(0)}%` : null,
     stats.regen > 0 ? `재생 ${stats.regen}/s` : null,
+    // 물러나 있으면 저절로 찬다 — 회복 중일 때만 알린다
+    hero.alive && hero.secondsSinceDamaged >= HD.HERO_OOC_REGEN_DELAY && hero.hp < stats.maxHp
+      ? `회복중 +${stats.outOfCombatRegen.toFixed(0)}/s`
+      : null,
   ].filter(Boolean);
   el.heroStats.textContent = parts.join(' · ');
 

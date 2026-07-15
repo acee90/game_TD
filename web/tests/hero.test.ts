@@ -214,6 +214,58 @@ describe('레벨 — 모든 처치에서 경험치를 얻는다', () => {
   });
 });
 
+describe('비전투 재생 — 물러나면 회복한다 (2026-07-15)', () => {
+  test('맞는 중에는 안 찬다', () => {
+    const hero = new Hero(200);
+    hero.takeDamage(200);
+    const hurt = hero.hp;
+
+    // 지연 시간이 지나기 전까지는 회복이 없다
+    for (let i = 0; i < 30; i++) hero.step(0.1); // 3초 < HERO_OOC_REGEN_DELAY(4초)
+    expect(hero.hp).toBeCloseTo(hurt, 5);
+  });
+
+  test('마지막 피격 후 지연 시간이 지나면 저절로 찬다', () => {
+    const hero = new Hero(200);
+    hero.takeDamage(200);
+    const hurt = hero.hp;
+
+    // 실제 게임처럼 1/60초씩 밟는다 — 지연 시간을 넘긴 뒤 딱 1초치만 회복해야 한다
+    const tick = 1 / 60;
+    for (let t = 0; t < H.HERO_OOC_REGEN_DELAY / tick; t++) hero.step(tick);
+    expect(hero.hp).toBeCloseTo(hurt, 5); // 아직 지연 시간 — 회복 없음
+
+    for (let t = 0; t < 1 / tick; t++) hero.step(tick);
+    expect(hero.hp - hurt).toBeCloseTo(hero.stats.outOfCombatRegen, 0);
+  });
+
+  test('다시 맞으면 재생이 끊긴다', () => {
+    const hero = new Hero(200);
+    hero.takeDamage(200);
+    hero.step(H.HERO_OOC_REGEN_DELAY + 1); // 회복 중
+    const healed = hero.hp;
+
+    hero.takeDamage(1); // 피격 — 타이머가 0으로
+    const afterHit = hero.hp;
+    for (let i = 0; i < 30; i++) hero.step(0.1); // 3초 — 아직 지연 시간 안 지남
+    expect(hero.hp).toBeCloseTo(afterHit, 5);
+    expect(afterHit).toBeLessThan(healed);
+  });
+
+  test('최대 체력을 넘지 않는다', () => {
+    const hero = new Hero(200);
+    hero.takeDamage(10);
+    for (let i = 0; i < 600; i++) hero.step(0.1); // 60초 — 넘치고도 남는다
+    expect(hero.hp).toBe(hero.stats.maxHp);
+  });
+
+  test('회복량은 최대 체력 비례 — 탱커일수록 절대량이 크다', () => {
+    const squishy = computeStats(20, []);
+    const tank = computeStats(20, [card('bulwark')]); // 최대 체력 +55%
+    expect(tank.outOfCombatRegen).toBeGreaterThan(squishy.outOfCombatRegen);
+  });
+});
+
 describe('사망과 부활 — 패널티는 대기시간뿐', () => {
   test('죽으면 부활 타이머가 걸린다', () => {
     const hero = new Hero(200);

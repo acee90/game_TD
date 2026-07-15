@@ -528,3 +528,65 @@ describe('돌파와 스킬', () => {
     expect(game.enemies).toHaveLength(0);
   });
 });
+
+describe('대재앙 — 단독은 적당히, 시너지를 채워야 크게 (2026-07-15)', () => {
+  /**
+   * 유성 한 방의 실제 총 피해. 안 죽는 더미를 경로에 늘어세우고 한 번 시전한다.
+   *
+   * 반경으로 대상 수를 **어림하면 안 된다** — 경로가 1차원이라 선형일 것 같지만,
+   * 몹 무리가 유한해서 반경을 키워도 대상 수는 완만하게만 는다 (측정: 85→145에서 7→11기).
+   */
+  const meteorBurst = (ids: string[], level = 35): number => {
+    const game = new Game();
+    const hero = game.hero;
+    hero.level = level;
+    for (const id of ids) hero.addAugment(card(id));
+    game.augmentChoices = [];
+
+    hero.distance = PATH_LENGTH / 2;
+    hero.targetDistance = hero.distance;
+    game.enemies.length = 0;
+    for (let i = 0; i < 40; i++) {
+      game.enemies.push(mob(hero.distance + (i - 20) * 26, 1e12, 0));
+    }
+
+    hero.mana = hero.skill!.manaMax;
+    const before = game.heroDamageDealt;
+    game.useSkill();
+    return game.heroDamageDealt - before;
+  };
+
+  test('한 카드가 두 곱셈 축을 동시에 키우지 않는다 — 피해 배수는 완만하다', () => {
+    // 반경은 대상 수를, damageMult는 한 방을 키운다. 둘 다 크면 카드 하나가 곱연산이 된다.
+    // COMPOUNDING_IDS 원칙: 곱은 소수 정예여야 한다.
+    expect(augment('cataclysm').skillMod!.damageMult).toBeLessThanOrEqual(1.2);
+  });
+
+  test('대재앙 2장이 범용 스킬 카드(증폭) 2장을 압도하지 않는다', () => {
+    const cataclysm = meteorBurst(['skill_meteor', 'cataclysm', 'cataclysm']);
+    const amp = meteorBurst(['skill_meteor', 'skill_amp', 'skill_amp']);
+    // 개편 전엔 대재앙이 35% 앞서 유성 빌드의 정답이 하나뿐이었다.
+    // 전용 카드라 약간 앞서는 건 좋지만, 압도하면 드래프트가 사라진다.
+    expect(cataclysm / amp).toBeGreaterThan(0.9);
+    expect(cataclysm / amp).toBeLessThan(1.25);
+  });
+
+  test('스킬 계열을 5장까지 채우면(대특화) 파워가 대재앙 단독의 두 배로 뛴다', () => {
+    // 반경이 같은 두 빌드라 대상 수가 같다 — 차이는 순수하게 시너지가 만든 것이다.
+    const alone = new Hero();
+    alone.level = 35;
+    for (const id of ['skill_meteor', 'cataclysm', 'cataclysm']) alone.addAugment(card(id));
+
+    const synergized = new Hero();
+    synergized.level = 35;
+    for (const id of ['skill_meteor', 'cataclysm', 'cataclysm', 'skill_amp', 'skill_amp']) {
+      synergized.addAugment(card(id));
+    }
+
+    expect(synergized.skill!.radius).toBe(alone.skill!.radius); // 대상 수가 같다
+    // 각성(3장)에 초월 시전(5장)이 얹히면서 스킬 피해가 두 배가 된다
+    expect(synergized.skill!.damageMult / alone.skill!.damageMult).toBeGreaterThan(1.9);
+    // 시전 마나도 줄어 회전이 빨라진다 (초월 시전: 필요 마나 -30%)
+    expect(synergized.skill!.manaMax).toBeLessThan(alone.skill!.manaMax);
+  });
+});
