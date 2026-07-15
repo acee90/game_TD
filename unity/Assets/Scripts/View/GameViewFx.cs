@@ -335,10 +335,16 @@ namespace GodTD.View
                 p.Go.transform.position = Vector3.Lerp(p.From, p.To, k);
                 if (k >= 1f)
                 {
+                    var hot = Color.Lerp(p.Color, Color.white, 0.35f);
                     if (p.SplashRadiusPx > 0f)
                     {
                         Pulse(p.To, p.Color, p.SplashRadiusPx * SCALE * 0.5f);
-                        Burst(p.To, p.Color, 6, 2.4f, 0.12f);
+                        Burst(p.To, hot, 12, 2.8f, 0.13f);
+                    }
+                    else
+                    {
+                        // 단일 타격도 작은 불꽃 — 명중이 '느껴지게'
+                        Burst(p.To, hot, 5, 2.2f, 0.1f);
                     }
                     Deactivate(p);
                 }
@@ -355,12 +361,13 @@ namespace GodTD.View
                 orb.name = "Projectile";
                 Destroy(orb.GetComponent<Collider>());
                 orb.transform.SetParent(root, false);
-                orb.transform.localScale = new Vector3(0.26f, 0.26f, 0.26f);
+                orb.transform.localScale = new Vector3(0.24f, 0.24f, 0.24f);
                 var trail = orb.AddComponent<TrailRenderer>();
-                trail.time = 0.14f;
-                trail.startWidth = 0.16f;
+                trail.time = 0.18f;
+                trail.startWidth = 0.22f;
                 trail.endWidth = 0f;
-                trail.material = UnlitMat(Color.white);
+                trail.numCapVertices = 2;
+                trail.material = AdditiveSolid(Color.white); // 가산 트레일 — 겹칠수록 밝아져 블룸
                 p = new Projectile
                 {
                     Go = orb,
@@ -372,9 +379,11 @@ namespace GodTD.View
             p.Go.SetActive(true);
             p.Go.transform.position = from;
             p.Trail.Clear();
-            p.Trail.startColor = color;
+            // 흰-핫 코어로 밝히고(가장자리는 본색), 트레일은 본색으로 꼬리를 남긴다
+            var hot = Color.Lerp(color, Color.white, 0.35f);
+            p.Trail.startColor = hot;
             p.Trail.endColor = new Color(color.r, color.g, color.b, 0f);
-            p.Renderer.sharedMaterial = UnlitMat(color);
+            p.Renderer.sharedMaterial = AdditiveSolid(hot * 1.8f); // HDR → 블룸이 코어를 문다
             p.From = from;
             p.To = to;
             p.T = 0f;
@@ -382,6 +391,9 @@ namespace GodTD.View
             p.Color = color;
             p.SplashRadiusPx = splashRadiusPx;
             p.Active = true;
+
+            // 총구 섬광 — 발사가 '터지듯' 시작
+            Burst(from, hot, 4, 1.8f, 0.09f);
         }
 
         void Deactivate(Projectile p)
@@ -539,6 +551,20 @@ namespace GodTD.View
             if (unlitMats.TryGetValue(color, out var mat)) return mat;
             mat = new Material(spriteShader) { color = color };
             unlitMats[color] = mat;
+            return mat;
+        }
+
+        // ── 텍스처 없는 가산 솔리드 — 투사체 코어·트레일용. 색은 HDR(>1) 가능 → 블룸이 문다 ──
+        readonly Dictionary<Color, Material> additiveSolidMats = new Dictionary<Color, Material>();
+
+        /// <summary>Sprites/Default를 SrcAlpha/One 가산으로. 텍스처 없이 솔리드 발광 — HDR 색으로 블룸.</summary>
+        Material AdditiveSolid(Color color)
+        {
+            if (additiveSolidMats.TryGetValue(color, out var mat)) return mat;
+            mat = new Material(spriteShader) { color = color };
+            mat.SetInt("_SrcBlend", (int)UnityEngine.Rendering.BlendMode.SrcAlpha);
+            mat.SetInt("_DstBlend", (int)UnityEngine.Rendering.BlendMode.One);
+            additiveSolidMats[color] = mat;
             return mat;
         }
 
