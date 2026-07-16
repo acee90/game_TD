@@ -95,6 +95,7 @@ namespace GodTD.View
 
         LineRenderer selectionRing;
         LineRenderer heroRing;
+        GameObject tileSelectMarker;   // Kenney selection-a — 선택한 타일 위 4모서리 브래킷
 
         // ── 머티리얼 캐시 (색·발광 강도별) ──
         readonly Dictionary<Color, Material> litMats = new Dictionary<Color, Material>();
@@ -459,6 +460,17 @@ namespace GodTD.View
             // 선택 링 · 영웅 사거리 링 (매 프레임 갱신)
             selectionRing = MakeRing("SelectionRing", TransMat(new Color(1f, 0.82f, 0.25f, 0.30f)), 0.06f);
             heroRing = MakeRing("HeroRangeRing", TransMat(new Color(0.69f, 0.55f, 1f, 0.13f)), 0.05f);
+
+            // 선택 타일 마커 — Kenney selection-a(4모서리 브래킷). 선택한 타일 위에 얹어 매 프레임 옮긴다
+            var selPrefab = Resources.Load<GameObject>("Kenney/selection-a");
+            if (selPrefab != null)
+            {
+                tileSelectMarker = Instantiate(selPrefab, staticRoot);
+                tileSelectMarker.name = "TileSelectMarker";
+                float s = MapData.TILE * SCALE;
+                tileSelectMarker.transform.localScale = new Vector3(s, s, s);
+                tileSelectMarker.SetActive(false);
+            }
         }
 
         /// <summary>배경 그라데이션 — 버텍스 컬러 메시 (먼 쪽 어둡게, 가까운 쪽 살짝 밝게)</summary>
@@ -986,6 +998,9 @@ namespace GodTD.View
                     ? Instantiate(heroPrefab)
                     : new GameObject("Hero", typeof(MeshFilter), typeof(MeshRenderer));
                 heroObject.name = "Hero";
+                // 영웅 몸집 축소 — 1.8배 → 1.4배 (프리팹 모델이 커서 몹·타워 대비 과하게 컸다)
+                if (heroPrefab != null)
+                    heroObject.transform.localScale = Vector3.one * (1.4f / 1.8f);
                 heroObject.AddComponent<SphereCollider>();
                 heroObject.AddComponent<HeroMarker>();
                 heroObject.transform.SetParent(dynamicRoot, false);
@@ -1099,6 +1114,15 @@ namespace GodTD.View
                 SetCirclePoints(selectionRing, selected.X, selected.Y, Combat.Range(selected.Tower), 0.46f);
             else
                 selectionRing.positionCount = 0;
+
+            // 선택 타일 브래킷 — 빈 타일이든 타워든 슬롯을 고르면 그 타일 위에 얹는다
+            if (tileSelectMarker != null)
+            {
+                var slot = Selection.Slot;
+                bool show = slot != null && (Selection.IsTower || Selection.IsEmptyTile);
+                tileSelectMarker.SetActive(show);
+                if (show) tileSelectMarker.transform.position = W(slot.X, slot.Y, 0.46f);
+            }
 
             var hero = Game.Hero;
             if (hero.Alive)

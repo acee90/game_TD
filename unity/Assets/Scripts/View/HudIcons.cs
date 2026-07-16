@@ -24,6 +24,8 @@ namespace GodTD.View
         Spawn, Boss, Xp, SkillDamage, Cooldown, Sell,
         // 종족 업그레이드 — 4칸이 가장 자주 눌린다. 같은 글리프 4개면 구분이 안 된다.
         RaceTerran, RaceZerg, RaceProtoss, RaceCreature,
+        // 상태 표식 — 잠금(색 없이도 구분되는 형태 게이트)
+        Lock,
     }
 
     public static class HudIcons
@@ -70,20 +72,20 @@ namespace GodTD.View
         {
             switch (id)
             {
-                // 미네랄 — 세로로 깎인 결정. 가운데 면(facet)을 파내 입체로 읽힌다.
+                // 금화 — 세로로 깎인 결정. 가운데 면(facet)을 파내 입체로 읽힌다.
                 case HudIcon.Mineral:
                     return Sub(
                         Poly(p, Crystal),
                         Seg(p, new Vector2(0f, 0.95f), new Vector2(0f, -0.95f), 0.055f));
 
-                // 가스 — 띠 두른 구체
+                // 마정석 — 띠 두른 구체
                 case HudIcon.Gas:
                     return Sub(Sub(
                             Circle(p, 0.82f),
                             Box(p - new Vector2(0f, 0.18f), new Vector2(1f, 0.055f))),
                         Box(p - new Vector2(0f, -0.28f), new Vector2(1f, 0.055f)));
 
-                // 프로브 — 육각 링 + 코어
+                // 광부 — 육각 링 + 코어
                 case HudIcon.Probe:
                     return Union(
                         Ring(Poly(p, Hexagon), 0.11f),
@@ -154,6 +156,12 @@ namespace GodTD.View
                             Circle(p - new Vector2(0f, 0.68f), 0.2f)),
                             Circle(p - new Vector2(-0.6f, -0.4f), 0.2f)),
                         Circle(p - new Vector2(0.6f, -0.4f), 0.2f));
+
+                // 잠금 — 자물쇠(몸통 박스 + 위 고리 반원 근사)
+                case HudIcon.Lock:
+                    return Union(
+                        Box(p - new Vector2(0f, -0.28f), new Vector2(0.5f, 0.34f)),   // 몸통
+                        Ring(Circle(p - new Vector2(0f, 0.28f), 0.30f), 0.09f));      // 고리(위)
 
                 default:
                     return 1f;

@@ -46,9 +46,9 @@ namespace GodTD.Core
             }
         }
 
-        public static readonly string[] RACES = { "테란", "저그", "플토", "크리쳐" };
+        public static readonly string[] RACES = { "정규군", "포병", "마법대", "소환대" };
 
-        /// <summary>종족 색 (테란/저그/플토/크리쳐) — 웹 원본 RACE_COLOR와 동일한 hex</summary>
+        /// <summary>병과 색 (정규군/포병/마법대/소환대) — 웹 원본 RACE_COLOR와 동일한 hex</summary>
         public static readonly string[] RACE_COLOR = { "#4ea3ff", "#c065e0", "#ffd23f", "#6fdc8c" };
 
         public const int GOD_TIER = 4;
@@ -65,47 +65,47 @@ namespace GodTD.Core
             // Lv1 — strings:321,322,323,324,527,567,516
             new[]
             {
-                new UnitDef("마린", Race.Terran, Tag.Speed),
-                new UnitDef("메딕", Race.Terran, Tag.Speed),
-                new UnitDef("히드라", Race.Zerg, Tag.Power),
-                new UnitDef("저글링", Race.Zerg, Tag.Power),
-                new UnitDef("질럿", Race.Protoss, Tag.Splash),
-                new UnitDef("다크템플러", Race.Protoss, Tag.Splash),
-                new UnitDef("벵갈라스", Race.Creature, Tag.Power),
+                new UnitDef("견습 궁병", Race.Terran, Tag.Speed),
+                new UnitDef("종자", Race.Terran, Tag.Speed),
+                new UnitDef("소형 투석기", Race.Zerg, Tag.Power),
+                new UnitDef("소형 노포", Race.Zerg, Tag.Power),
+                new UnitDef("견습 마법사", Race.Protoss, Tag.Splash),
+                new UnitDef("견습 정령술사", Race.Protoss, Tag.Splash),
+                new UnitDef("미니 골렘", Race.Creature, Tag.Power),
             },
             // Lv2 — trigger #496~#502, N=1..7 순서 그대로
             new[]
             {
-                new UnitDef("어사돈", Race.Creature, Tag.Speed),
-                new UnitDef("하이템플러", Race.Protoss, Tag.Splash),
-                new UnitDef("고스트", Race.Terran, Tag.Speed),
+                new UnitDef("가고일", Race.Creature, Tag.Speed),
+                new UnitDef("마법사", Race.Protoss, Tag.Splash),
+                new UnitDef("궁병", Race.Terran, Tag.Speed),
                 // 디파일러의 태그 문자열만 원본 strings에서 확인되지 않는다(§11.4). 저그 파워로 채움. [프로토]
-                new UnitDef("디파일러", Race.Zerg, Tag.Power),
-                new UnitDef("드라군", Race.Protoss, Tag.Splash),
-                new UnitDef("파이어벳", Race.Terran, Tag.Speed),
-                new UnitDef("울트라리스크", Race.Zerg, Tag.Power),
+                new UnitDef("망고넬", Race.Zerg, Tag.Power),
+                new UnitDef("원소술사", Race.Protoss, Tag.Splash),
+                new UnitDef("기사", Race.Terran, Tag.Speed),
+                new UnitDef("발리스타", Race.Zerg, Tag.Power),
             },
             // Lv3 — 태그는 [원본확정](strings:308/315/316/317/318/319/644), N 순서는 [프로토]
             new[]
             {
-                new UnitDef("골리앗", Race.Terran, Tag.Speed),
-                new UnitDef("시저탱크", Race.Terran, Tag.Speed),
-                new UnitDef("뮤탈리스크", Race.Zerg, Tag.Power),
-                new UnitDef("가디언", Race.Zerg, Tag.Power),
-                new UnitDef("라이나돈", Race.Creature, Tag.Splash),
-                new UnitDef("다크아칸", Race.Protoss, Tag.Splash),
-                new UnitDef("아칸", Race.Protoss, Tag.Splash),
+                new UnitDef("장궁병", Race.Terran, Tag.Speed),
+                new UnitDef("소드 엑스퍼트", Race.Terran, Tag.Speed),
+                new UnitDef("트레뷰셋", Race.Zerg, Tag.Power),
+                new UnitDef("중발리스타", Race.Zerg, Tag.Power),
+                new UnitDef("매그마 골렘", Race.Creature, Tag.Splash),
+                new UnitDef("마도사", Race.Protoss, Tag.Splash),
+                new UnitDef("원소 마도사", Race.Protoss, Tag.Splash),
             },
             // Lv4 — trigger #507~#513, N=1..7 순서 그대로
             new[]
             {
-                new UnitDef("럴커", Race.Zerg, Tag.Power),
-                new UnitDef("카카루", Race.Creature, Tag.Power, Tag.Speed),
-                new UnitDef("캐리어", Race.Protoss, Tag.Splash),
-                new UnitDef("레이스", Race.Terran, Tag.Speed),
-                new UnitDef("디바우러", Race.Zerg, Tag.Power),
-                new UnitDef("커세어", Race.Protoss, Tag.Splash),
-                new UnitDef("배틀크루져", Race.Terran, Tag.Speed),
+                new UnitDef("거석 투석기", Race.Zerg, Tag.Power),
+                new UnitDef("룬 골렘", Race.Creature, Tag.Power, Tag.Speed),
+                new UnitDef("아크메이지", Race.Protoss, Tag.Splash),
+                new UnitDef("신궁", Race.Terran, Tag.Speed),
+                new UnitDef("연발 발리스타", Race.Zerg, Tag.Power),
+                new UnitDef("대원소술사", Race.Protoss, Tag.Splash),
+                new UnitDef("소드마스터", Race.Terran, Tag.Speed),
             },
         };
 
@@ -118,10 +118,10 @@ namespace GodTD.Core
         /// </summary>
         public static readonly UnitDef[] GOD_POOL_EARLY =
         {
-            new UnitDef("오버로드", Race.Zerg, Tag.Power),
-            new UnitDef("리버", Race.Protoss, Tag.Splash),
+            new UnitDef("공성 거탑", Race.Zerg, Tag.Power),
+            new UnitDef("리치", Race.Protoss, Tag.Splash),
             new UnitDef("발키리", Race.Terran, Tag.Speed),
-            new UnitDef("라그나소어", Race.Creature, Tag.Power),
+            new UnitDef("아이언 콜로서스", Race.Creature, Tag.Power),
         };
 
         public static readonly UnitDef[] GOD_POOL_LATE =
@@ -130,13 +130,13 @@ namespace GodTD.Core
             GOD_POOL_EARLY[1],
             GOD_POOL_EARLY[2],
             GOD_POOL_EARLY[3],
-            new UnitDef("사라 케리건", Race.Zerg, Tag.Speed, Tag.Power),
-            new UnitDef("짐 레이너", Race.Terran, Tag.Speed, Tag.Splash),
-            new UnitDef("제라툴", Race.Protoss, Tag.Splash, Tag.Power),
-            new UnitDef("인페스티드 케리건", Race.Zerg, Tag.Power, Tag.Speed),
-            new UnitDef("헌터 킬러", Race.Zerg, Tag.Power, Tag.Splash),
-            new UnitDef("테사다", Race.Protoss, Tag.Splash, Tag.Speed),
-            new UnitDef("스칸티드", Race.Creature, Tag.Splash),
+            new UnitDef("왕립 대노포", Race.Zerg, Tag.Speed, Tag.Power),
+            new UnitDef("팔라딘", Race.Terran, Tag.Speed, Tag.Splash),
+            new UnitDef("대현자", Race.Protoss, Tag.Splash, Tag.Power),
+            new UnitDef("파멸의 투석기", Race.Zerg, Tag.Power, Tag.Speed),
+            new UnitDef("폭풍 노포", Race.Zerg, Tag.Power, Tag.Splash),
+            new UnitDef("원소 군주", Race.Protoss, Tag.Splash, Tag.Speed),
+            new UnitDef("미아즈마 로드", Race.Creature, Tag.Splash),
         };
 
         /// <summary>확장 GOD 풀이 열리는 처치 보스 수. trigger #534의 `AtLeast, 6`. [원본확정]</summary>
@@ -153,7 +153,7 @@ namespace GodTD.Core
                 if (i > 0) sb.Append(' ');
                 sb.Append(TagLabelOf(u.Tags[i]));
             }
-            return u.Race == Race.Creature ? $"크리쳐 {sb}" : sb.ToString();
+            return u.Race == Race.Creature ? $"소환대 {sb}" : sb.ToString();
         }
     }
 }

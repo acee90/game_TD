@@ -202,7 +202,16 @@ namespace GodTD.Core
         /// <summary>R10부터 5의 배수 라운드는 사냥꾼 웨이브</summary>
         public static WaveType WaveTypeOf(int round) =>
             round >= 10 && round % 5 == 0 ? WAVE_HUNTER : WAVE_NORMAL; // 36기 × 0.18 = 6.5초 스폰 창
-        public const float ENEMY_SPEED = 52f; // [프로토]
+        public const float ENEMY_SPEED = 42f; // 52 → 42 (2026-07-14 web 동기화): 초반 체감 템포 완화 [프로토]
+
+        /// <summary>
+        /// 초반 전투 템포 배수 (2026-07-16). 게임 시작 몇 라운드를 "느린 템포"로 시작한다.
+        /// 라운드 타이머·스폰·dt는 그대로 두고 전투 3요소에만 곱한다:
+        /// 몹 이동속도 × p, 몹 체력 × p, 타워/영웅 공격 인터벌 ÷ p.
+        /// 수학적 불변이 아니라 튜닝 대상 — 시드 시뮬로 초반 난이도를 맞춘다. [프로토]
+        /// ← web/src/data/balance.ts earlyTempo
+        /// </summary>
+        public static float EarlyTempo(int round) => MathF.Min(1f, 0.5f + 0.1f * round);
 
         // ───────── 전투 (전부 [프로토]) ─────────
         // 원본은 무기슬롯→유닛 바인딩 정보가 없어 실제 공격력을 읽을 수 없다(§11.3).

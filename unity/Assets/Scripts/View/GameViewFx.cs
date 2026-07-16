@@ -54,6 +54,18 @@ namespace GodTD.View
         // ── 파티클 ──
         ParticleSystem burstPs;
 
+        // ── 임포트한 파티클 팩(URP 변환) 프리팹 — Resources/Fx/*, 풀링 재사용 ──
+        // 코드 생성 버스트 위에 얹는 '고급' 착탄·총구 연출. 프리팹이 없으면 코드 FX만으로 폴백한다.
+        GameObject fxMuzzle, fxExplosion, fxPlasma, fxSparks;
+        const float FX_MUZZLE_SCALE = 0.22f;
+        const float FX_IMPACT_SCALE = 0.28f;
+        const float FX_SPLASH_SCALE = 0.42f;
+        const int FX_MAX_ACTIVE = 48; // 동시 인스턴스 상한 — 과부하·시각 노이즈 방지
+        sealed class FxInstance { public ParticleSystem Ps; public float Until; public GameObject Key; }
+        readonly List<FxInstance> fxActive = new List<FxInstance>();
+        readonly Dictionary<GameObject, Stack<ParticleSystem>> fxPool =
+            new Dictionary<GameObject, Stack<ParticleSystem>>();
+
         // 스킬 시그니처 — Core 판정은 색만 넘긴다. 종족색이 스킬색과 겹치므로(테란=일제사격 등)
         // 원소 구분은 "제자리 AoE인가 + 색"으로 판별한다. 이동 투사체는 흰색=평타(둥근 pip),
         // 그 외=화살/볼트(진행 방향으로 길쭉하게 정렬).
@@ -113,6 +125,20 @@ namespace GodTD.View
         readonly List<PulseFx> pulses = new List<PulseFx>();
         readonly List<RingFx> rings = new List<RingFx>();
 
+        // ── AoE 범위 표시 — 실제 반경에 즉시 그려 잠깐 유지 후 페이드(확장 링과 달리 '범위'를 읽게) ──
+        sealed class AoeFx
+        {
+            public GameObject Disc;      // 반투명 바닥 원판
+            public LineRenderer Ring;    // 외곽선
+            public Vector3 Center;
+            public float Radius;
+            public Color Color;
+            public float T;
+            public float Duration;
+            public bool Active;
+        }
+        readonly List<AoeFx> aoeAreas = new List<AoeFx>();
+
         // ── 플로팅 텍스트 ──
         readonly Dictionary<FloatText, TextMesh> floatTexts = new Dictionary<FloatText, TextMesh>();
         readonly List<FloatText> floatRemoveBuffer = new List<FloatText>();
@@ -146,6 +172,11 @@ namespace GodTD.View
             root = new GameObject("Fx").transform;
             root.SetParent(transform, false);
             BuildBurstSystem();
+            // 임포트한 파티클 팩(URP 변환본) — 없으면 null이라 코드 FX로 폴백
+            fxMuzzle = Resources.Load<GameObject>("Fx/MuzzleFlashEffect");
+            fxExplosion = Resources.Load<GameObject>("Fx/SmallExplosionEffect");
+            fxPlasma = Resources.Load<GameObject>("Fx/PlasmaExplosionEffect");
+            fxSparks = Resources.Load<GameObject>("Fx/SparksEffect");
         }
 
         /// <summary>재시작 — 판에 매인 연출 상태를 전부 비운다</summary>
@@ -153,6 +184,14 @@ namespace GodTD.View
         {
             seenShots.Clear();
             foreach (var p in projectiles) Deactivate(p);
+            foreach (var f in fxActive)
+            {
+                if (f.Ps == null) continue;
+                f.Ps.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
+                f.Ps.gameObject.SetActive(false);
+                fxPool[f.Key].Push(f.Ps);
+            }
+            fxActive.Clear();
             foreach (var p in pulses) { p.Active = false; p.Go.SetActive(false); }
             foreach (var r in rings) { r.Active = false; r.Line.gameObject.SetActive(false); }
             foreach (var pair in floatTexts) Destroy(pair.Value.gameObject);
@@ -174,6 +213,79 @@ namespace GodTD.View
             SyncBars(game);
             TickPulses(dt);
             TickRings(dt);
+            TickAoe(dt);
+            TickFxPool();
+        }
+
+        // ───────── 임포트 파티클 팩 — 풀링 스폰/회수 ─────────
+        /// <summary>착탄/총구 위치에 팩 프리팹을 재생. 프리팹 null이면 무시(코드 FX 폴백).</summary>
+        void SpawnFx(GameObject prefab, Vector3 pos, float scale)
+        {
+            if (prefab == null || fxActive.Count >= FX_MAX_ACTIVE) return;
+            if (!fxPool.TryGetValue(prefab, out var pool)) { pool = new Stack<ParticleSystem>(); fxPool[prefab] = pool; }
+            ParticleSystem ps = pool.Count > 0 ? pool.Pop() : null;
+            if (ps == null)
+            {
+                var go = Instantiate(prefab, root);
+                StripSmoke(go); // 어두운 연기 서브시스템 제거 — 밝은 불꽃·스파크만 남겨 토이 룩 유지
+                // 팩 폭발 프리팹은 loop=true(데모용 상시 폭발)라 계속 뿜으며 바닥에 쌓인다.
+                // 모든 서브시스템을 1회성으로 강제해 '한 번 터지고 끝'이 되게 한다.
+                foreach (var sub in go.GetComponentsInChildren<ParticleSystem>(true))
+                {
+                    var m = sub.main;
+                    m.loop = false;
+                    m.stopAction = ParticleSystemStopAction.None;
+                }
+                ps = go.GetComponent<ParticleSystem>() ?? go.GetComponentInChildren<ParticleSystem>();
+                if (ps == null) { Destroy(go); return; }
+            }
+            var t = ps.transform;
+            t.position = pos;
+            t.localScale = Vector3.one * scale;
+            ps.gameObject.SetActive(true);
+            ps.Clear(true);
+            ps.Play(true);
+            // 모든 서브시스템의 최대 (지속시간+수명)으로 회수 시점을 잡는다
+            float dur = 0f;
+            foreach (var sub in ps.GetComponentsInChildren<ParticleSystem>(true))
+                dur = Mathf.Max(dur, sub.main.duration + sub.main.startLifetime.constantMax);
+            fxActive.Add(new FxInstance { Ps = ps, Until = Time.time + dur + 0.2f, Key = prefab });
+        }
+
+        /// <summary>인스턴스에서 어두운 연기 계열 파티클 렌더러를 끈다 — 밝은 가산 요소만 남긴다</summary>
+        static void StripSmoke(GameObject go)
+        {
+            foreach (var psr in go.GetComponentsInChildren<ParticleSystemRenderer>(true))
+            {
+                var m = psr.sharedMaterial;
+                string mn = m != null ? m.name : "";
+                if (mn.Contains("Smoke") || mn.Contains("PlasmaExplosionParticle") || psr.gameObject.name.Contains("Smoke"))
+                    psr.gameObject.SetActive(false);
+            }
+        }
+
+        void TickFxPool()
+        {
+            for (int i = fxActive.Count - 1; i >= 0; i--)
+            {
+                var f = fxActive[i];
+                if (f.Ps == null) { fxActive.RemoveAt(i); continue; }
+                if (Time.time >= f.Until)
+                {
+                    f.Ps.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
+                    f.Ps.gameObject.SetActive(false);
+                    fxPool[f.Key].Push(f.Ps);
+                    fxActive.RemoveAt(i);
+                }
+            }
+        }
+
+        /// <summary>착탄 종류별 팩 프리팹 선택 — 비전=플라즈마, 스플래시/화염=폭발, 그 외=스파크</summary>
+        GameObject ImpactFx(FxKind kind, bool splash)
+        {
+            if (kind == FxKind.Arcane && fxPlasma != null) return fxPlasma;
+            if (splash || kind == FxKind.Fire) return fxExplosion;
+            return fxSparks;
         }
 
         // ───────── 파티클 버스트 ─────────
@@ -393,6 +505,69 @@ namespace GodTD.View
             }
         }
 
+        // ───────── AoE 범위 표시 ─────────
+        /// <summary>
+        /// 실제 피해 반경(월드 단위)을 바닥 원판+외곽선으로 즉시 그려 잠깐 유지 후 페이드한다.
+        /// 확장 링(Ring)은 다 커질 즈음 투명해져 범위가 안 읽혔다 — 이건 처음부터 전체 반경을 보인다.
+        /// </summary>
+        void AoeArea(Vector3 center, Color color, float radiusWorld)
+        {
+            if (radiusWorld < 0.05f) return;
+            var fx = aoeAreas.Find(a => !a.Active);
+            if (fx == null)
+            {
+                if (aoeAreas.Count >= 24) return;
+                var disc = GameObject.CreatePrimitive(PrimitiveType.Cylinder); // 납작 원판
+                disc.name = "AoeDisc";
+                Destroy(disc.GetComponent<Collider>());
+                disc.transform.SetParent(root, false);
+                var ringGo = new GameObject("AoeRing");
+                ringGo.transform.SetParent(root, false);
+                var line = ringGo.AddComponent<LineRenderer>();
+                line.useWorldSpace = true;
+                line.loop = true;
+                line.numCornerVertices = 2;
+                fx = new AoeFx { Disc = disc, Ring = line };
+                aoeAreas.Add(fx);
+            }
+            var ground = new Vector3(center.x, 0.34f, center.z);
+            fx.Disc.SetActive(true);
+            fx.Disc.transform.position = ground;
+            fx.Disc.transform.localScale = new Vector3(radiusWorld * 2f, 0.02f, radiusWorld * 2f);
+            fx.Ring.gameObject.SetActive(true);
+            WorldCircle(fx.Ring, ground, radiusWorld);
+            fx.Center = ground;
+            fx.Radius = radiusWorld;
+            fx.Color = color;
+            fx.T = 0f;
+            fx.Duration = 0.55f;
+            fx.Active = true;
+        }
+
+        void TickAoe(float dt)
+        {
+            foreach (var a in aoeAreas)
+            {
+                if (!a.Active) continue;
+                a.T += dt;
+                float k = Mathf.Clamp01(a.T / a.Duration);
+                // 앞 30%는 꽉 차게 유지, 그 뒤 페이드 — 범위를 눈으로 잡을 시간을 준다
+                float alpha = 1f - Mathf.SmoothStep(0f, 1f, Mathf.Clamp01((k - 0.3f) / 0.7f));
+                a.Disc.GetComponent<MeshRenderer>().sharedMaterial =
+                    UnlitMat(new Color(a.Color.r, a.Color.g, a.Color.b, 0.22f * alpha));
+                float w = 0.18f * alpha;
+                a.Ring.material = UnlitMat(new Color(a.Color.r, a.Color.g, a.Color.b, 0.9f * alpha));
+                a.Ring.startWidth = w;
+                a.Ring.endWidth = w;
+                if (k >= 1f)
+                {
+                    a.Active = false;
+                    a.Disc.SetActive(false);
+                    a.Ring.gameObject.SetActive(false);
+                }
+            }
+        }
+
         // ───────── 투사체 — Core 즉발 판정 위에 비행 연출만 ─────────
         void SyncProjectiles(Game game, float dt)
         {
@@ -408,9 +583,13 @@ namespace GodTD.View
 
                 if ((from - to).magnitude < 0.05f)
                 {
-                    // 제자리 광역 = 스킬 착탄 — 원소별 시그니처(화염 불티·유성 낙하·바람 소용돌이)
+                    // 제자리 광역 = 스킬 착탄 — 원소별 시그니처(화염 불티·유성 낙하·바람 소용돌이) + 팩 폭발
                     if (shot.SplashRadius > 0f)
+                    {
+                        AoeArea(to, color, shot.SplashRadius * SCALE);   // 실제 반경을 바닥에 명확히
                         SignatureLand(to, color, shot.SplashRadius * SCALE * 0.6f, kind);
+                        SpawnFx(ImpactFx(kind, true), to + Vector3.up * 0.4f, FX_SPLASH_SCALE);
+                    }
                     continue;
                 }
                 Launch(from, to, color, shot.SplashRadius, kind);
@@ -428,14 +607,17 @@ namespace GodTD.View
                 {
                     if (p.SplashRadiusPx > 0f)
                     {
-                        // 이동 광역(타워 스플래시 등) — 착탄 시그니처
+                        // 타워 스플래시는 사거리 전체가 피해 범위 → 매 발 사거리 원을 그리면 노이즈이고
+                        // 오해를 준다(사거리 원은 타워 선택 시 이미 표시). 착탄 연출만 남긴다.
                         SignatureLand(p.To, p.Color, p.SplashRadiusPx * SCALE * 0.5f, p.Kind);
+                        SpawnFx(ImpactFx(p.Kind, true), p.To + Vector3.up * 0.4f, FX_SPLASH_SCALE);
                     }
                     else
                     {
-                        // 단일 타격도 작은 불꽃 — 명중이 '느껴지게'
+                        // 단일 타격도 작은 불꽃 — 명중이 '느껴지게' + 팩 스파크
                         var hot = Color.Lerp(p.Color, Color.white, 0.35f);
                         Burst(p.To, hot, 5, 2.2f, 0.1f);
+                        SpawnFx(ImpactFx(p.Kind, false), p.To, FX_IMPACT_SCALE);
                     }
                     Deactivate(p);
                 }
@@ -499,8 +681,9 @@ namespace GodTD.View
             p.Kind = kind;
             p.Active = true;
 
-            // 총구 섬광 — 발사가 '터지듯' 시작
+            // 총구 섬광 — 발사가 '터지듯' 시작 (코드 버스트 + 팩 머즐 플래시)
             Burst(from, hot, 4, 1.8f, 0.09f);
+            SpawnFx(fxMuzzle, from, FX_MUZZLE_SCALE);
         }
 
         void Deactivate(Projectile p)
@@ -576,15 +759,20 @@ namespace GodTD.View
             {
                 if (!enemyBars.TryGetValue(enemy, out var bar))
                 {
-                    bar = MakeBar(enemy.Kind == EnemyKind.Boss ? 2.8f : 1.5f, BAR_HP);
+                    bar = MakeBar(enemy.Kind == EnemyKind.Boss ? 3.6f : 1.7f, BAR_HP);
                     enemyBars[enemy] = bar;
                 }
                 var p = MapData.PathPos(enemy.Distance);
+                // 바는 몸체 바로 위에 붙는다. 보스는 몸이 커서 오프셋만 조금 더 준다
+                // (기존 radius*4는 7.9월드유닛까지 떠서 보스 한참 위 허공에 걸리는 버그였다)
                 float top = enemy.Kind == EnemyKind.Boss
-                    ? enemy.Radius * 4f * SCALE + 0.7f
+                    ? enemy.Radius * 2f * SCALE + 1.0f
                     : enemy.Radius * 2f * SCALE + 0.6f;
-                UpdateBar(bar, GameView.W(p.X, p.Y, 0.4f + top),
-                    enemy.MaxHp > 0f ? enemy.Hp / enemy.MaxHp : 0f);
+                float ratio = enemy.MaxHp > 0f ? enemy.Hp / enemy.MaxHp : 0f;
+                // 잡몹은 다닥다닥 겹치므로 풀피일 땐 바를 숨긴다(다치면 보인다). 보스는 항상 표시.
+                bool show = enemy.Kind == EnemyKind.Boss || ratio < 0.995f;
+                bar.Root.SetActive(show);
+                if (show) UpdateBar(bar, GameView.W(p.X, p.Y, 0.4f + top), ratio);
             }
             barRemoveBuffer.Clear();
             foreach (var pair in enemyBars)
@@ -602,8 +790,9 @@ namespace GodTD.View
             if (hero.Alive)
             {
                 float ratio = hero.Stats.MaxHp > 0f ? hero.Hp / hero.Stats.MaxHp : 0f;
+                // 영웅 몸과 겹치지 않게 머리 위로 더 띄운다
                 UpdateBar(heroBar, GameView.W(hero.X, hero.Y,
-                    0.4f + HeroData.HERO_RADIUS * 2f * SCALE + 0.55f), ratio);
+                    0.4f + HeroData.HERO_RADIUS * 2f * SCALE + 0.95f), ratio);
             }
 
             // 허수아비
@@ -626,17 +815,22 @@ namespace GodTD.View
             var rootGo = new GameObject("Bar");
             rootGo.transform.SetParent(root, false);
 
+            // 전용 머티리얼 + 렌더 큐 — fill을 배경보다 뒤(높은 큐)에 그려 항상 위에 보이게 한다.
+            // (체력이 줄면 fill 쿼드 중심이 왼쪽으로 옮겨가 반투명 거리정렬이 뒤집혀 배경에 가려지던 버그 수정)
+            var bgMat = new Material(spriteShader) { color = BAR_BG, renderQueue = 4000 };
+            var fillMat = new Material(spriteShader) { color = fillColor, renderQueue = 4002 };
+
             var bg = GameObject.CreatePrimitive(PrimitiveType.Quad);
             Destroy(bg.GetComponent<Collider>());
             bg.transform.SetParent(rootGo.transform, false);
-            bg.transform.localScale = new Vector3(width, 0.16f, 1f);
-            bg.GetComponent<MeshRenderer>().sharedMaterial = UnlitMat(BAR_BG);
+            bg.transform.localScale = new Vector3(width + 0.12f, 0.30f, 1f); // 테두리처럼 살짝 더 크게
+            bg.GetComponent<MeshRenderer>().sharedMaterial = bgMat;
 
             var fill = GameObject.CreatePrimitive(PrimitiveType.Quad);
             Destroy(fill.GetComponent<Collider>());
             fill.transform.SetParent(rootGo.transform, false);
-            fill.transform.localScale = new Vector3(width, 0.12f, 1f);
-            fill.GetComponent<MeshRenderer>().sharedMaterial = UnlitMat(fillColor);
+            fill.transform.localScale = new Vector3(width, 0.22f, 1f);
+            fill.GetComponent<MeshRenderer>().sharedMaterial = fillMat;
 
             return new WorldBar { Root = rootGo, Fill = fill.transform, Width = width };
         }
@@ -646,7 +840,7 @@ namespace GodTD.View
             ratio = Mathf.Clamp01(ratio);
             bar.Root.transform.position = at;
             bar.Root.transform.rotation = cam.transform.rotation; // 빌보드
-            bar.Fill.localScale = new Vector3(bar.Width * ratio, 0.12f, 1f);
+            bar.Fill.localScale = new Vector3(bar.Width * ratio, 0.22f, 1f);
             // 왼쪽 기준으로 줄어들게 + 배경보다 카메라 쪽으로 살짝
             bar.Fill.localPosition = new Vector3(-bar.Width * (1f - ratio) / 2f, 0f, -0.012f);
         }
