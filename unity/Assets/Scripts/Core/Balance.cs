@@ -137,8 +137,11 @@ namespace GodTD.Core
         public static float BossArmor(int level) => 1.5f * level;
         public const float BOSS_SPEED = 26f;
 
-        /// <summary>보스가 일주를 끝내면 라이프 손실이 크다 [프로토]</summary>
-        public static int BossLeakLives(int level) => 2 + level;
+        /// <summary>
+        /// 보스 누출 = 잡몹과 같은 라이프 -1 (2026-07-17, 2+L → 1). 진짜 리스크는
+        /// 기회비용 — 못 잡으면 쿨타임 동안 처치 보상을 못 얻는다. ← web
+        /// </summary>
+        public static int BossLeakLives(int level) => 1;
 
         // ───────── 적 웨이브 (§9) ─────────
         // 원본은 특정 라운드에 이름 붙은 GOD 적이 나오지만(trigger #268~#286), 그 사이 라운드의

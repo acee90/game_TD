@@ -897,9 +897,12 @@ namespace GodTD.View
                 if (skill != null)
                 {
                     skillVisible = true;
+                    // 마나 게이지 (TFT식) — 평타·피격으로 차고, 가득 차면 자동 시전
                     UiKit.SetBar(skillBar.fill,
-                        1f - Mathf.Max(0f, hero.SkillCooldown) / Mathf.Max(0.01f, skill.Cooldown));
-                    skillLine = $"스킬 <color=#7CE7FF>{skill.Def.Name}</color> · ";
+                        Mathf.Clamp01(hero.Mana / Mathf.Max(0.01f, skill.ManaMax)));
+                    skillLine =
+                        $"스킬 <color=#7CE7FF>{skill.Def.Name}</color> " +
+                        $"<color=#8A93AD>마나 {Mathf.FloorToInt(hero.Mana)}/{Mathf.RoundToInt(skill.ManaMax)}</color> · ";
                 }
                 selBody.text = $"{skillLine}{augs}";
             }

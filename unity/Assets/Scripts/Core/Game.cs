@@ -165,7 +165,7 @@ namespace GodTD.Core
             else Hero.GasSkillCdr++;
             Message = track == GasSkillTrack.Damage
                 ? $"스킬 피해 개조 +{Hero.GasSkillDamage} · 다음 {GasSkillCost(GasSkillTrack.Damage)}"
-                : $"스킬 쿨타임 개조 +{Hero.GasSkillCdr} · 다음 {GasSkillCost(GasSkillTrack.Cdr)}";
+                : $"필요 마나 개조 +{Hero.GasSkillCdr} · 다음 {GasSkillCost(GasSkillTrack.Cdr)}";
             return true;
         }
 
@@ -709,6 +709,8 @@ namespace GodTD.Core
                             X = hero.X, Y = hero.Y, Tx = t.X, Ty = t.Y, Life = 0.1f, Color = "#ffffff",
                         });
                     }
+                    // 평타가 마나를 채운다 (TFT식) — 공속이 곧 스킬 회전
+                    hero.GainMana(Skills.MANA_PER_ATTACK);
                     // 초반 느린 템포 — 영웅도 타워·몹과 같은 비율로 느리게 친다(마나 충전도 함께 느려짐)
                     hero.AttackCooldown = stats.AttackInterval / Balance.EarlyTempo(Round);
                 }

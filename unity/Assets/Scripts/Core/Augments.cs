@@ -258,8 +258,9 @@ namespace GodTD.Core
                 new AugmentEffect(), grantsSkill: SkillId.Decoy),
 
             // ── 스킬 공용 강화 (스킬을 든 뒤에만 등장)
-            new Augment("skill_cdr", AugmentKind.Utility, "냉각", "스킬 쿨타임 20% 감소", 3,
-                new AugmentEffect(), skillMod: new SkillModPatch { CooldownMult = 0.8f }, requiresAnySkill: true),
+            // 쿨타임 폐지 → 마나 (2026-07-17 웹 동기화): 웹의 '집중 수련'(필요 마나 -15%)에 대응
+            new Augment("skill_cdr", AugmentKind.Utility, "집중 수련", "필요 마나 15% 감소", 3,
+                new AugmentEffect(), skillMod: new SkillModPatch { ManaMaxMult = 0.85f }, requiresAnySkill: true),
             new Augment("skill_amp", AugmentKind.Stat, "증폭", "스킬 피해 +45%", 3,
                 new AugmentEffect(), skillMod: new SkillModPatch { DamageMult = 1.45f }, requiresAnySkill: true),
 

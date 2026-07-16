@@ -10,7 +10,7 @@
 //   │ Z │ X │ C │   6 7 8
 //   └───┴───┴───┘
 //
-// 영웅 스킬은 자동 시전이라 버튼이 아니다 — 상세 열의 쿨타임 게이지로 표시한다.
+// 영웅 스킬은 자동 시전이라 버튼이 아니다 — 상세 열의 마나 게이지로 표시한다.
 // 이 파일은 "무엇을 그릴지"만 정한다. 그리는 것은 GameHud가 한다.
 
 using System;
@@ -158,12 +158,12 @@ namespace GodTD.View
                 () => game.BuyGasSkill(GasSkillTrack.Damage), GAS, HudIcon.SkillDamage,
                 reason: game.CanBuyGasSkill(GasSkillTrack.Damage) ? DisableReason.None : DisableReason.Cost,
                 tooltip: $"영웅 스킬 피해 +8%. 필요 마정석 {game.GasSkillCost(GasSkillTrack.Damage)}.");
-            c[4] = new Command("쿨타임",
+            c[4] = new Command("필요 마나",
                 $"-6% · {Gs(game.GasSkillCost(GasSkillTrack.Cdr))} · Lv{hero.GasSkillCdr}",
                 game.CanBuyGasSkill(GasSkillTrack.Cdr),
                 () => game.BuyGasSkill(GasSkillTrack.Cdr), GAS, HudIcon.Cooldown,
                 reason: game.CanBuyGasSkill(GasSkillTrack.Cdr) ? DisableReason.None : DisableReason.Cost,
-                tooltip: $"영웅 스킬 쿨타임 -6%. 필요 마정석 {game.GasSkillCost(GasSkillTrack.Cdr)}.");
+                tooltip: $"영웅 스킬 필요 마나 -6% — 더 자주 터진다. 필요 마정석 {game.GasSkillCost(GasSkillTrack.Cdr)}.");
         }
 
         // ── 타워: 판매뿐. GOD 타입 변경(금화 리롤)은 게임 시스템이라 보류 — c[1] 자리를 비워 둔다. ──

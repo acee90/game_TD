@@ -172,8 +172,8 @@ export const enemyDamage = (round: number): number =>
  * 보스 접촉 피해 — **전 레벨 무해** (2026-07-17 플레이테스트, 3→6).
  *
  * 2026-07-11에는 Lv4+가 영웅을 때렸지만("고레벨 소환의 대가"), 실제로는 보스의 위협이
- * 두 겹이 될 필요가 없었다 — 리스크는 못 잡았을 때의 누출 라이프(2+L)만으로 충분하고,
- * 영웅 위협은 사냥꾼 웨이브가 전담한다. 보스는 그냥 지나간다.
+ * 두 겹이 될 필요가 없었다 — 리스크는 누출 라이프 -1과 **기회비용**(못 잡으면 쿨타임
+ * 동안 보상 없음)으로 충분하고, 영웅 위협은 사냥꾼 웨이브가 전담한다. 보스는 그냥 지나간다.
  */
 export const BOSS_HARMLESS_MAX_LEVEL = 6;
 export const bossDamage = (level: number, round: number): number =>

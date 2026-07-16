@@ -67,8 +67,11 @@ namespace GodTD.Core
         public bool Alive = true;
         public float RespawnTimer;
         public float AttackCooldown;
-        /// <summary>액티브 스킬 재사용 대기</summary>
-        public float SkillCooldown;
+        /// <summary>
+        /// 마나 (TFT식, 2026-07-17 웹 동기화 — 쿨타임 폐지). 평타(+10)·피격(+8)으로 차고,
+        /// 가득 차면 자동 시전 후 0으로 돌아간다. 공속이 곧 스킬 회전이다.
+        /// </summary>
+        public float Mana;
         /// <summary>가스로 산 스킬 개조 횟수</summary>
         public int GasSkillDamage;
         public int GasSkillCdr;
@@ -130,12 +133,34 @@ namespace GodTD.Core
                         { DamageMult = MathF.Pow(Skills.GAS_SKILL_DAMAGE_MULT, GasSkillDamage) });
                 if (GasSkillCdr > 0)
                     patches.Add(new SkillModPatch
-                        { CooldownMult = MathF.Pow(Skills.GAS_SKILL_CDR_MULT, GasSkillCdr) });
-                return Skills.Resolve(id.Value, Skills.FoldMods(patches));
+                        { ManaMaxMult = MathF.Pow(Skills.GAS_SKILL_CDR_MULT, GasSkillCdr) });
+                // 허수아비류 — 공속이 빠를수록 필요 마나가 준다
+                float attackSpeedRatio = HeroData.HERO_ATTACK_INTERVAL / Stats.AttackInterval;
+                return Skills.Resolve(id.Value, Skills.FoldMods(patches), attackSpeedRatio);
             }
         }
 
-        public bool SkillReady => Alive && SkillIdHeld.HasValue && SkillCooldown <= 0f;
+        /// <summary>마나가 가득 찼는가 — 쿨타임은 없다</summary>
+        public bool SkillReady
+        {
+            get
+            {
+                if (!Alive || !SkillIdHeld.HasValue) return false;
+                var skill = Skill;
+                return skill != null && Mana >= skill.ManaMax;
+            }
+        }
+
+        /// <summary>평타·피격이 마나를 채운다. 상한은 현재 스킬의 필요 마나.</summary>
+        public void GainMana(float amount)
+        {
+            var skill = Skill;
+            if (skill == null) return;
+            Mana = MathF.Min(skill.ManaMax, Mana + amount);
+        }
+
+        /// <summary>시전 — 마나를 비운다</summary>
+        public void SpendMana() => Mana = 0f;
 
         /// <summary>클릭 좌표를 (진행도, 횡오프셋)으로 분해해 목적지로 삼는다. 보정된 실제 목적지를 돌려준다.</summary>
         public MapData.PathProjection MoveTo(float x, float y)
@@ -174,6 +199,8 @@ namespace GodTD.Core
         {
             if (!Alive) return;
             Hp -= raw * (1f - Stats.DamageReduction);
+            // 맞으면 마나가 찬다 (TFT식) — 탱커가 스킬을 자주 쓰는 이유
+            GainMana(Skills.MANA_ON_DAMAGED);
             if (Hp <= 0f)
             {
                 Hp = 0f;
@@ -200,7 +227,6 @@ namespace GodTD.Core
             }
 
             AttackCooldown -= dt;
-            if (SkillCooldown > 0f) SkillCooldown = MathF.Max(0f, SkillCooldown - dt);
 
             var stats = Stats;
             if (stats.Regen > 0f) Hp = MathF.Min(stats.MaxHp, Hp + stats.Regen * dt);
@@ -219,7 +245,7 @@ namespace GodTD.Core
         void Respawn()
         {
             Alive = true;
-            SkillCooldown = 0f;
+            Mana = 0f;
             Hp = Stats.MaxHp;
             Distance = AltarDistance;
             TargetDistance = AltarDistance;

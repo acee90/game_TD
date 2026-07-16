@@ -162,8 +162,14 @@ export const BOSS_COOLDOWN_SECONDS = 45; // [프로토]
 export const bossHP = (level: number): number => 700 * Math.pow(3.0, level - 1);
 export const bossArmor = (level: number): number => 1.5 * level;
 export const BOSS_SPEED = 26;
-/** 보스가 일주를 끝내면 라이프 손실이 크다 [프로토] */
-export const bossLeakLives = (level: number): number => 2 + level;
+/**
+ * 보스 누출 = 잡몹과 같은 **라이프 -1** (2026-07-17, 2+L → 1).
+ *
+ * 보스의 진짜 리스크는 라이프가 아니라 **기회비용**이다 — 못 잡으면 그 쿨타임(45초)
+ * 동안 처치 보상을 못 얻는다. 라이프 폭탄(2+L)까지 얹으면 상위 보스 도전이 이중으로
+ * 처벌되어 소환 자체를 꺼리게 된다. 소환은 공격적일수록 좋고, 실패는 시간으로 갚는다.
+ */
+export const bossLeakLives = (_level: number): number => 1;
 
 // ───────── 적 웨이브 (§9) ─────────
 // 원본은 특정 라운드에 이름 붙은 GOD 적이 나오지만(trigger #268~#286), 그 사이 라운드의
