@@ -110,7 +110,8 @@ namespace GodTD.View
         static readonly Color SOIL_GROUND = Hex("#39562b"); // 타일 틈 사이로 비치는 어두운 잔디 → 은은한 격자 그루브
         // Kenney 잔디 알베도가 청록빛이라 파란기를 눌러 차분한 자연 초록으로 (형광/라임 방지) — 필드·슬롯 공통
         static readonly Color GRASS_TINT = new Color(0.82f, 0.74f, 0.42f);
-        static readonly Color ROAD_TINT = new Color(0.95f, 0.72f, 0.48f);
+        // 길 타일용 순한 틴트 — 잔디 벽 파란기만 눌러 초록 유지 + 흙은 갈색 유지 (둘 다 한 머티리얼)
+        static readonly Color ROAD_TINT = new Color(1.0f, 0.88f, 0.6f);
         const float TILE_TOP = 0.36f;                        // 타일 윗면 = 유닛이 서는 높이
 
         // 제단 — 성주가 부활하는 사당. 테두리 금동색.
@@ -373,31 +374,29 @@ namespace GodTD.View
             foreach (var stray in FindObjectsByType<Light>(FindObjectsSortMode.None))
                 if (stray.type == LightType.Directional) Destroy(stray.gameObject);
 
-            // 대낮 태양 — Kenney 디오라마처럼 환하되 과노출은 피한다(파란기 없는 따뜻한 흰빛).
-            // Kenney 잔디색은 청록빛(blue 0.48)이라 파란·과한 조명이면 시안으로 날아간다 — 중립·절제.
+            // 하드 직사광 — 로우폴리 디오라마 입체감의 핵심. 각 면이 뚜렷이 음영져 타일·길 벽이 살아난다.
+            // (파란기 없는 흰빛 — Kenney 잔디가 청록이라 파란 조명이면 시안으로 날아간다.)
             var sun = new GameObject("Sun").AddComponent<Light>();
             sun.transform.SetParent(transform, false);
             sun.type = LightType.Directional;
-            sun.transform.rotation = Quaternion.Euler(52f, -35f, 0f);
-            sun.color = new Color(1f, 0.98f, 0.92f);
-            sun.intensity = 0.9f;
+            sun.transform.rotation = Quaternion.Euler(42f, -40f, 0f);
+            sun.color = new Color(1f, 0.98f, 0.9f);
+            sun.intensity = 1.5f;
             sun.shadows = LightShadows.Soft;
-            sun.shadowStrength = 0.72f; // 타일 경계·유닛에 또렷한 그림자 → 입체감
+            sun.shadowStrength = 0.85f; // 또렷한 그림자 → 입체
 
-            // 따뜻한 중립 앰비언트 — 파란기 없이 밝게. 시안 방지의 핵심.
-            RenderSettings.ambientMode = AmbientMode.Trilight;
-            RenderSettings.ambientSkyColor = new Color(0.72f, 0.70f, 0.62f);
-            RenderSettings.ambientEquatorColor = new Color(0.58f, 0.57f, 0.50f);
-            RenderSettings.ambientGroundColor = new Color(0.35f, 0.33f, 0.27f);
+            // 낮은 균일 앰비언트 — 그림자를 죽이지 않으면서 완전 검정만 방지 (하드룩 유지)
+            RenderSettings.ambientMode = AmbientMode.Flat;
+            RenderSettings.ambientLight = new Color(0.34f, 0.34f, 0.30f);
             QualitySettings.shadowDistance = 140f;
 
-            // 반대편 따뜻한 필 — 실루엣을 부드럽게 채운다
+            // 약한 필 — 그림자 쪽이 완전히 죽지 않게만
             var fill = new GameObject("Fill").AddComponent<Light>();
             fill.transform.SetParent(transform, false);
             fill.type = LightType.Directional;
             fill.transform.rotation = Quaternion.Euler(40f, 150f, 0f);
-            fill.color = new Color(1f, 0.92f, 0.78f);
-            fill.intensity = 0.25f;
+            fill.color = new Color(1f, 0.94f, 0.82f);
+            fill.intensity = 0.15f;
             fill.shadows = LightShadows.None;
         }
 
@@ -513,25 +512,83 @@ namespace GodTD.View
             return t;
         }
 
-        /// <summary>통합 보드 격자 — 잔디 + 경로(흙) 셀을 전부 같은 높이 flush로. 슬롯 자리는 건너뛴다(중복·z파이팅 방지).</summary>
+        const int BOARD_R = 7; // 격자 반경(셀)
+
+        static bool IsRoadCell(int gx, int gy)
+        {
+            float px = MapData.CENTER.X + gx * MapData.TILE;
+            float py = MapData.CENTER.Y + gy * MapData.TILE;
+            return PerpDistToPath(px, py) < MapData.TILE * 0.4f; // 셀 중심이 경로선 위
+        }
+
+        /// <summary>이웃 연결(N/E/S/W)로 길 조각·회전 선택 — 마칭스퀘어식 오토타일링.
+        /// 실측 기준(top-down): 직선=N-S가 rot0, 코너=W-N이 rot0. 삼거리·끝은 드물어 근사.</summary>
+        static (GameObject prefab, float rot) RoadPiece(bool n, bool e, bool s, bool w,
+            GameObject straight, GameObject corner, GameObject crossing, GameObject split, GameObject end)
+        {
+            int count = (n ? 1 : 0) + (e ? 1 : 0) + (s ? 1 : 0) + (w ? 1 : 0);
+            if (count >= 4) return (crossing ? crossing : straight, 0f);
+            if (count == 3)
+            {
+                // split base(rot0)=빠진 방향 S 가정 → 실측 필요 시 조정
+                if (!s) return (split, 0f);
+                if (!w) return (split, 90f);
+                if (!n) return (split, 180f);
+                return (split, 270f); // !e
+            }
+            if (count == 2)
+            {
+                if (n && s) return (straight, 0f);
+                if (e && w) return (straight, 90f);
+                // 코너 rot0 = W-N. 시계방향으로 +90씩.
+                if (w && n) return (corner, 0f);
+                if (n && e) return (corner, 90f);
+                if (e && s) return (corner, 180f);
+                return (corner, 270f); // s && w
+            }
+            if (n) return (end, 0f);
+            if (e) return (end, 90f);
+            if (s) return (end, 180f);
+            if (w) return (end, 270f);
+            return (straight, 0f);
+        }
+
+        /// <summary>통합 보드 격자 — 잔디 + 실제 길 타일(잔디 벽+파인 흙길)을 방향 맞춰 오토타일링. 슬롯 자리는 건너뜀.</summary>
         void BuildBoard()
         {
             var grass = Resources.Load<GameObject>("Kenney/tile");
-            var dirt = Resources.Load<GameObject>("Kenney/tile-dirt");
+            var straight = Resources.Load<GameObject>("Kenney/tile-straight");
+            var corner = Resources.Load<GameObject>("Kenney/tile-corner-square");
+            var crossing = Resources.Load<GameObject>("Kenney/tile-crossing");
+            var split = Resources.Load<GameObject>("Kenney/tile-split");
+            var end = Resources.Load<GameObject>("Kenney/tile-end");
             if (grass == null) return;
-            float side = MapData.TILE * SCALE * 0.97f; // 얇은 틈 → 은은한 격자 그루브(solid 필드 유지)
-            for (int gx = -7; gx <= 7; gx++)
-            for (int gy = -7; gy <= 7; gy++)
+            float side = MapData.TILE * SCALE; // flush — 길 타일 잔디 벽이 이음새를 이룬다
+
+            for (int gx = -BOARD_R; gx <= BOARD_R; gx++)
+            for (int gy = -BOARD_R; gy <= BOARD_R; gy++)
             {
                 float px = MapData.CENTER.X + gx * MapData.TILE;
                 float py = MapData.CENTER.Y + gy * MapData.TILE;
                 if (IsNearSlot(px, py)) continue; // 슬롯 타일이 이미 채운다
-                bool road = dirt != null && PerpDistToPath(px, py) < MapData.TILE * 0.55f;
-                var t = SpawnTile(road ? dirt : grass, px, py, side, TILE_TOP, 0f, road ? "Road" : "Grass");
-                // 타일별 미세 명암 변화 → 단조로운 초록 탈피 (결정적)
+
                 int hh = ((gx * 73856093) ^ (gy * 19349663)) & 0xff;
-                float v = 0.9f + (hh / 255f) * 0.2f; // 0.9~1.1
-                TintTile(t, (road ? ROAD_TINT : GRASS_TINT) * v);
+                float v = 0.96f + (hh / 255f) * 0.08f; // 타일별 아주 미세한 명암(체커보드 방지)
+
+                if (straight != null && IsRoadCell(gx, gy))
+                {
+                    bool n = IsRoadCell(gx, gy - 1), s = IsRoadCell(gx, gy + 1);
+                    bool e = IsRoadCell(gx + 1, gy), w = IsRoadCell(gx - 1, gy);
+                    var (prefab, rot) = RoadPiece(n, e, s, w, straight, corner, crossing, split, end);
+                    var rt = SpawnTile(prefab, px, py, side, TILE_TOP, rot, "Road");
+                    // 순한 틴트 — 잔디 벽 파란기만 눌러 초록으로, 흙은 갈색 유지 (흙까지 초록 되면 길이 묻힌다)
+                    TintTile(rt, ROAD_TINT * v);
+                }
+                else
+                {
+                    var gt = SpawnTile(grass, px, py, side, TILE_TOP, 0f, "Grass");
+                    TintTile(gt, GRASS_TINT * v);
+                }
             }
         }
 
@@ -600,7 +657,7 @@ namespace GodTD.View
             // 타워 슬롯 = 잔디 위에 살짝 도톰하게 올라온 빌드 패드. 제단만 크리스탈 타일.
             var grassPrefab = Resources.Load<GameObject>("Kenney/tile");
             var altarPrefab = Resources.Load<GameObject>("Kenney/tile-crystal");
-            float side = MapData.TILE * SCALE * 0.97f; // 격자와 동일 (얇은 틈)
+            float side = MapData.TILE * SCALE; // 격자와 동일 flush
 
             for (int i = 0; i < count; i++)
             {
