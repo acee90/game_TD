@@ -83,7 +83,8 @@ namespace GodTD.Core
         /// <summary>제단은 게임 시작과 함께 십자 중앙 타일에 주어진다. 그 자리에는 타워를 놓을 수 없다.</summary>
         public Slot AltarSlot => Slots[HeroData.ALTAR_SLOT];
 
-        public void MoveHero(float x, float y) => Hero.MoveTo(x, y);
+        /// <summary>우클릭 이동 — 보정된 실제 목적지를 돌려준다 (View가 목적지 마커에 쓴다)</summary>
+        public MapData.PathProjection MoveHero(float x, float y) => Hero.MoveTo(x, y);
 
         /// <summary>증강 하나를 고른다. 남은 선택이 있으면 다음 선택지를 띄운다.</summary>
         public bool ChooseAugment(int index)

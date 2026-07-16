@@ -54,6 +54,12 @@ namespace GodTD.Core
         public float Distance;
         /// <summary>경로 위 목적지</summary>
         public float TargetDistance;
+        /// <summary>
+        /// 횡방향 오프셋 (hero-point-movement.md) — 경로 중심선에서 좌측 법선 방향으로
+        /// 비낀 거리(px). 길 보행 폭 안에서 실제 클릭 지점까지 간다. 몹 판정은 1D 그대로. ← web
+        /// </summary>
+        public float Lateral;
+        public float TargetLateral;
 
         public float Hp;
         public int Level = 1;
@@ -81,8 +87,8 @@ namespace GodTD.Core
             Hp = Stats.MaxHp;
         }
 
-        public float X => MapData.PathPos(Distance).X;
-        public float Y => MapData.PathPos(Distance).Y;
+        public float X => MapData.PathPosLateral(Distance, Lateral).X;
+        public float Y => MapData.PathPosLateral(Distance, Lateral).Y;
 
         public HeroStats Stats => ComputeStats(Level, AugmentCards);
 
@@ -131,16 +137,20 @@ namespace GodTD.Core
 
         public bool SkillReady => Alive && SkillIdHeld.HasValue && SkillCooldown <= 0f;
 
-        /// <summary>클릭 좌표를 경로에 투영해서 목적지로 삼는다</summary>
-        public void MoveTo(float x, float y)
+        /// <summary>클릭 좌표를 (진행도, 횡오프셋)으로 분해해 목적지로 삼는다. 보정된 실제 목적지를 돌려준다.</summary>
+        public MapData.PathProjection MoveTo(float x, float y)
         {
-            TargetDistance = MapData.NearestPathDistance(x, y);
+            var p = MapData.ProjectToPath(x, y);
+            TargetDistance = p.Distance;
+            TargetLateral = p.Lateral;
+            return p;
         }
 
-        /// <summary>경로 위 거리를 직접 지정 (테스트·내부용)</summary>
+        /// <summary>경로 위 거리를 직접 지정 (테스트·내부용) — 중앙선으로 간다</summary>
         public void MoveToDistance(float distance)
         {
             TargetDistance = MathF.Min(MapData.PATH_LENGTH, MathF.Max(0f, distance));
+            TargetLateral = 0f;
         }
 
         /// <summary>경험치를 넣고, 레벨이 오르면 오른 레벨 수를 돌려준다</summary>
@@ -195,11 +205,15 @@ namespace GodTD.Core
             var stats = Stats;
             if (stats.Regen > 0f) Hp = MathF.Min(stats.MaxHp, Hp + stats.Regen * dt);
 
-            float gap = TargetDistance - Distance;
-            if (MathF.Abs(gap) <= HeroData.HERO_ARRIVE_EPSILON) return;
+            // 2D 이동 예산 — 진행도·횡오프셋 벡터 길이로 속도를 나눠 대각 이동 가속을 막는다 ← web
+            float dAlong = TargetDistance - Distance;
+            float dLat = TargetLateral - Lateral;
+            float gap = MapData.Hypot(dAlong, dLat);
+            if (gap <= HeroData.HERO_ARRIVE_EPSILON) return;
 
-            float step = MathF.Min(MathF.Abs(gap), stats.MoveSpeed * dt);
-            Distance += MathF.Sign(gap) * step;
+            float step = MathF.Min(gap, stats.MoveSpeed * dt);
+            Distance += dAlong / gap * step;
+            Lateral += dLat / gap * step;
         }
 
         void Respawn()
@@ -209,6 +223,8 @@ namespace GodTD.Core
             Hp = Stats.MaxHp;
             Distance = AltarDistance;
             TargetDistance = AltarDistance;
+            Lateral = 0f;
+            TargetLateral = 0f;
             RespawnTimer = 0f;
         }
 

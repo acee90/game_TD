@@ -126,6 +126,9 @@ namespace GodTD.Core
             }
             PATH_LENGTH = total;
 
+            CUM = new float[WAYPOINTS.Length];
+            for (int i = 0; i < SEGMENTS.Length; i++) CUM[i + 1] = CUM[i] + SEGMENTS[i];
+
             ALTAR_PATH_DISTANCE = NearestPathDistance(CENTER.X, CENTER.Y);
         }
 
@@ -208,27 +211,94 @@ namespace GodTD.Core
             return WAYPOINTS[WAYPOINTS.Length - 1];
         }
 
+        // ───────── 영웅 클릭 지점 이동 (hero-point-movement.md, 2026-07-16) ← web/src/core/map.ts ─────────
+
+        /// <summary>길의 보행 가능 반폭(px) — 경로 중심선에서 좌우로 이만큼까지 걸을 수 있다.</summary>
+        public const float WALKABLE_HALF_WIDTH = 12f;
+
         /// <summary>
-        /// 임의의 점에서 가장 가까운 경로 위 지점의 거리.
-        /// 영웅은 경로를 벗어날 수 없으므로 클릭 좌표를 여기에 투영해서 목적지로 삼는다.
+        /// 코너 블렌딩 반경(px). 90도 코너에서 법선이 급변하므로 코너 근처에서 횡오프셋을
+        /// 선형으로 눌러 0에 수렴시킨다 — 좌표가 연속이 되어 순간이동이 없다. [프로토 가설]
         /// </summary>
-        public static float NearestPathDistance(float x, float y)
+        public const float CORNER_BLEND = 18f;
+
+        /// <summary>웨이포인트들의 누적 진행도 — 코너 블렌딩·투영용 (정적 초기화에서 채운다)</summary>
+        static readonly float[] CUM;
+
+        static float DistToNearestCorner(float d)
         {
-            const int STEPS = 600;
-            float best = 0f;
-            float bestGap = float.PositiveInfinity;
-            for (int i = 0; i <= STEPS; i++)
+            float best = float.PositiveInfinity;
+            // 양 끝(입구·출구)은 코너가 아니다 — 내부 웨이포인트만
+            for (int i = 1; i < CUM.Length - 1; i++) best = Math.Min(best, Math.Abs(d - CUM[i]));
+            return best;
+        }
+
+        /// <summary>코너 감쇠가 적용된 실제 좌표 — 영웅 렌더·판정이 모두 이 좌표를 쓴다</summary>
+        public static Pt PathPosLateral(float d, float lateral)
+        {
+            if (lateral == 0f) return PathPos(d);
+            float damp = Math.Min(1f, DistToNearestCorner(d) / CORNER_BLEND);
+            return PathPosOffset(d, lateral * damp);
+        }
+
+        public readonly struct PathProjection
+        {
+            /// <summary>최근접 경로 진행도</summary>
+            public readonly float Distance;
+            /// <summary>보행 폭으로 제한된 횡오프셋 (좌측 법선 기준 부호)</summary>
+            public readonly float Lateral;
+            /// <summary>실제(보정된) 목적지 좌표 — 목적지 마커는 여기에 찍는다</summary>
+            public readonly float X;
+            public readonly float Y;
+
+            public PathProjection(float distance, float lateral, float x, float y)
             {
-                float d = (i / (float)STEPS) * PATH_LENGTH;
-                Pt p = PathPos(d);
-                float gap = Hypot(p.X - x, p.Y - y);
+                Distance = distance;
+                Lateral = lateral;
+                X = x;
+                Y = y;
+            }
+        }
+
+        /// <summary>
+        /// 클릭 좌표를 (진행도, 횡오프셋)으로 분해한다 — 구간별 수선의 발(해석적).
+        /// 보행 영역 밖 클릭은 최근접 유효 지점으로 보정된다.
+        /// fixture 비교: web/tests/hero-movement.test.ts — (180,100) → (72, −8).
+        /// </summary>
+        public static PathProjection ProjectToPath(float x, float y, float maxLateral = WALKABLE_HALF_WIDTH)
+        {
+            float bestGap = float.PositiveInfinity;
+            float bestD = 0f;
+            float bestLat = 0f;
+            for (int i = 0; i < SEGMENTS.Length; i++)
+            {
+                float len = SEGMENTS[i];
+                if (len == 0f) continue;
+                Pt a = WAYPOINTS[i];
+                Pt b = WAYPOINTS[i + 1];
+                float ux = (b.X - a.X) / len; // 진행 방향 단위벡터
+                float uy = (b.Y - a.Y) / len;
+                float t = Math.Max(0f, Math.Min(len, (x - a.X) * ux + (y - a.Y) * uy));
+                float px = a.X + ux * t;
+                float py = a.Y + uy * t;
+                float gap = Hypot(x - px, y - py);
                 if (gap < bestGap)
                 {
                     bestGap = gap;
-                    best = d;
+                    bestD = CUM[i] + t;
+                    // 좌측 법선(-uy, ux) 기준 부호 있는 횡오프셋
+                    bestLat = (x - px) * -uy + (y - py) * ux;
                 }
             }
-            return best;
+            float lateral = Math.Max(-maxLateral, Math.Min(maxLateral, bestLat));
+            Pt r = PathPosLateral(bestD, lateral);
+            return new PathProjection(bestD, lateral, r.X, r.Y);
         }
+
+        /// <summary>
+        /// 임의의 점에서 가장 가까운 경로 위 지점의 거리.
+        /// (2026-07-16: 600스텝 샘플링 → 해석적 투영. 결과 의미는 동일하되 더 정확하다.)
+        /// </summary>
+        public static float NearestPathDistance(float x, float y) => ProjectToPath(x, y, 0f).Distance;
     }
 }

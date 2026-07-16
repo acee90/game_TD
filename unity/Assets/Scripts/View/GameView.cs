@@ -92,6 +92,13 @@ namespace GodTD.View
         int lastHeroLevel = 1;
         bool heroWasAlive = true;
         TextMesh respawnLabel;   // F3 — 제단 위 부활 카운트다운 빌보드
+
+        // F6/M4 — 이동 명령 연출 (hero-point-movement.md): 목적지 decal + 예정 경로 리본.
+        // 리본은 (진행도, 횡오프셋) 공간의 직선을 샘플한다 — 영웅이 그 공간에서 직선으로
+        // 움직이므로 표시 경로 = 실제 궤적이다. 도착·사망·부활·재시작 때 자동으로 걷힌다.
+        GameObject moveMarker;
+        LineRenderer movePathLine;
+        const int MOVE_PATH_SAMPLES = 24;
         GameObject decoyObject;
 
         LineRenderer selectionRing;
@@ -317,10 +324,12 @@ namespace GodTD.View
                 return;
             }
 
-            // 우클릭 = 영웅 이동. 어디를 찍든 경로 위로 투영된다.
+            // 우클릭 = 영웅 이동. 클릭 지점을 (진행도, 횡오프셋)으로 분해해 길 폭 안의
+            // 실제 지점으로 간다. 보정된 목적지에 마커·예정 경로를 그린다 (F6/M4).
             if (right)
             {
-                Game.MoveHero(hit.point.x / SCALE, -hit.point.z / SCALE);
+                var order = Game.MoveHero(hit.point.x / SCALE, -hit.point.z / SCALE);
+                ShowMoveOrder(order);
                 return;
             }
 
@@ -1034,6 +1043,8 @@ namespace GodTD.View
             heroWasAlive = alive;
             heroObject.SetActive(alive);
 
+            RefreshMoveOrder(hero, alive); // F6/M4 — 이동 명령 연출 갱신
+
             // F3 — 사망 중 제단 위에 남은 부활 초를 빌보드로 (§7.13). HUD 배너와 같은 숫자.
             if (!alive && !Game.Over)
             {
@@ -1195,6 +1206,67 @@ namespace GodTD.View
         {
             shakeAmp = Mathf.Max(shakeAmp, amplitude);
             if (stopSeconds > 0f) hitstopTimer = stopSeconds;
+        }
+
+        /// <summary>F6/M4 — 우클릭 직후 목적지 decal·경로 리본을 세운다 (지연 생성).</summary>
+        void ShowMoveOrder(MapData.PathProjection order)
+        {
+            if (moveMarker == null)
+            {
+                moveMarker = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+                moveMarker.name = "MoveMarker";
+                Destroy(moveMarker.GetComponent<Collider>()); // 클릭 레이캐스트를 오염시키면 안 된다
+                moveMarker.transform.localScale = new Vector3(0.55f, 0.02f, 0.55f);
+                var markerMat = new Material(Shader.Find("Sprites/Default"))
+                {
+                    color = new Color(HERO.r, HERO.g, HERO.b, 0.85f),
+                };
+                moveMarker.GetComponent<MeshRenderer>().sharedMaterial = markerMat;
+
+                var lineGo = new GameObject("MovePath");
+                movePathLine = lineGo.AddComponent<LineRenderer>();
+                movePathLine.widthMultiplier = 0.09f;
+                movePathLine.numCapVertices = 2;
+                movePathLine.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+                movePathLine.receiveShadows = false;
+                movePathLine.material = new Material(Shader.Find("Sprites/Default"))
+                {
+                    color = new Color(HERO.r, HERO.g, HERO.b, 0.45f),
+                };
+            }
+            moveMarker.SetActive(true);
+            moveMarker.transform.position = W(order.X, order.Y, 0.12f);
+            movePathLine.gameObject.SetActive(true);
+            Fx.Ring(W(order.X, order.Y, 0.2f), HERO, 1.1f); // 클릭 순간 피드백
+        }
+
+        /// <summary>
+        /// F6/M4 — 매 프레임 예정 경로 갱신. 도착(2D 엡실론)·사망이면 표시를 걷는다.
+        /// 재시작으로 영웅이 바뀌어도 새 영웅은 목적지=현재라 자동으로 사라진다.
+        /// </summary>
+        void RefreshMoveOrder(Hero hero, bool alive)
+        {
+            if (moveMarker == null || !moveMarker.activeSelf) return;
+
+            float dAlong = hero.TargetDistance - hero.Distance;
+            float dLat = hero.TargetLateral - hero.Lateral;
+            bool arrived = MapData.Hypot(dAlong, dLat) <= HeroData.HERO_ARRIVE_EPSILON;
+            if (!alive || arrived)
+            {
+                moveMarker.SetActive(false);
+                movePathLine.positionCount = 0;
+                movePathLine.gameObject.SetActive(false);
+                return;
+            }
+
+            movePathLine.positionCount = MOVE_PATH_SAMPLES + 1;
+            for (int i = 0; i <= MOVE_PATH_SAMPLES; i++)
+            {
+                float t = i / (float)MOVE_PATH_SAMPLES;
+                var pt = MapData.PathPosLateral(
+                    hero.Distance + dAlong * t, hero.Lateral + dLat * t);
+                movePathLine.SetPosition(i, W(pt.X, pt.Y, 0.12f));
+            }
         }
 
         /// <summary>인월드 라벨 — 웹 렌더러에 있던 티어·문 표기 복원 (감사: 가독성 회귀)</summary>

@@ -5,7 +5,7 @@ import * as B from '../data/balance';
 import * as H from '../data/hero';
 import * as K from '../data/skills';
 import * as S from '../data/score';
-import { PATH_LENGTH, SLOT_POS, pathPos } from '../core/map';
+import { PATH_LENGTH, SLOT_POS, pathPos, type PathProjection } from '../core/map';
 import { GOD_TIER, RACE_COLOR, tagLabel, type Race } from '../data/units';
 import type { AugmentCard } from '../data/hero';
 import { attackInterval, damage, isSplash, range, slowFactor, type UpgradeLevels } from './combat';
@@ -110,8 +110,9 @@ export class Game {
     return this.slots[H.ALTAR_SLOT];
   }
 
-  moveHero(x: number, y: number): void {
-    this.hero.moveTo(x, y);
+  /** 우클릭 이동 — 보정된 실제 목적지를 돌려준다 (렌더러가 목적지 마커에 쓴다) */
+  moveHero(x: number, y: number): PathProjection {
+    return this.hero.moveTo(x, y);
   }
 
   /** 클릭 지점의 몹/보스를 고른다 (없으면 null). 보스는 크므로 더 넉넉히 잡는다. */
