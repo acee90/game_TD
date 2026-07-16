@@ -1,6 +1,6 @@
 # docs — 문서 지도
 
-> 상태: **현행** (새 문서는 여기에 등록한다) · 최종 갱신: 2026-07-14
+> 상태: **현행** (새 문서는 여기에 등록한다) · 최종 갱신: 2026-07-16
 > 규칙: [documentation-rules.md](documentation-rules.md) · 상태가 **현행**인 문서만 기준으로 삼는다.
 
 ```
@@ -59,6 +59,7 @@ docs/
 | 문서 | 상태 | 내용 |
 |---|---|---|
 | [unity-sync-plan.md](exec-plans/unity-sync-plan.md) | 진행 중 | Unity 동기화 이어하기 (미커밋 부분 반영 상태 포함) |
+| [unity-hud-redesign.md](exec-plans/unity-hud-redesign.md) | 초안 | H1~H4 구현 이력 + H5 프로덕션 HUD 업그레이드 계획 |
 
 ## balance/ — 자동 생성 시트
 

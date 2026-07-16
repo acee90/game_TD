@@ -12,6 +12,7 @@ using System.Collections.Generic;
 using GodTD.Core;
 using UnityEngine;
 using UnityEngine.Rendering;
+using UnityEngine.Rendering.Universal;
 
 namespace GodTD.View
 {
@@ -67,6 +68,7 @@ namespace GodTD.View
         float camDistance = 54f; // 시작은 살짝 멀리서 줌인
 
         GameObject[] tiles;
+        MeshRenderer[] tileRenderers; // Kenney 타일 색조(occupied/altar) MPB 적용용
         GameObject[] towerObjects;
         UnitDef[] towerDefs;   // 캐시 — def/tier가 바뀌면 다시 만든다
         int[] towerTiers;
@@ -93,28 +95,27 @@ namespace GodTD.View
 
         LineRenderer selectionRing;
         LineRenderer heroRing;
+        GameObject tileSelectMarker;   // Kenney selection-a — 선택한 타일 위 4모서리 브래킷
 
         // ── 머티리얼 캐시 (색·발광 강도별) ──
         readonly Dictionary<Color, Material> litMats = new Dictionary<Color, Material>();
         readonly Dictionary<(Color, float), Material> glowMats = new Dictionary<(Color, float), Material>();
         readonly Dictionary<Color, Material> transMats = new Dictionary<Color, Material>();
         Material flashMat;
-        Shader standardShader;
+        Shader litShader;
         Shader spriteShader;
 
-        // ── 색상 (웹 원본 render.ts 팔레트 유지) ──
-        static readonly Color BG = Hex("#090c16");
-        static readonly Color BG_FAR = Hex("#05060c");
-        static readonly Color BG_NEAR = Hex("#141b30");
-        static readonly Color BOARD = Hex("#101526");
-        static readonly Color PATH_OUTER = Hex("#333c66");
-        static readonly Color PATH_INNER = Hex("#171d33");
-        static readonly Color CROSS_FILL = Hex("#1a2036");
-        static readonly Color TILE_EMPTY = Hex("#161c30");
-        static readonly Color TILE_TOWER = Hex("#232a44");
-        static readonly Color TILE_BASE = Hex("#0b0f1d");
-        // 제단 — 성주가 부활하는 사당. 보라 마법진(#2a2140/#b08cff)에서 흙·금동으로 바꿨다 (세계관 §8).
-        static readonly Color ALTAR = Hex("#2b2418");
+        // ── 색상 — Kenney Sample.png 룩: 어두운 배경 위에 밝은 타일 섬이 뜬다. ──
+        static readonly Color SKY = Hex("#38383f");        // 배경 = 어두운 차콜 (타일을 팝시킨다)
+        static readonly Color SKY_FAR = Hex("#303036");
+        static readonly Color SOIL_GROUND = Hex("#33333a"); // 타일 밑/틈 = 어두운 배경색과 통일
+        // Kenney 잔디 알베도가 청록빛이라 파란기를 눌러 깨끗한 중간 초록으로 (형광/라임 방지)
+        static readonly Color GRASS_TINT = new Color(0.72f, 0.95f, 0.55f);
+        // 길 타일 — 따뜻한 탄/흙색 (Sample의 오렌지빛 길)
+        static readonly Color ROAD_TINT = new Color(1.15f, 0.92f, 0.62f);
+        const float TILE_TOP = 0.36f;                        // 타일 윗면 = 유닛이 서는 높이
+
+        // 제단 — 성주가 부활하는 사당. 테두리 금동색.
         static readonly Color ALTAR_EDGE = Hex("#c8a24a");
         static readonly Color DOOR_IN_COLOR = Hex("#8a6fd0");
         static readonly Color DOOR_OUT_COLOR = Hex("#ff5a3c");
@@ -139,9 +140,9 @@ namespace GodTD.View
 
         void Awake()
         {
-            standardShader = Shader.Find("Standard");
+            litShader = Shader.Find("Universal Render Pipeline/Lit");
             spriteShader = Shader.Find("Sprites/Default");
-            flashMat = new Material(standardShader) { color = Color.white };
+            flashMat = new Material(litShader) { color = Color.white };
             flashMat.EnableKeyword("_EMISSION");
             flashMat.SetColor("_EmissionColor", Color.white * 2.2f);
 
@@ -154,6 +155,7 @@ namespace GodTD.View
 
             BuildCamera();
             BuildLights();
+            BuildPostFx();
             BuildStaticScene();
             dynamicRoot = new GameObject("Dynamic").transform;
             dynamicRoot.SetParent(transform, false);
@@ -357,10 +359,12 @@ namespace GodTD.View
             cam.orthographic = false;
             cam.fieldOfView = CAM_FOV;
             cam.clearFlags = CameraClearFlags.SolidColor;
-            cam.backgroundColor = BG;
+            cam.backgroundColor = SKY;
             cam.nearClipPlane = 1f;
             cam.farClipPlane = 300f;
-            if (cam.GetComponent<BloomEffect>() == null) cam.gameObject.AddComponent<BloomEffect>();
+            // URP: 블룸은 Volume(Bloom override)이 처리한다 — 카메라 포스트프로세싱만 켠다.
+            var camData = cam.GetUniversalAdditionalCameraData();
+            camData.renderPostProcessing = true;
             ApplyViewport();
         }
 
@@ -371,30 +375,58 @@ namespace GodTD.View
             foreach (var stray in FindObjectsByType<Light>(FindObjectsSortMode.None))
                 if (stray.type == LightType.Directional) Destroy(stray.gameObject);
 
+            // 부드럽고 균일한 밝은 조명 — Kenney Sample 룩(스튜디오 렌더). 입체감은 이제 타일
+            // 지오메트리(언덕·나무)가 만드므로, 조명은 대비를 낮춰 색을 곱게 살린다.
             var sun = new GameObject("Sun").AddComponent<Light>();
             sun.transform.SetParent(transform, false);
             sun.type = LightType.Directional;
-            sun.transform.rotation = Quaternion.Euler(55f, -35f, 0f);
-            sun.color = new Color(1f, 0.96f, 0.88f);
-            sun.intensity = 0.7f; // 1.15는 딥네이비 타일을 회청색으로 씻어냈다 (캡처 검증)
+            sun.transform.rotation = Quaternion.Euler(45f, -40f, 0f);
+            sun.color = new Color(1f, 0.98f, 0.92f);
+            sun.intensity = 1.05f;
             sun.shadows = LightShadows.Soft;
-            sun.shadowStrength = 0.8f;
+            sun.shadowStrength = 0.45f; // 옅고 부드러운 그림자
 
-            // Trilight — Flat(0.30,0.33,0.46)이 딥네이비 팔레트를 회청색으로 씻어냈다(아트 계획 §2.6)
-            RenderSettings.ambientMode = AmbientMode.Trilight;
-            RenderSettings.ambientSkyColor = Hex("#1A2340");
-            RenderSettings.ambientEquatorColor = Hex("#10162A");
-            RenderSettings.ambientGroundColor = Hex("#070A14");
+            // 밝은 균일 앰비언트 — 그늘도 환하게 (Sample처럼 대비 낮음)
+            RenderSettings.ambientMode = AmbientMode.Flat;
+            RenderSettings.ambientLight = new Color(0.62f, 0.62f, 0.6f);
             QualitySettings.shadowDistance = 140f;
 
-            // 반대편 차가운 필 — 실루엣이 어두운 판에서 분리된다 (감사 high/low)
+            // 반대편 필 — 그림자 쪽을 부드럽게 채운다
             var fill = new GameObject("Fill").AddComponent<Light>();
             fill.transform.SetParent(transform, false);
             fill.type = LightType.Directional;
-            fill.transform.rotation = Quaternion.Euler(38f, 140f, 0f);
-            fill.color = new Color(0.55f, 0.65f, 1f);
-            fill.intensity = 0.22f;
+            fill.transform.rotation = Quaternion.Euler(40f, 150f, 0f);
+            fill.color = new Color(1f, 0.95f, 0.85f);
+            fill.intensity = 0.3f;
             fill.shadows = LightShadows.None;
+        }
+
+        // ───────── 포스트프로세싱 (URP Volume) ─────────
+        // 구형 BloomEffect(OnRenderImage)를 대체한다. emissive·가산 파티클이 '밝은 알베도'가
+        // 아니라 진짜 빛으로 읽히게 하는 게 핵심 — 감사가 지목한 "싸구려 느낌"의 최대 처방.
+        // 코드 생성(에셋 0) 원칙 유지: 프로파일도 런타임에 만든다.
+        void BuildPostFx()
+        {
+            var go = new GameObject("PostFx Volume");
+            go.transform.SetParent(transform, false);
+            var volume = go.AddComponent<Volume>();
+            volume.isGlobal = true;
+            volume.priority = 10f;
+
+            var profile = ScriptableObject.CreateInstance<VolumeProfile>();
+            volume.sharedProfile = profile;
+
+            // Bloom — 밝은 대낮 씬이므로 임계를 높여 발광 이펙트(투사체·GOD·보스)만 번지게. 잔디는 안 번진다.
+            var bloom = profile.Add<Bloom>(true);
+            bloom.threshold.Override(1.25f);
+            bloom.intensity.Override(0.7f);
+            bloom.scatter.Override(0.6f);
+            bloom.highQualityFiltering.Override(true);
+
+            // Tonemapping(Neutral) — HDR 발광값을 색 왜곡 최소로 눌러 담는다. 없으면 >1 값이 하얗게 클립.
+            // ACES는 딥네이비 팔레트를 데워 회청색으로 밀기에 Neutral을 쓴다.
+            var tone = profile.Add<Tonemapping>(true);
+            tone.mode.Override(TonemappingMode.Neutral);
         }
 
         // ───────── 정적 씬 (배경 · 보드 · 경로 · 십자 · 타일 · 문) ─────────
@@ -405,35 +437,21 @@ namespace GodTD.View
 
             BuildBackdrop();
 
-            // 보드 판 — 그림자를 받는 리트 바닥이자 빈 곳 클릭(영웅 이동)의 레이캐스트 판
+            // 어두운 바닥판 — 타일 섬 밑을 받치고(틈·너머는 어두운 배경) + 빈 곳 클릭 레이캐스트.
+            // 윗면을 길 파인 바닥보다 아래로 낮춰야(≈-0.05) 길 채널에 지면이 안 비친다.
             var board = GameObject.CreatePrimitive(PrimitiveType.Cube);
             board.name = "Ground";
             board.transform.SetParent(staticRoot, false);
-            board.transform.position = boardCenter + new Vector3(0f, -0.45f, 0f);
-            board.transform.localScale = new Vector3(52f, 0.8f, 62f);
-            Paint(board, LitMat(BOARD));
+            board.transform.position = boardCenter + new Vector3(0f, -0.55f, 0f);
+            board.transform.localScale = new Vector3(60f, 1f, 70f);
+            Paint(board, LitMat(SOIL_GROUND));
 
-            // 경로 — 굵은 선 두 겹 (외곽선 + 안쪽)
-            MakePathLine("PathOuter", (36f + 4f) * SCALE, PATH_OUTER, 0.02f);  // 2열 레인 수용
-            MakePathLine("PathInner", 36f * SCALE, PATH_INNER, 0.04f);
+            BuildTiles();   // 타워 슬롯 = 클릭 가능한 잔디 타일 (격자와 같은 높이)
+            BuildBoard();   // 통합 격자 — 잔디(언덕·나무·바위 혼합) + 경로 흙 타일 오토타일링
 
-            // 십자 지형 — 살짝 도드라진 리트 플레이트
-            foreach (var bar in MapData.CROSS_BARS)
-            {
-                var cube = GameObject.CreatePrimitive(PrimitiveType.Cube);
-                cube.name = "CrossBar";
-                Destroy(cube.GetComponent<Collider>());
-                cube.transform.SetParent(staticRoot, false);
-                cube.transform.position = W(bar.X + bar.W / 2f, bar.Y + bar.H / 2f, 0.05f);
-                cube.transform.localScale = new Vector3(bar.W * SCALE, 0.1f, bar.H * SCALE);
-                Paint(cube, LitMat(CROSS_FILL));
-            }
-
-            // 문 (입구 보라 / 출구 빨강) — 발광 게이트
+            // 문 (입구·출구) — 게이트
             MakeDoor(MapData.DOOR_IN, DOOR_IN_COLOR);
             MakeDoor(MapData.DOOR_OUT, DOOR_OUT_COLOR);
-
-            BuildTiles();
 
             // 제단 테두리 — 보라 링
             var altarRing = MakeRing("AltarRing", TransMat(ALTAR_EDGE), 0.07f);
@@ -442,6 +460,17 @@ namespace GodTD.View
             // 선택 링 · 영웅 사거리 링 (매 프레임 갱신)
             selectionRing = MakeRing("SelectionRing", TransMat(new Color(1f, 0.82f, 0.25f, 0.30f)), 0.06f);
             heroRing = MakeRing("HeroRangeRing", TransMat(new Color(0.69f, 0.55f, 1f, 0.13f)), 0.05f);
+
+            // 선택 타일 마커 — Kenney selection-a(4모서리 브래킷). 선택한 타일 위에 얹어 매 프레임 옮긴다
+            var selPrefab = Resources.Load<GameObject>("Kenney/selection-a");
+            if (selPrefab != null)
+            {
+                tileSelectMarker = Instantiate(selPrefab, staticRoot);
+                tileSelectMarker.name = "TileSelectMarker";
+                float s = MapData.TILE * SCALE;
+                tileSelectMarker.transform.localScale = new Vector3(s, s, s);
+                tileSelectMarker.SetActive(false);
+            }
         }
 
         /// <summary>배경 그라데이션 — 버텍스 컬러 메시 (먼 쪽 어둡게, 가까운 쪽 살짝 밝게)</summary>
@@ -457,8 +486,8 @@ namespace GodTD.View
                 boardCenter + new Vector3(-EXTENT, Y, EXTENT),
                 boardCenter + new Vector3(EXTENT, Y, EXTENT),
             };
-            // 카메라가 -Z 근처에서 +Z(먼 쪽)를 바라본다 — 먼 쪽을 어둡게
-            mesh.colors = new[] { BG_NEAR, BG_NEAR, BG_FAR, BG_FAR };
+            // 보드 너머는 어두운 배경 — 타일 섬이 뜬다 (Sample 룩)
+            mesh.colors = new[] { SKY, SKY, SKY_FAR, SKY_FAR };
             mesh.triangles = new[] { 0, 2, 1, 1, 2, 3 };
             mesh.RecalculateBounds();
 
@@ -468,64 +497,221 @@ namespace GodTD.View
             go.AddComponent<MeshRenderer>().sharedMaterial = TransMat(Color.white);
         }
 
+        static readonly int BaseColorId = Shader.PropertyToID("_BaseColor");
+
+        /// <summary>Kenney 타일 인스턴스 — 균일 스케일(네이티브 도톰한 베벨 유지), 윗면을 topY에 맞춘다.</summary>
+        GameObject SpawnTile(GameObject prefab, float px, float py, float side, float topY, float rotY, string name)
+        {
+            var t = Instantiate(prefab);
+            t.name = name;
+            t.transform.SetParent(staticRoot, false);
+            t.transform.position = W(px, py, topY - 0.2f * side); // 메시 윗면(0.2·side)을 topY에
+            t.transform.localScale = new Vector3(side, side, side);
+            t.transform.rotation = Quaternion.Euler(0f, rotY, 0f);
+            return t;
+        }
+
+        const int BOARD_R = 7; // 격자 반경(셀)
+
+        static bool IsRoadCell(int gx, int gy)
+        {
+            float px = MapData.CENTER.X + gx * MapData.TILE;
+            float py = MapData.CENTER.Y + gy * MapData.TILE;
+            return PerpDistToPath(px, py) < MapData.TILE * 0.4f; // 셀 중심이 경로선 위
+        }
+
+        /// <summary>이웃 연결(N/E/S/W)로 길 조각·회전 선택 — 마칭스퀘어식 오토타일링.
+        /// 실측 기준(top-down): 직선=N-S가 rot0, 코너=W-N이 rot0. 삼거리·끝은 드물어 근사.</summary>
+        static (GameObject prefab, float rot) RoadPiece(bool n, bool e, bool s, bool w,
+            GameObject straight, GameObject corner, GameObject crossing, GameObject split, GameObject end)
+        {
+            int count = (n ? 1 : 0) + (e ? 1 : 0) + (s ? 1 : 0) + (w ? 1 : 0);
+            if (count >= 4) return (crossing ? crossing : straight, 0f);
+            if (count == 3)
+            {
+                // split base(rot0)=빠진 방향 S 가정 → 실측 필요 시 조정
+                if (!s) return (split, 0f);
+                if (!w) return (split, 90f);
+                if (!n) return (split, 180f);
+                return (split, 270f); // !e
+            }
+            if (count == 2)
+            {
+                if (n && s) return (straight, 0f);
+                if (e && w) return (straight, 90f);
+                // 코너 rot0 = W-N. 시계방향으로 +90씩.
+                if (w && n) return (corner, 0f);
+                if (n && e) return (corner, 90f);
+                if (e && s) return (corner, 180f);
+                return (corner, 270f); // s && w
+            }
+            if (n) return (end, 0f);
+            if (e) return (end, 90f);
+            if (s) return (end, 180f);
+            if (w) return (end, 270f);
+            return (straight, 0f);
+        }
+
+        /// <summary>통합 보드 격자 — 잔디 + 실제 길 타일(잔디 벽+파인 흙길)을 방향 맞춰 오토타일링. 슬롯 자리는 건너뜀.</summary>
+        void BuildBoard()
+        {
+            var grass = Resources.Load<GameObject>("Kenney/tile");
+            var straight = Resources.Load<GameObject>("Kenney/tile-straight");
+            var corner = Resources.Load<GameObject>("Kenney/tile-corner-square");
+            var crossing = Resources.Load<GameObject>("Kenney/tile-crossing");
+            var split = Resources.Load<GameObject>("Kenney/tile-split");
+            var end = Resources.Load<GameObject>("Kenney/tile-end");
+            // 3D 기복 타일 — 평 잔디는 어떤 크기여도 평면이라, 언덕·나무·바위로 지형을 세운다(진단 확인).
+            var hill = Resources.Load<GameObject>("Kenney/tile-hill");
+            var tree = Resources.Load<GameObject>("Kenney/tile-tree");
+            var treeD = Resources.Load<GameObject>("Kenney/tile-tree-double");
+            var treeQ = Resources.Load<GameObject>("Kenney/tile-tree-quad");
+            var rock = Resources.Load<GameObject>("Kenney/tile-rock");
+            if (grass == null) return;
+            float side = MapData.TILE * SCALE; // flush — 길 타일 잔디 벽이 이음새를 이룬다
+
+            for (int gx = -BOARD_R; gx <= BOARD_R; gx++)
+            for (int gy = -BOARD_R; gy <= BOARD_R; gy++)
+            {
+                float px = MapData.CENTER.X + gx * MapData.TILE;
+                float py = MapData.CENTER.Y + gy * MapData.TILE;
+                if (IsNearSlot(px, py)) continue; // 슬롯 타일이 이미 채운다
+
+                int hh = ((gx * 73856093) ^ (gy * 19349663)) & 0xff;
+                float v = 0.96f + (hh / 255f) * 0.08f; // 타일별 아주 미세한 명암(체커보드 방지)
+
+                if (straight != null && IsRoadCell(gx, gy))
+                {
+                    bool n = IsRoadCell(gx, gy - 1), s = IsRoadCell(gx, gy + 1);
+                    bool e = IsRoadCell(gx + 1, gy), w = IsRoadCell(gx - 1, gy);
+                    var (prefab, rot) = RoadPiece(n, e, s, w, straight, corner, crossing, split, end);
+                    var rt = SpawnTile(prefab, px, py, side, TILE_TOP, rot, "Road");
+                    // 순한 틴트 — 잔디 벽 파란기만 눌러 초록으로, 흙은 갈색 유지 (흙까지 초록 되면 길이 묻힌다)
+                    TintTile(rt, ROAD_TINT * v);
+                }
+                else
+                {
+                    // 잔디 셀 = 3D 기복 타일 혼합. 언덕(낮음) 위주로 지형을 세우고 나무·바위를 흩뿌린다.
+                    // 경로에서 먼 셀일수록 나무를 짙게(시야 방해 최소). 회전도 셀마다 달라 반복감 제거.
+                    bool far = PerpDistToPath(px, py) > MapData.TILE * 2.2f && !IsNearSlot2(px, py, 1.6f);
+                    var prefab = GrassPick(hh, far, grass, hill, tree, treeD, treeQ, rock);
+                    var gt = SpawnTile(prefab, px, py, side, TILE_TOP, (hh & 3) * 90f, "Grass");
+                    TintTile(gt, GRASS_TINT * v);
+                }
+            }
+        }
+
+        /// <summary>잔디 셀 타일 선택 — 언덕 위주 저기복 + 나무·바위 악센트. far면 나무를 짙게.</summary>
+        static GameObject GrassPick(int hh, bool far, GameObject grass, GameObject hill,
+            GameObject tree, GameObject treeD, GameObject treeQ, GameObject rock)
+        {
+            int r = hh % 100;
+            if (far)
+            {
+                if (r < 22) return hill ?? grass;
+                if (r < 45) return tree ?? grass;
+                if (r < 57) return treeD ?? grass;
+                if (r < 64) return treeQ ?? grass;
+                if (r < 80) return rock ?? grass;
+                return grass;
+            }
+            // 경로·슬롯 인접: 낮은 기복만 (언덕·바위·평지) — 시야 방해 최소
+            if (r < 46) return hill ?? grass;
+            if (r < 62) return rock ?? grass;
+            if (r < 72) return tree ?? grass;
+            return grass;
+        }
+
+        static bool IsNearSlot2(float px, float py, float tiles)
+        {
+            foreach (var s in MapData.SLOT_POS)
+                if (MapData.Hypot(s.X - px, s.Y - py) < MapData.TILE * tiles) return true;
+            return false;
+        }
+
+        /// <summary>Kenney 타일 렌더러에 _BaseColor 틴트 (MPB — 공유 머티리얼 오염 없음).</summary>
+        static void TintTile(GameObject tile, Color tint)
+        {
+            var r = tile.GetComponentInChildren<MeshRenderer>();
+            if (r == null) return;
+            var mpb = new MaterialPropertyBlock();
+            r.GetPropertyBlock(mpb);
+            mpb.SetColor(BaseColorId, tint);
+            r.SetPropertyBlock(mpb);
+        }
+
+        /// <summary>나무·바위 디테일 — 슬롯·경로 아닌 잔디 셀에 드문드문 (결정적 배치).</summary>
+        static bool IsNearSlot(float px, float py)
+        {
+            foreach (var s in MapData.SLOT_POS)
+                if (MapData.Hypot(s.X - px, s.Y - py) < MapData.TILE * 0.75f) return true;
+            return false;
+        }
+
+        static float PerpDistToPath(float px, float py)
+        {
+            var wp = MapData.WAYPOINTS;
+            float best = float.MaxValue;
+            for (int i = 0; i < wp.Length - 1; i++)
+            {
+                var a = wp[i]; var b = wp[i + 1];
+                float dx = b.X - a.X, dy = b.Y - a.Y;
+                float l2 = dx * dx + dy * dy;
+                float t = l2 > 0f ? Mathf.Clamp01(((px - a.X) * dx + (py - a.Y) * dy) / l2) : 0f;
+                float cx = a.X + t * dx, cy = a.Y + t * dy;
+                best = Mathf.Min(best, MapData.Hypot(px - cx, py - cy));
+            }
+            return best;
+        }
+
         void BuildTiles()
         {
             int count = MapData.SLOT_POS.Length;
             tiles = new GameObject[count];
+            tileRenderers = new MeshRenderer[count];
             towerObjects = new GameObject[count];
             towerDefs = new UnitDef[count];
             towerTiers = new int[count];
+
+            // 타워 슬롯 = 잔디 위에 살짝 도톰하게 올라온 빌드 패드. 제단만 크리스탈 타일.
+            var grassPrefab = Resources.Load<GameObject>("Kenney/tile");
+            var altarPrefab = Resources.Load<GameObject>("Kenney/tile-crystal");
+            float side = MapData.TILE * SCALE; // 격자와 동일 flush
+
             for (int i = 0; i < count; i++)
             {
                 towerTiers[i] = -1;
                 var p = MapData.SLOT_POS[i];
-                float side = (MapData.TILE - 5f) * SCALE;
+                bool isAltar = i == HeroData.ALTAR_SLOT;
+                var prefab = isAltar && altarPrefab != null ? altarPrefab : grassPrefab;
 
-                // 받침 — 한 둘레 큰 어두운 판. 타일이 살짝 떠 있는 베벨 느낌을 만든다.
-                var basePlate = GameObject.CreatePrimitive(PrimitiveType.Cube);
-                basePlate.name = $"TileBase{i}";
-                Destroy(basePlate.GetComponent<Collider>());
-                basePlate.transform.SetParent(staticRoot, false);
-                basePlate.transform.position = W(p.X, p.Y, 0.10f);
-                basePlate.transform.localScale = new Vector3(side + 0.18f, 0.10f, side + 0.18f);
-                Paint(basePlate, LitMat(TILE_BASE));
+                // 격자와 같은 높이(flush) — 슬롯은 색조로만 구분한다
+                var tile = SpawnTile(prefab, p.X, p.Y, side, TILE_TOP, 0f, $"Tile{i}");
 
-                // 본체 — 클릭 판정 콜라이더 포함
-                var tile = GameObject.CreatePrimitive(PrimitiveType.Cube);
-                tile.name = $"Tile{i}";
-                tile.transform.SetParent(staticRoot, false);
-                tile.transform.position = W(p.X, p.Y, 0.26f);
-                tile.transform.localScale = new Vector3(side, 0.22f, side);
+                var box = tile.AddComponent<BoxCollider>(); // 클릭 판정
+                box.center = new Vector3(0f, 0.1f, 0f);
+                box.size = new Vector3(1f, 0.4f, 1f);
                 tile.AddComponent<TileMarker>().Index = i;
+
                 tiles[i] = tile;
+                tileRenderers[i] = tile.GetComponentInChildren<MeshRenderer>();
                 PaintTile(i, false);
             }
         }
 
         void PaintTile(int index, bool occupied)
         {
+            var r = tileRenderers[index];
+            if (r == null) return;
             bool isAltar = index == HeroData.ALTAR_SLOT;
-            var color = isAltar ? ALTAR : occupied ? TILE_TOWER : TILE_EMPTY;
-            Paint(tiles[index], isAltar ? GlowMat(ALTAR_EDGE, 0.25f, ALTAR) : LitMat(color));
-        }
-
-        void MakePathLine(string name, float width, Color color, float h)
-        {
-            var go = new GameObject(name);
-            go.transform.SetParent(staticRoot, false);
-            go.transform.rotation = Quaternion.Euler(90f, 0f, 0f);
-            var line = go.AddComponent<LineRenderer>();
-            line.useWorldSpace = true;
-            line.material = TransMat(color);
-            line.startWidth = width;
-            line.endWidth = width;
-            line.positionCount = MapData.WAYPOINTS.Length;
-            line.alignment = LineAlignment.TransformZ;
-            for (int i = 0; i < MapData.WAYPOINTS.Length; i++)
-            {
-                var p = MapData.WAYPOINTS[i];
-                line.SetPosition(i, W(p.X, p.Y, h));
-            }
+            // 컬러맵 아틀라스는 공유하므로 색은 _BaseColor 틴트로만 준다 (MPB — 머티리얼 오염 없음).
+            Color tint = isAltar ? new Color(1.2f, 1.0f, 0.5f)       // 제단 — 금빛(블룸으로 은은히 발광)
+                       : occupied ? GRASS_TINT * 0.72f               // 세워진 자리 — 눌린 흙빛으로 어둡게
+                       : GRASS_TINT * 1.12f;                         // 빈 슬롯 — 살짝 밝은 잔디(빌드 가능 표시)
+            var mpb = new MaterialPropertyBlock();
+            r.GetPropertyBlock(mpb);
+            mpb.SetColor(BaseColorId, tint);
+            r.SetPropertyBlock(mpb);
         }
 
         void MakeDoor(Pt at, Color color)
@@ -812,6 +998,9 @@ namespace GodTD.View
                     ? Instantiate(heroPrefab)
                     : new GameObject("Hero", typeof(MeshFilter), typeof(MeshRenderer));
                 heroObject.name = "Hero";
+                // 영웅 몸집 축소 — 1.8배 → 1.4배 (프리팹 모델이 커서 몹·타워 대비 과하게 컸다)
+                if (heroPrefab != null)
+                    heroObject.transform.localScale = Vector3.one * (1.4f / 1.8f);
                 heroObject.AddComponent<SphereCollider>();
                 heroObject.AddComponent<HeroMarker>();
                 heroObject.transform.SetParent(dynamicRoot, false);
@@ -926,6 +1115,15 @@ namespace GodTD.View
             else
                 selectionRing.positionCount = 0;
 
+            // 선택 타일 브래킷 — 빈 타일이든 타워든 슬롯을 고르면 그 타일 위에 얹는다
+            if (tileSelectMarker != null)
+            {
+                var slot = Selection.Slot;
+                bool show = slot != null && (Selection.IsTower || Selection.IsEmptyTile);
+                tileSelectMarker.SetActive(show);
+                if (show) tileSelectMarker.transform.position = W(slot.X, slot.Y, 0.46f);
+            }
+
             var hero = Game.Hero;
             if (hero.Alive)
                 SetCirclePoints(heroRing, hero.X, hero.Y, hero.Stats.Range, 0.44f);
@@ -938,9 +1136,9 @@ namespace GodTD.View
         public Material LitMat(Color color)
         {
             if (litMats.TryGetValue(color, out var mat)) return mat;
-            mat = new Material(standardShader) { color = color };
+            mat = new Material(litShader) { color = color };
             mat.SetFloat("_Metallic", 0.03f);  // 0.15/0.45는 넓은 스펙큘러가 팔레트를 회색으로 씻었다 (캡처 검증)
-            mat.SetFloat("_Glossiness", 0.18f);
+            mat.SetFloat("_Smoothness", 0.18f);
             litMats[color] = mat;
             return mat;
         }
@@ -950,9 +1148,9 @@ namespace GodTD.View
         {
             var key = (color, intensity);
             if (glowMats.TryGetValue(key, out var mat)) return mat;
-            mat = new Material(standardShader) { color = baseColor ?? color };
+            mat = new Material(litShader) { color = baseColor ?? color };
             mat.SetFloat("_Metallic", 0.2f);
-            mat.SetFloat("_Glossiness", 0.5f);
+            mat.SetFloat("_Smoothness", 0.5f);
             mat.EnableKeyword("_EMISSION");
             mat.SetColor("_EmissionColor", color * intensity);
             glowMats[key] = mat;

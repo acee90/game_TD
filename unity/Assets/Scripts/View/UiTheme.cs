@@ -2,12 +2,9 @@
 // uGUI 이관(HUD 재설계 §3)의 기반층. 스프라이트와 TMP 폰트를 전부 코드에서 생성한다 —
 // 커밋 에셋은 폰트 .ttf 하나뿐이다.
 //
-// 시각 언어(2026-07-12 개정): '모던 다크 + 테크 액센트'.
-// 웹 카드 UI의 흔적(둥근 사각형·플랫 필·1px 헤어라인)을 걷어내고 게임 HUD의 어휘로 바꾼다.
-//   - 형태: 라운드 사각형이 아니라 모서리를 45°로 깎은(chamfer) 판.
-//   - 재질: 불투명 필이 아니라 월드가 비치는 반투명 유리 + 가장자리 내부 발광 + 스캔라인.
-//   - 색: 청록 시그니처 하나가 HUD 크롬(테두리·발광·핫키)을 지배한다.
-//         계열색(미네랄·가스·영웅·금)은 크롬이 아니라 '의미'에만 쓴다.
+// 시각 언어(2026-07-16 개정): '중세 전장 장비'.
+// 검게 그을린 철판, 짙은 목재, 황동 테두리와 양피지색 문자를 기본 재질로 쓴다.
+// 모서리는 방패·금속판처럼 45°로 깎고, 네온·유리·스캔라인 표현은 사용하지 않는다.
 
 using System.Collections.Generic;
 using TMPro;
@@ -17,43 +14,43 @@ namespace GodTD.View
 {
     public static class UiTheme
     {
-        // ── 시그니처 — HUD 크롬 전용. 게임 의미론에는 쓰지 않는다 ──
-        public static readonly Color Accent = Hex("#42E8D5");
-        public static readonly Color AccentLine = Hex("#42E8D5", 0.45f);
-        public static readonly Color AccentGlow = Hex("#42E8D5", 0.13f);
+        // ── 황동 크롬 — HUD 프레임 전용 ──
+        public static readonly Color Accent = Hex("#C6A15B");
+        public static readonly Color AccentLine = Hex("#C6A15B", 0.62f);
+        public static readonly Color AccentGlow = Hex("#D6B56E", 0.09f);
 
-        // ── 유리 재질 ──
-        // 알파를 0.8 언저리로 낮춰 보드가 비친다 — '떠 있는 div'가 아니라 '유리판'이 된다.
-        public static readonly Color PanelBg = Hex("#060D19", 0.82f);
-        public static readonly Color PanelStroke = Hex("#42E8D5", 0.22f);
-        public static readonly Color SocketBg = Hex("#0A1424", 0.45f);
+        // ── 그을린 철판·목재 소켓 ──
+        public static readonly Color PanelBg = Hex("#17140F", 0.94f);
+        public static readonly Color PanelStroke = Hex("#B58B4A", 0.62f);
+        public static readonly Color SocketBg = Hex("#241B12", 0.78f);
 
-        // 슬롯 테두리 — 커맨드 버튼 9칸까지 청록으로 두르면 네온이 과해진다.
-        // 쉴 때는 중립 남색, hover에서만 액센트로 타오른다.
-        public static readonly Color SlotStroke = Hex("#31435F", 0.60f);
+        public static readonly Color SlotStroke = Hex("#68543A", 0.78f);
 
-        public static readonly Color CardBg = Hex("#0E1B2F", 0.78f);
-        public static readonly Color CardHover = Hex("#1A3D57", 0.92f);
-        public static readonly Color CardPress = Hex("#061019", 0.95f);
-        public static readonly Color CardDisabled = Hex("#080F1B", 0.55f);
+        public static readonly Color CardBg = Hex("#2A2117", 0.96f);
+        public static readonly Color CardHover = Hex("#493820", 0.98f);
+        public static readonly Color CardPress = Hex("#120F0B", 1f);
+        public static readonly Color CardDisabled = Hex("#17130F", 0.82f);
 
-        public static readonly Color TextMain = Hex("#EAF2FA");
-        public static readonly Color TextDim = Hex("#8FA3BE");
-        public static readonly Color TextFaint = Hex("#556687");
+        public static readonly Color TextMain = Hex("#F2E4C4");
+        public static readonly Color TextDim = Hex("#B9A98B");
+        public static readonly Color TextFaint = Hex("#756A58");
 
         // 계열색 — 게임 전역과 동일한 의미론
-        public static readonly Color Gold = Hex("#FFD23F");
-        public static readonly Color Mineral = Hex("#8FD6FF");
-        public static readonly Color Gas = Hex("#6FDC8C");
-        public static readonly Color HeroCol = Hex("#B08CFF");
-        public static readonly Color Danger = Hex("#FF5A3C");
-        public static readonly Color Build = Hex("#4EA3FF");
+        public static readonly Color Gold = Hex("#D9B55F");
+        public static readonly Color Mineral = Hex("#B7D1D8");
+        public static readonly Color Gas = Hex("#85A875");
+        public static readonly Color HeroCol = Hex("#6F8DA8");
+        public static readonly Color Danger = Hex("#A94832");
+        public static readonly Color Build = Hex("#8A7655");
 
         // ── 타입 스케일 ── (게임 스케일: 웹보다 한 단계 크고 굵다)
         public const float FontTitle = 28f;
         public const float FontLabel = 16f;
         public const float FontSmall = 14f;
         public const float FontCaption = 11.5f;
+        public const float FontStatBig   = 21f; // 1순위(생명·금화·마정석·다음공세)
+        public const float FontStatSmall = 12f; // 3순위(점수·킬·프로브)
+        public const float FontEyebrow   = 10.5f;
 
         // ── 리듬 ──
         public const float Pad = 11f;
@@ -75,9 +72,7 @@ namespace GodTD.View
         }
 
         // ── TMP 폰트 ──
-        // Rajdhani(OFL)가 주 폰트다 — 좁고 각진 테크 디스플레이체. 숫자가 HUD의 주인공인데
-        // 웹 본문 산세리프로 찍으면 대시보드로 읽힌다. 한글 글리프는 없으므로
-        // Pretendard를 폴백으로 달아 자동으로 넘긴다 (숫자·영문=Rajdhani, 한글=Pretendard).
+        // 숫자는 좁고 굵은 Rajdhani, 한글은 Pretendard로 읽기 쉬운 전장 계기판을 만든다.
         static TMP_FontAsset font;
 
         public static TMP_FontAsset Font

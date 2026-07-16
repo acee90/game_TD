@@ -2,8 +2,7 @@
 // 프리팹 없이 코드로 캔버스를 짓는다. 판·텍스트·버튼·게이지 네 가지 원자를 만든다.
 //
 // 판 하나는 여러 겹이다 (아래 → 위):
-//   그림자 · 유리 본체 · 내부 발광 · 스캔라인 · 액센트 테두리 · 상단 스파인
-// 겹을 쌓는 이유는 재질감 때문이다. 단색 사각형 하나는 아무리 색을 골라도 div로 읽힌다.
+//   그림자 · 그을린 철판 · 가장자리 광택 · 황동 테두리 · 상단 장식선
 
 using System;
 using TMPro;
@@ -56,7 +55,7 @@ namespace GodTD.View
         }
 
         /// <summary>
-        /// 떠 있는 유리판 — 그림자 + 반투명 본체 + 내부 발광 + 스캔라인 + 액센트 테두리.
+        /// 떠 있는 철제 판 — 그림자 + 불투명 본체 + 가장자리 광택 + 황동 테두리.
         /// 반환하는 body의 부모가 그림자 루트다 (배치 단위 — 그림자 여백만큼 크게 잡아야 한다).
         /// </summary>
         public static Image GlassPlate(string name, Transform parent, int cut = UiTheme.CutPanel)
@@ -64,41 +63,36 @@ namespace GodTD.View
             // 그림자 (본체보다 사방 8px 크게, 아래로 4px)
             var shadow = Raw(name + "Shadow", parent, UiTheme.Shadow(), new Color(0f, 0f, 0f, 0.6f));
 
-            // 유리 본체 — 알파 0.82라 보드가 비친다
+            // 그을린 철제 본체
             var body = Panel(name, shadow.transform, UiTheme.PanelBg, cut);
             Rect(body.gameObject, shadow.transform, Vector2.zero, Vector2.one,
                 new Vector2(8f, 12f), new Vector2(-8f, -4f));
             body.raycastTarget = true; // 판 밑 보드 클릭 차단
 
-            // 내부 발광 — 가장자리가 안쪽으로 빛난다. 유리 두께감의 핵심.
+            // 가장자리의 약한 황동 반사광
             var glow = Raw("Glow", body.transform, UiTheme.InnerGlow(cut, 16), UiTheme.AccentGlow);
             Fill(glow.gameObject, body.transform);
 
-            // 스캔라인 — 유리 표면. cut만큼 들여 깎인 모서리 밖으로 새지 않게 한다.
-            var scan = Raw("Scan", body.transform, UiTheme.Scanlines(),
-                new Color(1f, 1f, 1f, 0.03f), Image.Type.Tiled);
-            Fill(scan.gameObject, body.transform, cut);
-
-            // 액센트 테두리 — 본체와 픽셀 단위로 정렬된 1px 링
+            // 황동 테두리 — 본체와 픽셀 단위로 정렬된 1px 링
             var outline = Panel("Outline", body.transform, UiTheme.PanelStroke, cut, 1);
             Fill(outline.gameObject, body.transform);
 
             return body;
         }
 
-        /// <summary>유리판 + 상단 액센트 스파인 + 섹션 제목. 좌하단 정보 카드·우하단 커맨드 카드용.</summary>
+        /// <summary>철제 판 + 상단 황동 장식선 + 섹션 제목.</summary>
         public static (Image body, TextMeshProUGUI title) FloatingPanel(
             string name, Transform parent, Color accent, string titleText)
         {
             const int CUT = UiTheme.CutPanel;
             var body = GlassPlate(name, parent, CUT);
 
-            // 상단 스파인 — 판의 '진영색'. 계열색이 여기로 들어온다.
+            // 상단 장식선 — 판의 진영색
             var strip = Panel("Accent", body.transform, accent, 1);
             Rect(strip.gameObject, body.transform, new Vector2(0, 1), Vector2.one,
                 new Vector2(CUT, -4f), new Vector2(-CUT, -2f));
 
-            // 제목 — 액센트색, 자간 넓게 (게임 HUD의 '섹션 라벨' 관용구)
+            // 각인된 섹션 제목
             var title = Text(name + "Title", body.transform, UiTheme.FontCaption, accent,
                 TextAlignmentOptions.TopLeft, FontStyles.Bold);
             title.characterSpacing = 8f;
@@ -128,7 +122,7 @@ namespace GodTD.View
         /// <summary>체력·XP·쿨타임 게이지 — 어두운 홈 + 채움 + 채움 끝의 발광</summary>
         public static (Image bg, Image fill) Bar(string name, Transform parent, Color fillColor)
         {
-            var bg = Panel(name, parent, UiTheme.Hex("#04080F", 0.85f), 2);
+            var bg = Panel(name, parent, UiTheme.Hex("#0C0A07", 0.95f), 2);
             var fill = Panel("Fill", bg.transform, fillColor, 2);
             Fill(fill.gameObject, bg.transform, 1.5f);
             var rt = fill.rectTransform;
@@ -170,6 +164,8 @@ namespace GodTD.View
         bool hover;
         bool interactable = true;
         float pressScale = 1f;
+        float shakeT;    // 좌우 흔들림 남은 시간 (비용부족 되돌림)
+        Vector3 restPos; // 흔들림 시작 시점의 원위치
         float lit;       // 0=쉼, 1=hover. 프레임마다 목표로 수렴한다.
         Color accent = UiTheme.Accent;
 
@@ -179,6 +175,61 @@ namespace GodTD.View
         TextMeshProUGUI chipText;
         Image icon;      // 칸을 지배하는 글리프
         Color iconColor = Color.white;
+        Image badge;             // 우하단 비용 배지 (지연 생성)
+        TextMeshProUGUI badgeText;
+        Image reasonMark;        // 좌하단 비활성 사유 글리프 (지연 생성)
+
+        /// <summary>hover 폴링용 — 공용 툴팁이 이 값으로 대상 카드를 찾는다</summary>
+        public bool Hovered => hover;
+
+        /// <summary>좌우 흔들림 발화 — 비용부족을 눌렀을 때 되돌림 주스. 상한 세팅(중첩 방지).</summary>
+        public void Shake(float strength)
+        {
+            shakeT = Mathf.Max(shakeT, 0.26f * strength);
+            restPos = transform.localPosition;
+        }
+
+        /// <summary>우하단 비용/경고 배지 — 자원색 채움 + 흰 글자. 지연 생성.</summary>
+        public void SetBadge(string text, Color col)
+        {
+            if (badge == null)
+            {
+                badge = UiKit.Panel("Badge", transform, new Color(col.r, col.g, col.b, 0.90f), 3);
+                UiKit.Rect(badge.gameObject, transform, new Vector2(1, 0), new Vector2(1, 0),
+                    new Vector2(-30f, 4f), new Vector2(-4f, 18f));
+                badge.raycastTarget = false;
+                badgeText = UiKit.Text("BadgeTxt", badge.transform, 9f, Color.white,
+                    TextAlignmentOptions.Center, FontStyles.Bold);
+                UiKit.Rect(badgeText.gameObject, badge.transform, Vector2.zero, Vector2.one,
+                    Vector2.zero, Vector2.zero);
+            }
+            badge.gameObject.SetActive(true);
+            badge.color = new Color(col.r, col.g, col.b, 0.90f);
+            badgeText.text = text;
+        }
+
+        public void ClearBadge() { if (badge != null) badge.gameObject.SetActive(false); }
+
+        /// <summary>좌하단 비활성 사유 글리프(자물쇠·시계 등) — 색 없이도 구분되게. 지연 생성.</summary>
+        public void SetReasonMark(HudIcon id, Color col)
+        {
+            var s = HudIcons.Get(id);
+            if (s == null) { ClearReasonMark(); return; }
+            if (reasonMark == null)
+            {
+                var go = new GameObject("ReasonMark", typeof(RectTransform), typeof(Image));
+                reasonMark = go.GetComponent<Image>();
+                reasonMark.raycastTarget = false;
+                reasonMark.preserveAspect = true;
+                UiKit.Rect(go, transform, new Vector2(0, 0), new Vector2(0, 0),
+                    new Vector2(4f, 4f), new Vector2(20f, 20f));
+            }
+            reasonMark.gameObject.SetActive(true);
+            reasonMark.sprite = s;
+            reasonMark.color = col;
+        }
+
+        public void ClearReasonMark() { if (reasonMark != null) reasonMark.gameObject.SetActive(false); }
 
         /// <summary>칸의 아이콘. HudIcon.None이면 숨긴다 (오버레이 카드처럼 글리프가 없는 버튼).</summary>
         public void SetIcon(HudIcon id, Color color)
@@ -295,6 +346,15 @@ namespace GodTD.View
                 pressScale = Mathf.Min(1f, pressScale + Time.unscaledDeltaTime * 1.2f);
                 float overshoot = 1f + Mathf.Sin((1f - pressScale) * Mathf.PI) * 0.02f;
                 transform.localScale = Vector3.one * (pressScale * overshoot);
+            }
+
+            // 좌우 흔들림 — press(scale)와 축이 달라 공존한다
+            if (shakeT > 0f)
+            {
+                shakeT -= Time.unscaledDeltaTime;
+                float amp = shakeT > 0f ? Mathf.Sin(shakeT * 70f) * shakeT * 10f : 0f;
+                transform.localPosition = restPos + new Vector3(amp, 0f, 0f);
+                if (shakeT <= 0f) transform.localPosition = restPos;
             }
         }
 

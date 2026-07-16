@@ -13,8 +13,8 @@
     --text:#ece2cb; --dim:#9d8c6f;
     --gold:#e3b23e; --silver:#c2c6cf;
     --slate:#6d86ab; --moss:#8a9a5b; --rust:#c14a2c;
-    /* 계열 식별색 — 철·마법·금·야수의 물성 톤 */
-    --terran:#6d86ab; --zerg:#9a6ea6; --toss:#e3b23e; --creature:#8a9a5b;
+    /* 병과 식별색 — 정규군 강철 · 포병 청동 · 마법대 자수정 · 소환대 이끼 (units.ts RACE_COLOR와 일치) */
+    --terran:#6d86ab; --zerg:#bf7a3a; --toss:#9a6ea6; --creature:#8a9a5b;
     --danger:#c14a2c; --gas:#8a9a5b;
     --serif:'Iowan Old Style','Palatino Linotype','Nanum Myeongjo',Georgia,'Times New Roman',serif;
     --leather:linear-gradient(180deg,#3a2e1d,#2b2115);
@@ -151,95 +151,120 @@
            background:radial-gradient(120% 100% at 50% 0%,rgba(40,28,14,.93),rgba(8,6,3,.97))}
   #overlay h1{font-size:27px;font-family:var(--serif);color:var(--gold);letter-spacing:.04em}
   #overlay button{padding:12px 28px;font-size:15px;font-family:var(--serif)}
+
+  /* ── 레이아웃 ──
+     기본(모바일/좁은 화면): 기존 세로 단일 컬럼 그대로.
+     데스크톱(≥880px): 보드를 가운데 두고 버튼·패널을 좌우 여백에 배치하는 3열 그리드. */
+  .boardcol{min-width:0}
+  @media (min-width:880px){
+    body{padding:14px;justify-content:center}
+    #wrap{max-width:1160px;display:grid;gap:18px;align-items:start;
+          grid-template-columns:minmax(240px,1fr) minmax(380px,470px) minmax(240px,1fr)}
+    .actions{order:1}   /* 왼쪽 여백 — 액션 버튼 */
+    .boardcol{order:2}  /* 가운데 — 게임 보드 */
+    .panels{order:3}    /* 오른쪽 여백 — 영웅·보상 패널 */
+    .actions,.panels{position:sticky;top:14px}
+    /* 사이드로 올라가면 첫 요소의 상단 여백은 지운다 */
+    .actions>:first-child,.panels>:first-child,.boardcol>:first-child{margin-top:0}
+  }
 </style>
 </head>
 <body>
 <main id="wrap">
-  <section id="hud" aria-label="상태">
-    <div>라운드<b id="round">R1</b></div>
-    <div>다음<b id="timer">20s</b></div>
-    <div class="m">미네랄<b id="mineral">55</b></div>
-    <div class="g">가스<b id="gas">6</b></div>
-    <div class="l">라이프<b id="lives">20</b></div>
-    <div>누적 킬<b id="kills">0</b></div>
-  </section>
-  <section id="scorebar" aria-label="점수">
-    <span class="dim">점수</span><b id="score">0</b>
-    <span class="dim" id="scoreNext"></span>
-  </section>
+  <!-- 가운데: 게임 보드 + 상단 상태 -->
+  <div class="boardcol">
+    <section id="hud" aria-label="상태">
+      <div>라운드<b id="round">R1</b></div>
+      <div>다음<b id="timer">20s</b></div>
+      <div class="m">금화<b id="mineral">55</b></div>
+      <div class="g">마정석<b id="gas">6</b></div>
+      <div class="l">라이프<b id="lives">20</b></div>
+      <div>누적 킬<b id="kills">0</b></div>
+    </section>
+    <section id="scorebar" aria-label="점수">
+      <span class="dim">점수</span><b id="score">0</b>
+      <span class="dim" id="scoreNext"></span>
+    </section>
 
-  <canvas id="canvas" width="420" height="470" aria-label="십자 일주 맵"></canvas>
+    <canvas id="canvas" width="420" height="470" aria-label="십자 일주 맵"></canvas>
 
-  <div id="info"></div>
-  <p id="message"></p>
-
-  <section id="missions" aria-label="보상 현황">
-    <div class="mrow">
-      <span class="mlabel">웨이브 보상</span>
-      <span class="mbar"><i id="repeatBar"></i></span>
-      <span class="mval" id="repeatVal"></span>
-    </div>
-    <div class="mrow">
-      <span class="mlabel">마일스톤</span>
-      <span class="mbar"><i id="milestoneBar"></i></span>
-      <span class="mval" id="milestoneVal"></span>
-    </div>
-    <div class="mrow">
-      <span class="mlabel">보스 처치</span>
-      <span class="mnote" id="bossReward"></span>
-    </div>
-    <div class="mrow">
-      <span class="mlabel">몹 돌파</span>
-      <span class="mnote">라이프 -1 · 미네랄 +5</span>
-    </div>
-  </section>
-
-  <button id="bossOpen">⚔️ 보스 소환<span class="sub"></span></button>
-
-  <div class="row c2">
-    <button id="spawn">유닛 생성</button>
-    <button id="probe">프로브</button>
-  </div>
-  <div class="row c2">
-    <button id="sell">유닛 처분</button>
-    <button id="copyTower" hidden>복제 예약</button>
+    <div id="info"></div>
+    <p id="message"></p>
   </div>
 
-  <section id="heroPanel" aria-label="영웅">
-    <div class="hrow">
-      <span class="hname">영웅 <b id="heroLevel">Lv1</b></span>
-      <span class="hbar"><i id="heroHpBar"></i></span>
-      <span class="hval" id="heroHp"></span>
-    </div>
-    <div class="hrow">
-      <span class="hname dim">경험치</span>
-      <span class="hbar"><i id="heroXpBar"></i></span>
-      <span class="hval dim" id="heroXp"></span>
-    </div>
-    <div class="hstats" id="heroStats"></div>
-    <div class="row c4" id="statRow">
-      <button id="statStr">힘</button><button id="statAgi">민첩</button><button id="statInt">지능</button><button id="buyXp">XP</button>
-    </div>
-    <div class="haugs" id="heroAugs"></div>
-    <div id="skill" hidden><i id="skillCd"></i><span id="skillText"></span></div>
-    <div class="row c2" id="gasSkillRow" hidden>
-      <button id="gasSkillDmg">스킬 피해</button><button id="gasSkillCdr">스킬 쿨감</button>
-    </div>
-  </section>
+  <!-- 왼쪽 여백: 액션 버튼 -->
+  <div class="actions">
+    <button id="bossOpen">⚔️ 보스 소환<span class="sub"></span></button>
 
-  <p class="note">파일런 업그레이드 (가스) — 종족별 공격력 +10% 복리</p>
-  <div class="row c4">
-    <button id="up0">테란</button><button id="up1">저그</button>
-    <button id="up2">플토</button><button id="up3">크리쳐</button>
+    <div class="row c2">
+      <button id="spawn">유닛 생성</button>
+      <button id="probe">광부</button>
+    </div>
+    <div class="row c2">
+      <button id="sell">유닛 처분</button>
+      <button id="copyTower" hidden>복제 예약</button>
+    </div>
+
+    <p class="note">파일런 업그레이드 (마정석) — 병과별 공격력 +10% 복리</p>
+    <div class="row c4">
+      <button id="up0">정규군</button><button id="up1">포병</button>
+      <button id="up2">마법대</button><button id="up3">소환대</button>
+    </div>
+
+    <p class="note">
+      몹은 북측 왼쪽 입구에서 나와 십자 외곽선을 반시계로 한 바퀴 돌고 북측 오른쪽 출구로 나간다.<br>
+      보스는 라운드와 무관하게 <b>보스 소환</b> 버튼으로 언제든 부른다.<br>
+      빈 곳을 클릭하면 영웅이 이동한다. 타일을 클릭하면 유닛 생성/선택.<br>
+      스킬은 자동 시전 — 어떤 스킬을 들고 어떻게 개조할지만 고른다.<br>
+      단축키 — P 생성 · B 보스 소환 · R 광부 · X 처분 · E XP 구매 · 1234 업그레이드
+    </p>
   </div>
 
-  <p class="note">
-    몹은 북측 왼쪽 입구에서 나와 십자 외곽선을 반시계로 한 바퀴 돌고 북측 오른쪽 출구로 나간다.<br>
-    보스는 라운드와 무관하게 <b>보스 소환</b> 버튼으로 언제든 부른다.<br>
-    빈 곳을 클릭하면 영웅이 이동한다. 타일을 클릭하면 유닛 생성/선택.<br>
-    스킬은 자동 시전 — 어떤 스킬을 들고 어떻게 개조할지만 고른다.<br>
-    단축키 — P 생성 · B 최고레벨 보스 · R 프로브 · X 처분 · E XP 구매 · 1234 업그레이드
-  </p>
+  <!-- 오른쪽 여백: 영웅 · 보상 패널 -->
+  <div class="panels">
+    <section id="heroPanel" aria-label="영웅">
+      <div class="hrow">
+        <span class="hname">영웅 <b id="heroLevel">Lv1</b></span>
+        <span class="hbar"><i id="heroHpBar"></i></span>
+        <span class="hval" id="heroHp"></span>
+      </div>
+      <div class="hrow">
+        <span class="hname dim">경험치</span>
+        <span class="hbar"><i id="heroXpBar"></i></span>
+        <span class="hval dim" id="heroXp"></span>
+      </div>
+      <div class="hstats" id="heroStats"></div>
+      <div class="row c4" id="statRow">
+        <button id="statStr">힘</button><button id="statAgi">민첩</button><button id="statInt">지능</button><button id="buyXp">XP</button>
+      </div>
+      <div class="haugs" id="heroAugs"></div>
+      <div id="skill" hidden><i id="skillCd"></i><span id="skillText"></span></div>
+      <div class="row c2" id="gasSkillRow" hidden>
+        <button id="gasSkillDmg">스킬 피해</button><button id="gasSkillCdr">스킬 쿨감</button>
+      </div>
+    </section>
+
+    <section id="missions" aria-label="보상 현황">
+      <div class="mrow">
+        <span class="mlabel">웨이브 보상</span>
+        <span class="mbar"><i id="repeatBar"></i></span>
+        <span class="mval" id="repeatVal"></span>
+      </div>
+      <div class="mrow">
+        <span class="mlabel">마일스톤</span>
+        <span class="mbar"><i id="milestoneBar"></i></span>
+        <span class="mval" id="milestoneVal"></span>
+      </div>
+      <div class="mrow">
+        <span class="mlabel">보스 처치</span>
+        <span class="mnote" id="bossReward"></span>
+      </div>
+      <div class="mrow">
+        <span class="mlabel">몹 돌파</span>
+        <span class="mnote">라이프 -1 · 금화 +5</span>
+      </div>
+    </section>
+  </div>
 </main>
 
 <div id="augOverlay">
@@ -247,23 +272,6 @@
   <p class="sub" id="augSub"></p>
   <div class="augcards" id="augCards"></div>
   <button id="reroll">리롤</button>
-</div>
-
-<div id="bossOverlay">
-  <div class="modal">
-    <h2>보스 소환</h2>
-    <p class="sub" id="bossOverlayState"></p>
-    <div class="bossgrid">
-      <button class="bossbtn" id="boss1">Lv1</button><button class="bossbtn" id="boss2">Lv2</button><button class="bossbtn" id="boss3">Lv3</button>
-      <button class="bossbtn" id="boss4">Lv4</button><button class="bossbtn" id="boss5">Lv5</button><button class="bossbtn" id="boss6">Lv6</button>
-    </div>
-    <p class="modalnote">
-      비용 없이 쿨타임만 있다. Lv N을 처치해야 Lv N+1이 열리고,<br>
-      한번 열린 레벨은 계속 부를 수 있다 — 낮은 레벨은 안전하지만<br>
-      보상(5·8·13·20·29·39)이 적다.
-    </p>
-    <button id="bossClose">닫기</button>
-  </div>
 </div>
 
 <div id="overlay">

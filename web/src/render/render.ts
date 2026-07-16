@@ -21,8 +21,8 @@ function strokePath(ctx: CanvasRenderingContext2D, width: number, color: string)
 }
 
 function drawCross(ctx: CanvasRenderingContext2D): void {
-  ctx.fillStyle = '#1a2036';
-  ctx.strokeStyle = '#39406a';
+  ctx.fillStyle = '#211a12';
+  ctx.strokeStyle = '#4d3d28';
   ctx.lineWidth = 1.5;
   for (const bar of CROSS_BARS) {
     ctx.fillRect(bar.x, bar.y, bar.w, bar.h);
@@ -34,11 +34,11 @@ function drawDoors(ctx: CanvasRenderingContext2D): void {
   ctx.font = '600 10px system-ui, sans-serif';
   ctx.textAlign = 'center';
 
-  ctx.fillStyle = '#8a6fd0';
+  ctx.fillStyle = '#7d5a8c';
   ctx.fillRect(DOOR_IN[0] - PATH_WIDTH / 2, DOOR_IN[1] + 6, PATH_WIDTH, 5);
   ctx.fillText('입구', DOOR_IN[0], DOOR_IN[1] + 2);
 
-  ctx.fillStyle = '#ff5a3c';
+  ctx.fillStyle = '#c14a2c';
   ctx.fillRect(DOOR_OUT[0] - PATH_WIDTH / 2, DOOR_OUT[1] + 6, PATH_WIDTH, 5);
   ctx.fillText('출구', DOOR_OUT[0], DOOR_OUT[1] + 2);
 }
@@ -50,7 +50,7 @@ function drawNexus(ctx: CanvasRenderingContext2D, game: Game): void {
   ctx.beginPath();
   const progress = 1 - game.bossCooldown / BOSS_COOLDOWN_SECONDS;
   ctx.arc(x, y, TILE / 2 + 5, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * progress);
-  ctx.strokeStyle = '#ff8a3c';
+  ctx.strokeStyle = '#e3b23e';
   ctx.lineWidth = 3;
   ctx.stroke();
 }
@@ -58,8 +58,8 @@ function drawNexus(ctx: CanvasRenderingContext2D, game: Game): void {
 function drawSlot(ctx: CanvasRenderingContext2D, slot: Slot, selected: boolean): void {
   const half = TILE / 2 - 2;
   ctx.lineWidth = 1;
-  ctx.strokeStyle = selected ? '#ffd23f' : '#39406a';
-  ctx.fillStyle = slot.tower ? '#232a44' : 'rgba(20,26,44,.7)';
+  ctx.strokeStyle = selected ? '#e3b23e' : '#4d3d28';
+  ctx.fillStyle = slot.tower ? '#31271a' : 'rgba(36,29,20,.72)';
   ctx.beginPath();
   ctx.roundRect(slot.x - half, slot.y - half, half * 2, half * 2, 5);
   ctx.fill();
@@ -71,7 +71,7 @@ function drawSlot(ctx: CanvasRenderingContext2D, slot: Slot, selected: boolean):
   if (selected) {
     ctx.beginPath();
     ctx.arc(slot.x, slot.y, range(tower), 0, Math.PI * 2);
-    ctx.strokeStyle = 'rgba(255,210,63,.28)';
+    ctx.strokeStyle = 'rgba(227,178,62,.28)';
     ctx.stroke();
   }
 
@@ -82,11 +82,11 @@ function drawSlot(ctx: CanvasRenderingContext2D, slot: Slot, selected: boolean):
   ctx.fill();
   if (isGod) {
     ctx.lineWidth = 2;
-    ctx.strokeStyle = '#ffd23f';
+    ctx.strokeStyle = '#e3b23e';
     ctx.stroke();
   }
 
-  ctx.fillStyle = '#0e1220';
+  ctx.fillStyle = '#1a130a';
   ctx.font = '700 9px system-ui, sans-serif';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
@@ -95,16 +95,16 @@ function drawSlot(ctx: CanvasRenderingContext2D, slot: Slot, selected: boolean):
 }
 
 function drawEnemy(ctx: CanvasRenderingContext2D, x: number, y: number, e: Enemy): void {
-  const color = e.kind === 'boss' ? '#ff5a3c' : (e.typeColor ?? '#9aa2c0');
+  const color = e.kind === 'boss' ? '#c14a2c' : (e.typeColor ?? '#a89a80');
   ctx.beginPath();
   ctx.arc(x, y, e.radius, 0, Math.PI * 2);
   ctx.fillStyle = color;
   ctx.fill();
 
   const w = e.radius * 2;
-  ctx.fillStyle = '#0a0e19';
+  ctx.fillStyle = '#0d0a06';
   ctx.fillRect(x - e.radius, y - e.radius - 6, w, 3);
-  ctx.fillStyle = '#6fdc8c';
+  ctx.fillStyle = '#8a9a5b';
   ctx.fillRect(x - e.radius, y - e.radius - 6, w * Math.max(0, e.hp / e.maxHp), 3);
 }
 
@@ -113,15 +113,15 @@ function drawAltar(ctx: CanvasRenderingContext2D, game: Game): void {
   const { x, y } = game.altarSlot;
   const half = TILE / 2 - 2;
 
-  ctx.fillStyle = '#2a2140';
-  ctx.strokeStyle = '#b08cff';
+  ctx.fillStyle = '#2a2036';
+  ctx.strokeStyle = '#8a6ea6';
   ctx.lineWidth = 1.5;
   ctx.beginPath();
   ctx.roundRect(x - half, y - half, half * 2, half * 2, 5);
   ctx.fill();
   ctx.stroke();
 
-  ctx.fillStyle = '#b08cff';
+  ctx.fillStyle = '#b89ad8';
   ctx.font = '700 9px system-ui, sans-serif';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
@@ -138,7 +138,7 @@ function drawHero(ctx: CanvasRenderingContext2D, game: Game): void {
     ctx.globalAlpha = 0.35;
     ctx.beginPath();
     ctx.arc(ax, ay, HERO_RADIUS, 0, Math.PI * 2);
-    ctx.strokeStyle = '#b08cff';
+    ctx.strokeStyle = '#cbd2dd';
     ctx.lineWidth = 2;
     ctx.stroke();
     ctx.globalAlpha = 1;
@@ -155,32 +155,32 @@ function drawHero(ctx: CanvasRenderingContext2D, game: Game): void {
     const [tx, ty] = pathPos(hero.targetDistance);
     ctx.beginPath();
     ctx.arc(tx, ty, 4, 0, Math.PI * 2);
-    ctx.strokeStyle = 'rgba(176,140,255,.5)';
+    ctx.strokeStyle = 'rgba(203,210,221,.5)';
     ctx.lineWidth = 1;
     ctx.stroke();
   }
 
   ctx.beginPath();
   ctx.arc(x, y, stats.range, 0, Math.PI * 2);
-  ctx.strokeStyle = 'rgba(176,140,255,.14)';
+  ctx.strokeStyle = 'rgba(203,210,221,.16)';
   ctx.lineWidth = 1;
   ctx.stroke();
 
   ctx.beginPath();
   ctx.arc(x, y, HERO_RADIUS, 0, Math.PI * 2);
-  ctx.fillStyle = '#b08cff';
+  ctx.fillStyle = '#cdd3dc';
   ctx.fill();
-  ctx.strokeStyle = '#ffffff';
+  ctx.strokeStyle = '#f4efe0';
   ctx.lineWidth = 1.5;
   ctx.stroke();
 
   const width = HERO_RADIUS * 2.4;
-  ctx.fillStyle = '#0a0e19';
+  ctx.fillStyle = '#0d0a06';
   ctx.fillRect(x - width / 2, y - HERO_RADIUS - 8, width, 3);
-  ctx.fillStyle = '#6fdc8c';
+  ctx.fillStyle = '#8a9a5b';
   ctx.fillRect(x - width / 2, y - HERO_RADIUS - 8, width * Math.max(0, hero.hp / stats.maxHp), 3);
 
-  ctx.fillStyle = '#0e1220';
+  ctx.fillStyle = '#1a130a';
   ctx.font = '700 9px system-ui, sans-serif';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
@@ -213,16 +213,16 @@ function drawDecoy(ctx: CanvasRenderingContext2D, game: Game): void {
 
   ctx.beginPath();
   ctx.arc(x, y, 9, 0, Math.PI * 2);
-  ctx.fillStyle = '#ff8a3c';
+  ctx.fillStyle = '#d97a2e';
   ctx.fill();
-  ctx.strokeStyle = decoy.taunts ? '#ffd23f' : '#0e1220';
+  ctx.strokeStyle = decoy.taunts ? '#e3b23e' : '#1a130a';
   ctx.lineWidth = 2;
   ctx.stroke();
 
   const width = 22;
-  ctx.fillStyle = '#0a0e19';
+  ctx.fillStyle = '#0d0a06';
   ctx.fillRect(x - width / 2, y - 16, width, 3);
-  ctx.fillStyle = '#ff8a3c';
+  ctx.fillStyle = '#d97a2e';
   ctx.fillRect(x - width / 2, y - 16, width * Math.max(0, decoy.hp / decoy.maxHp), 3);
 }
 
@@ -230,8 +230,8 @@ export function render(ctx: CanvasRenderingContext2D, game: Game): void {
   const { canvas } = ctx;
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-  strokePath(ctx, PATH_WIDTH + 4, '#333c66');
-  strokePath(ctx, PATH_WIDTH, '#171d33');
+  strokePath(ctx, PATH_WIDTH + 4, '#46392a');
+  strokePath(ctx, PATH_WIDTH, '#241c12');
   drawCross(ctx);
   drawDoors(ctx);
   drawNexus(ctx, game);
@@ -268,7 +268,7 @@ export function render(ctx: CanvasRenderingContext2D, game: Game): void {
     if (enemy === game.selectedEnemy) {
       ctx.beginPath();
       ctx.arc(x, y, enemy.radius + 5, 0, Math.PI * 2);
-      ctx.strokeStyle = '#ffd23f';
+      ctx.strokeStyle = '#e3b23e';
       ctx.lineWidth = 1.5;
       ctx.stroke();
     }
@@ -276,7 +276,7 @@ export function render(ctx: CanvasRenderingContext2D, game: Game): void {
     if (enemy.burnTimer && enemy.burnTimer > 0) {
       ctx.beginPath();
       ctx.arc(x, y, enemy.radius + 2, 0, Math.PI * 2);
-      ctx.strokeStyle = '#ff8a3c';
+      ctx.strokeStyle = '#d97a2e';
       ctx.lineWidth = 1;
       ctx.stroke();
     }

@@ -20,7 +20,8 @@ export const TAG_LABEL: Record<Tag, string> = {
 export const RACES = ['정규군', '포병', '마법대', '소환대'] as const;
 export type Race = 0 | 1 | 2 | 3;
 export const CREATURE: Race = 3;
-export const RACE_COLOR = ['#4ea3ff', '#c065e0', '#ffd23f', '#6fdc8c'] as const;
+// 병과 식별색 (중세 물성 톤) — 정규군 강철슬레이트 · 포병 청동 · 마법대 자수정 · 소환대 이끼
+export const RACE_COLOR = ['#6d86ab', '#bf7a3a', '#9a6ea6', '#8a9a5b'] as const;
 
 export interface UnitDef {
   readonly name: string;

@@ -6,7 +6,7 @@ import * as B from '../data/balance';
 import { CREATURE, type Race, type Tag, type UnitDef } from '../data/units';
 import type { Tower } from './types';
 
-/** 종족별 업그레이드 레벨. 인덱스 = Race (테란/저그/플토/크리쳐) */
+/** 병과별 업그레이드 레벨. 인덱스 = Race (정규군/포병/마법대/소환대) */
 export type UpgradeLevels = [number, number, number, number];
 
 const combine = (tags: readonly Tag[], key: 'damage' | 'interval' | 'range'): number =>

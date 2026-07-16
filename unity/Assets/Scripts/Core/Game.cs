@@ -205,8 +205,11 @@ namespace GodTD.Core
                 return false;
             }
             BossCooldown = Balance.BOSS_COOLDOWN_SECONDS;
+            // 초반 느린 템포 — 보스는 이동속도만 ×p로 늦춘다(HP는 그대로). 체류시간 ×1/p 와
+            // 공속 ÷p 가 상쇄돼 전달 총딜 불변 → 난이도 중립. HP까지 낮추면 순수하게 쉬워진다.
+            float bossTempo = Balance.EarlyTempo(Round);
             Spawn(new EnemySpec(EnemyKind.Boss, $"Lv{level} BOSS",
-                Balance.BossHP(level), Balance.BossArmor(level), Balance.BOSS_SPEED,
+                Balance.BossHP(level), Balance.BossArmor(level), Balance.BOSS_SPEED * bossTempo,
                 radius: 18f, bossLevel: level));
             string unlocks = level == MaxBossLevel && level < Balance.BOSS_MAX_LEVEL
                 ? $" 처치하면 Lv{level + 1} 소환이 열립니다."
@@ -365,14 +368,16 @@ namespace GodTD.Core
             }
 
             Round++;
-            float hp = Balance.EnemyHP(Round);
+            // 초반 느린 템포 — 몹 체력·이동속도를 같은 배수로 낮춘다(공속은 발사부에서 함께 낮춤)
+            float tempo = Balance.EarlyTempo(Round);
+            float hp = MathF.Round(Balance.EnemyHP(Round) * tempo);
             float armor = Balance.EnemyArmor(Round);
 
             for (int i = 0; i < Balance.EnemyCount(Round); i++)
             {
                 var waveType = Balance.WaveTypeOf(Round);
                 spawnQueue.Enqueue(new EnemySpec(EnemyKind.Mob, $"R{Round}", hp, armor,
-                    Balance.ENEMY_SPEED, radius: 9f,
+                    Balance.ENEMY_SPEED * tempo, radius: 9f,
                     contactDamageMult: waveType.ContactDamageMult,
                     typeColor: waveType.Id == Balance.WaveTypeId.Normal ? null : waveType.Color));
             }
@@ -703,7 +708,8 @@ namespace GodTD.Core
                             X = hero.X, Y = hero.Y, Tx = t.X, Ty = t.Y, Life = 0.1f, Color = "#ffffff",
                         });
                     }
-                    hero.AttackCooldown = stats.AttackInterval;
+                    // 초반 느린 템포 — 영웅도 타워·몹과 같은 비율로 느리게 친다(마나 충전도 함께 느려짐)
+                    hero.AttackCooldown = stats.AttackInterval / Balance.EarlyTempo(Round);
                 }
             }
 
@@ -813,7 +819,8 @@ namespace GodTD.Core
                         X = slot.X, Y = slot.Y, Tx = p.X, Ty = p.Y, Life = 0.08f, Color = color,
                     });
                 }
-                tower.Cooldown = Combat.AttackInterval(tower);
+                // 초반 느린 템포 — 공격 인터벌을 늘려(÷p) 타워도 몹과 같은 비율로 느리게 쏜다
+                tower.Cooldown = Combat.AttackInterval(tower) / Balance.EarlyTempo(Round);
             }
         }
     }
