@@ -180,8 +180,13 @@ function selectionInfo(game: Game): string {
   if (!tower) {
     return '<span class="dim">빈 타일 = 유닛 생성 · 유닛 타일 = 정보 · 몹/보스 클릭 = 스탯. 같은 유닛 2기가 모이면 자동 조합됩니다.</span>';
   }
-  const dmg = damage(tower, game.upgrades).toFixed(0);
-  const dps = (damage(tower, game.upgrades) / attackInterval(tower)).toFixed(0);
+  const total = damage(tower, game.upgrades);
+  // 기본공과 강화(가스 업그레이드) 몫을 분리해 보여준다 (플레이테스트 2026-07-17 요청)
+  const base = damage(tower, [0, 0, 0, 0]);
+  const upLevel = game.upgrades[tower.def.race];
+  const upText =
+    upLevel > 0 ? ` <span class="chip">기본 ${base.toFixed(0)} + 강화Lv${upLevel} ${(total - base).toFixed(0)}</span>` : '';
+  const dps = (total / attackInterval(tower)).toFixed(0);
   // F5 (unity-hud-playtest-v0.1) — 간격(초/회)이 아니라 초당 공격 횟수. 큰 값 = 빠른 공격.
   const rate = 1 / Math.max(0.01, attackInterval(tower));
   const rateText = rate >= 10 ? rate.toFixed(1) : rate.toFixed(2);
@@ -191,7 +196,7 @@ function selectionInfo(game: Game): string {
       <span class="chip">${TIER_LABEL[tower.tier]}</span>
       <span class="chip">【 ${tagLabel(tower.def)} 】</span>
     </div>
-    <div class="dim">${RACES[tower.def.race]} · 공격력 ${dmg} · 공속 ${rateText}회/초
+    <div class="dim">${RACES[tower.def.race]} · 공격력 ${total.toFixed(0)}${upText} · 공속 ${rateText}회/초
       · DPS ${dps} · 사거리 ${range(tower).toFixed(0)}</div>`;
 }
 
@@ -324,11 +329,14 @@ function refreshAugmentOverlay(el: Elements, game: Game): void {
       const rarity = HD.RARITIES[card.rarity];
       // 대가가 달린 증강은 한눈에 보여야 한다 — 설명의 '·' 뒤가 대가다
       const risk = HD.isRisky(card.augment) ? `<span class="risk">⚠ 대가</span>` : '';
+      // 설명 수치는 실버 기준이다 — 등급이 효과를 키우는 걸 배지로 알린다
+      // (플레이테스트 2026-07-17: "실버·골드 속사의 공속 증가가 같아 보인다")
+      const power = rarity.power > 1 ? ` <b>효과 ×${rarity.power}</b>` : '';
       return `<button class="augcard" data-index="${i}" style="border-color:${rarity.color}">
         <div class="k">
           <span style="color:${kindColor}">${kindLabel}</span>
           ${risk}
-          <span class="rar" style="color:${rarity.color}">${rarity.label}</span>
+          <span class="rar" style="color:${rarity.color}">${rarity.label}${power}</span>
         </div>
         <div class="n">${card.augment.name}</div>
         <div class="d">${card.augment.description}</div>

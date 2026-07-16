@@ -478,12 +478,13 @@ namespace GodTD.View
             foreach (var (card, count) in groups)
             {
                 var rarity = Augments.RARITIES[card.Rarity];
+                string power = rarity.Power > 1f ? $" ×{rarity.Power:0.#}" : "";
                 var row = UiKit.Text("Row", historyContent, UiTheme.FontCaption, UiTheme.TextMain,
                     TextAlignmentOptions.TopLeft);
                 row.textWrappingMode = TextWrappingModes.Normal;
                 row.text =
                     $"<color={Augments.KindColor(card.Augment.Kind)}>{Augments.KindLabel(card.Augment.Kind)}</color> " +
-                    $"<color={rarity.Color}>{rarity.Label}</color> <b>{card.Augment.Name}</b>" +
+                    $"<color={rarity.Color}>{rarity.Label}{power}</color> <b>{card.Augment.Name}</b>" +
                     (count > 1 ? $" <color=#FFD23F>×{count}</color>" : "") +
                     $"\n<color=#8A93AD>{card.Augment.Description}</color>";
             }
@@ -877,8 +878,12 @@ namespace GodTD.View
                 UiKit.SetBar(selXpBar.fill, hero.Xp / Mathf.Max(1f, hero.XpNeeded));
 
                 float dps = stats.Damage / stats.AttackInterval;
+                // 공격 간격 하한(0.25초)에 닿으면 표시한다 — 여기서부터는 공속 증강이 안 먹는다
+                // (플레이테스트 2026-07-17: 상한에서 실버·골드 속사가 똑같아 보이는 이유)
+                string capped = stats.AttackInterval <= HeroData.MIN_ATTACK_INTERVAL + 0.001f
+                    ? " <color=#FFD23F>(최대)</color>" : "";
                 selStats.text =
-                    $"공격력 <color=#E8ECF6>{stats.Damage:0}</color> · 공속 <color=#E8ECF6>{AttackRate(stats.AttackInterval)}</color>" +
+                    $"공격력 <color=#E8ECF6>{stats.Damage:0}</color> · 공속 <color=#E8ECF6>{AttackRate(stats.AttackInterval)}</color>{capped}" +
                     $" · DPS <color=#E8ECF6>{dps:0}</color> · 사거리 {stats.Range:0}";
 
                 var augs = new System.Text.StringBuilder();
@@ -911,7 +916,13 @@ namespace GodTD.View
                 selStats.text =
                     $"공격력 <color=#E8ECF6>{dmg:0}</color> · 공속 <color=#E8ECF6>{AttackRate(interval)}</color>" +
                     $" · DPS <color=#E8ECF6>{dmg / interval:0}</color> · 사거리 {Combat.Range(tower):0}";
-                selBody.text = $"【 {Units.TagLabel(tower.Def)} 】";
+                // 기본공과 강화(가스 업그레이드) 몫을 분리해 보여준다 (플레이테스트 2026-07-17)
+                float baseDmg = Combat.Damage(tower, UpgradeLevels.Zero);
+                int upLevel = game.Upgrades[tower.Def.Race];
+                string upLine = upLevel > 0
+                    ? $"  <color=#85A875>기본 {baseDmg:0} + 강화Lv{upLevel} +{dmg - baseDmg:0}</color>"
+                    : "";
+                selBody.text = $"【 {Units.TagLabel(tower.Def)} 】{upLine}";
             }
             else if (sel.IsEmptyTile)
             {
@@ -1069,9 +1080,11 @@ namespace GodTD.View
                 if (!active) continue;
                 var choice = game.AugmentChoices[i];
                 var rarity = Augments.RARITIES[choice.Rarity];
+                // 설명 수치는 실버 기준 — 등급이 효과를 키우는 걸 배지로 알린다 (2026-07-17)
+                string power = rarity.Power > 1f ? $" <b>×{rarity.Power:0.#}</b>" : "";
                 btn.Label.text =
                     $"<color={Augments.KindColor(choice.Augment.Kind)}><size=10>{Augments.KindLabel(choice.Augment.Kind)}</size></color>" +
-                    $"  <color={rarity.Color}>{rarity.Label}</color>\n<b>{choice.Augment.Name}</b>";
+                    $"  <color={rarity.Color}>{rarity.Label}{power}</color>\n<b>{choice.Augment.Name}</b>";
                 btn.Detail.text = choice.Augment.Description;
                 btn.Interactable = !locked;
 

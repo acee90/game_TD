@@ -155,7 +155,11 @@ export const BOSS_COOLDOWN_SECONDS = 45; // [프로토]
  */
 // 2026-07-16: 기본공 7→4에 맞춰 HP 1150→700, 장갑 3L→1.5L (economy-power-rebalance D2).
 // 장갑은 타격당 감산이라 원피해가 함께 줄면 절반으로 내려야 상대 감산율이 보존된다.
-export const bossHP = (level: number): number => 700 * Math.pow(2.5, level - 1);
+// 2026-07-17: 레벨 성장 2.5 → 3.0 — 사다리 측정("항상 최고 소환" 봇, 시드 12)에서
+// Lv4 첫 클리어 중앙 R15 · Lv5 R22 · Lv6 R22로 소진이 너무 빨랐다 (플레이테스트:
+// "R20~25에 Lv4·5, GOD 1기면 Lv6도" — GOD 1기 이후 타워 건설이 무의미해짐).
+// Lv1~2 앵커(base 700)는 유지 — 초반 리듬 불변, 상위 레벨만 가팔라진다.
+export const bossHP = (level: number): number => 700 * Math.pow(3.0, level - 1);
 export const bossArmor = (level: number): number => 1.5 * level;
 export const BOSS_SPEED = 26;
 /** 보스가 일주를 끝내면 라이프 손실이 크다 [프로토] */
@@ -233,7 +237,7 @@ export const expectedBoardDps = (round: number): number => {
 export const WAVE_RAMP_START = 30;
 export const WAVE_RAMP_END = 48;
 export const WAVE_BASE_RATE = 0.014; // R30 시점 선형 구간의 상대 성장률과 일치 (0.45/31.1)
-export const WAVE_MAX_RATE = 0.2; // 연속 복리 — 라운드당 ×e^0.2 ≈ ×1.221
+export const WAVE_MAX_RATE = 0.22; // 연속 복리 ×e^0.22 ≈ ×1.246 — 0.20은 보스 무해화 후 클리어율 11.6%로 물렀다 (2026-07-17)
 const RATE_SLOPE = (WAVE_MAX_RATE - WAVE_BASE_RATE) / (WAVE_RAMP_END - WAVE_RAMP_START);
 const CLEAR_AT_RAMP_START = 18 + 0.45 * (WAVE_RAMP_START - 1);
 export const targetClearSeconds = (round: number): number => {

@@ -10,6 +10,9 @@ namespace GodTD.Core
     /// <summary>종족별 업그레이드 레벨. 인덱스 = Race (테란/저그/플토/크리쳐)</summary>
     public sealed class UpgradeLevels
     {
+        /// <summary>업그레이드 0 상태 — 기본 공격력 계산용 (읽기 전용으로만 쓸 것)</summary>
+        public static readonly UpgradeLevels Zero = new UpgradeLevels();
+
         readonly int[] levels = { 0, 0, 0, 0 };
         public int this[Race race]
         {

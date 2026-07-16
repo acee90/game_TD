@@ -145,7 +145,8 @@ namespace GodTD.Core
 
         /// <summary>보스는 같은 라운드 잡몹 여러 기 몫으로 때린다</summary>
         /// <summary>Lv3까지는 영웅·허수아비를 공격하지 않고 지나간다 — 위협은 누출 라이프뿐 ← web</summary>
-        public const int BOSS_HARMLESS_MAX_LEVEL = 3;
+        // 3 → 6 (2026-07-17 플레이테스트): 보스는 전 레벨 무해 — 위협은 누출 라이프뿐. ← web
+        public const int BOSS_HARMLESS_MAX_LEVEL = 6;
         public static float BossDamage(int level, int round) =>
             level <= BOSS_HARMLESS_MAX_LEVEL ? 0f : EnemyDamage(round) * (1.5f + 0.5f * level);
 

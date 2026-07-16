@@ -169,13 +169,13 @@ export const enemyDamage = (round: number): number =>
   ENEMY_DAMAGE_BASE + ENEMY_DAMAGE_PER_ROUND * round;
 
 /**
- * 보스 접촉 피해.
+ * 보스 접촉 피해 — **전 레벨 무해** (2026-07-17 플레이테스트, 3→6).
  *
- * **Lv3까지는 영웅·허수아비를 공격하지 않고 그냥 지나간다** (플레이테스트 2026-07-11:
- * 저레벨 보스는 "소환하면 얻는 소득"이고, 위협은 못 잡았을 때의 누출 라이프(2+L)만으로
- * 충분하다). Lv4부터는 잡몹 여러 기 몫으로 때린다 — 고레벨 소환의 대가.
+ * 2026-07-11에는 Lv4+가 영웅을 때렸지만("고레벨 소환의 대가"), 실제로는 보스의 위협이
+ * 두 겹이 될 필요가 없었다 — 리스크는 못 잡았을 때의 누출 라이프(2+L)만으로 충분하고,
+ * 영웅 위협은 사냥꾼 웨이브가 전담한다. 보스는 그냥 지나간다.
  */
-export const BOSS_HARMLESS_MAX_LEVEL = 3;
+export const BOSS_HARMLESS_MAX_LEVEL = 6;
 export const bossDamage = (level: number, round: number): number =>
   level <= BOSS_HARMLESS_MAX_LEVEL ? 0 : enemyDamage(round) * (1.5 + 0.5 * level);
 

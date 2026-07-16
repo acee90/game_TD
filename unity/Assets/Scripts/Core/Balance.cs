@@ -131,7 +131,9 @@ namespace GodTD.Core
         // 레벨 성장 2.15 → 2.5 (2026-07-11): "항상 최고 소환" 처치율이 Lv6 96%였다.
         // 2.5에서 Lv5 54% · Lv6 75% — 레벨이 오를수록 리스크가 생긴다. ← web
         // 2026-07-16: 기본공 7→4에 맞춰 HP 1150→700, 장갑 3L→1.5L (장갑은 감산이라 함께 절반).
-        public static float BossHP(int level) => 700f * MathF.Pow(2.5f, level - 1);
+        // 2026-07-17: 성장 2.5 → 3.0 — 사다리 소진 R22가 너무 빨랐다 (Lv4 R15·Lv6 R22).
+        // Lv1~2 앵커 유지, 상위만 가팔라진다: Lv6 = 170k (GOD 1기 시대 종료). ← web
+        public static float BossHP(int level) => 700f * MathF.Pow(3.0f, level - 1);
         public static float BossArmor(int level) => 1.5f * level;
         public const float BOSS_SPEED = 26f;
 
@@ -168,7 +170,7 @@ namespace GodTD.Core
         public const int WAVE_RAMP_START = 30;
         public const int WAVE_RAMP_END = 48;
         public const float WAVE_BASE_RATE = 0.014f;
-        public const float WAVE_MAX_RATE = 0.2f;
+        public const float WAVE_MAX_RATE = 0.22f; // 0.20 → 0.22 (2026-07-17: 보스 무해화 후 재보정) ← web
         public static float TargetClearSeconds(int round)
         {
             if (round <= WAVE_RAMP_START) return 18f + 0.45f * (round - 1);
