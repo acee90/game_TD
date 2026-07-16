@@ -104,14 +104,14 @@ namespace GodTD.View
         Shader litShader;
         Shader spriteShader;
 
-        // ── 색상 — 밝은 로우폴리 디오라마 (Kenney TD Kit 룩). 어두운 중세 밤 팔레트는 폐기. ──
-        static readonly Color SKY = Hex("#cfe1ec");        // 배경 하늘 — 은은한 하늘색
-        static readonly Color SKY_FAR = Hex("#b9cede");
-        static readonly Color SOIL_GROUND = Hex("#39562b"); // 타일 틈 사이로 비치는 어두운 잔디 → 은은한 격자 그루브
-        // Kenney 잔디 알베도가 청록빛이라 파란기를 눌러 차분한 자연 초록으로 (형광/라임 방지) — 필드·슬롯 공통
-        static readonly Color GRASS_TINT = new Color(0.82f, 0.74f, 0.42f);
-        // 길 타일용 순한 틴트 — 잔디 벽 파란기만 눌러 초록 유지 + 흙은 갈색 유지 (둘 다 한 머티리얼)
-        static readonly Color ROAD_TINT = new Color(1.0f, 0.88f, 0.6f);
+        // ── 색상 — Kenney Sample.png 룩: 어두운 배경 위에 밝은 타일 섬이 뜬다. ──
+        static readonly Color SKY = Hex("#38383f");        // 배경 = 어두운 차콜 (타일을 팝시킨다)
+        static readonly Color SKY_FAR = Hex("#303036");
+        static readonly Color SOIL_GROUND = Hex("#33333a"); // 타일 밑/틈 = 어두운 배경색과 통일
+        // Kenney 잔디 알베도가 청록빛이라 파란기를 눌러 깨끗한 중간 초록으로 (형광/라임 방지)
+        static readonly Color GRASS_TINT = new Color(0.72f, 0.95f, 0.55f);
+        // 길 타일 — 따뜻한 탄/흙색 (Sample의 오렌지빛 길)
+        static readonly Color ROAD_TINT = new Color(1.15f, 0.92f, 0.62f);
         const float TILE_TOP = 0.36f;                        // 타일 윗면 = 유닛이 서는 높이
 
         // 제단 — 성주가 부활하는 사당. 테두리 금동색.
@@ -374,29 +374,29 @@ namespace GodTD.View
             foreach (var stray in FindObjectsByType<Light>(FindObjectsSortMode.None))
                 if (stray.type == LightType.Directional) Destroy(stray.gameObject);
 
-            // 하드 직사광 — 로우폴리 디오라마 입체감의 핵심. 각 면이 뚜렷이 음영져 타일·길 벽이 살아난다.
-            // (파란기 없는 흰빛 — Kenney 잔디가 청록이라 파란 조명이면 시안으로 날아간다.)
+            // 부드럽고 균일한 밝은 조명 — Kenney Sample 룩(스튜디오 렌더). 입체감은 이제 타일
+            // 지오메트리(언덕·나무)가 만드므로, 조명은 대비를 낮춰 색을 곱게 살린다.
             var sun = new GameObject("Sun").AddComponent<Light>();
             sun.transform.SetParent(transform, false);
             sun.type = LightType.Directional;
-            sun.transform.rotation = Quaternion.Euler(42f, -40f, 0f);
-            sun.color = new Color(1f, 0.98f, 0.9f);
-            sun.intensity = 1.5f;
+            sun.transform.rotation = Quaternion.Euler(45f, -40f, 0f);
+            sun.color = new Color(1f, 0.98f, 0.92f);
+            sun.intensity = 1.05f;
             sun.shadows = LightShadows.Soft;
-            sun.shadowStrength = 0.85f; // 또렷한 그림자 → 입체
+            sun.shadowStrength = 0.45f; // 옅고 부드러운 그림자
 
-            // 낮은 균일 앰비언트 — 그림자를 죽이지 않으면서 완전 검정만 방지 (하드룩 유지)
+            // 밝은 균일 앰비언트 — 그늘도 환하게 (Sample처럼 대비 낮음)
             RenderSettings.ambientMode = AmbientMode.Flat;
-            RenderSettings.ambientLight = new Color(0.34f, 0.34f, 0.30f);
+            RenderSettings.ambientLight = new Color(0.62f, 0.62f, 0.6f);
             QualitySettings.shadowDistance = 140f;
 
-            // 약한 필 — 그림자 쪽이 완전히 죽지 않게만
+            // 반대편 필 — 그림자 쪽을 부드럽게 채운다
             var fill = new GameObject("Fill").AddComponent<Light>();
             fill.transform.SetParent(transform, false);
             fill.type = LightType.Directional;
             fill.transform.rotation = Quaternion.Euler(40f, 150f, 0f);
-            fill.color = new Color(1f, 0.94f, 0.82f);
-            fill.intensity = 0.15f;
+            fill.color = new Color(1f, 0.95f, 0.85f);
+            fill.intensity = 0.3f;
             fill.shadows = LightShadows.None;
         }
 
@@ -436,11 +436,12 @@ namespace GodTD.View
 
             BuildBackdrop();
 
-            // 잔디 바닥 — 그림자 받는 판 + 빈 곳 클릭(영웅 이동) 레이캐스트. 타일 밑에 깔려 틈을 메운다.
+            // 어두운 바닥판 — 타일 섬 밑을 받치고(틈·너머는 어두운 배경) + 빈 곳 클릭 레이캐스트.
+            // 윗면을 길 파인 바닥보다 아래로 낮춰야(≈-0.05) 길 채널에 지면이 안 비친다.
             var board = GameObject.CreatePrimitive(PrimitiveType.Cube);
             board.name = "Ground";
             board.transform.SetParent(staticRoot, false);
-            board.transform.position = boardCenter + new Vector3(0f, TILE_TOP - 0.12f - 0.5f, 0f);
+            board.transform.position = boardCenter + new Vector3(0f, -0.55f, 0f);
             board.transform.localScale = new Vector3(60f, 1f, 70f);
             Paint(board, LitMat(SOIL_GROUND));
 
@@ -473,9 +474,8 @@ namespace GodTD.View
                 boardCenter + new Vector3(-EXTENT, Y, EXTENT),
                 boardCenter + new Vector3(EXTENT, Y, EXTENT),
             };
-            // 카메라가 -Z 근처에서 +Z(먼 쪽)를 바라본다 — 보드 너머 먼 바닥, 하늘로 옅어지게
-            var near = new Color(0.34f, 0.5f, 0.24f, 1f); // 보드 너머 먼 잔디
-            mesh.colors = new[] { near, near, SKY_FAR, SKY_FAR };
+            // 보드 너머는 어두운 배경 — 타일 섬이 뜬다 (Sample 룩)
+            mesh.colors = new[] { SKY, SKY, SKY_FAR, SKY_FAR };
             mesh.triangles = new[] { 0, 2, 1, 1, 2, 3 };
             mesh.RecalculateBounds();
 
