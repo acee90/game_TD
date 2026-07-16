@@ -445,8 +445,7 @@ namespace GodTD.View
             Paint(board, LitMat(SOIL_GROUND));
 
             BuildTiles();   // 타워 슬롯 = 클릭 가능한 잔디 타일 (격자와 같은 높이)
-            BuildBoard();   // 통합 격자 — 잔디 + 경로 셀 흙 타일, 전부 flush 같은 높이 (슬롯 자리는 건너뜀)
-            BuildDetails(); // 나무·바위 디테일
+            BuildBoard();   // 통합 격자 — 잔디(언덕·나무·바위 혼합) + 경로 흙 타일 오토타일링
 
             // 문 (입구·출구) — 게이트
             MakeDoor(MapData.DOOR_IN, DOOR_IN_COLOR);
@@ -496,18 +495,6 @@ namespace GodTD.View
             t.transform.SetParent(staticRoot, false);
             t.transform.position = W(px, py, topY - 0.2f * side); // 메시 윗면(0.2·side)을 topY에
             t.transform.localScale = new Vector3(side, side, side);
-            t.transform.rotation = Quaternion.Euler(0f, rotY, 0f);
-            return t;
-        }
-
-        /// <summary>바닥 피벗 소품(나무·바위) — 윗면 계산 없이 표면에 세운다.</summary>
-        GameObject SpawnProp(GameObject prefab, float px, float py, float scale, float rotY, string name)
-        {
-            var t = Instantiate(prefab);
-            t.name = name;
-            t.transform.SetParent(staticRoot, false);
-            t.transform.position = W(px, py, TILE_TOP);
-            t.transform.localScale = Vector3.one * scale;
             t.transform.rotation = Quaternion.Euler(0f, rotY, 0f);
             return t;
         }
@@ -562,6 +549,12 @@ namespace GodTD.View
             var crossing = Resources.Load<GameObject>("Kenney/tile-crossing");
             var split = Resources.Load<GameObject>("Kenney/tile-split");
             var end = Resources.Load<GameObject>("Kenney/tile-end");
+            // 3D 기복 타일 — 평 잔디는 어떤 크기여도 평면이라, 언덕·나무·바위로 지형을 세운다(진단 확인).
+            var hill = Resources.Load<GameObject>("Kenney/tile-hill");
+            var tree = Resources.Load<GameObject>("Kenney/tile-tree");
+            var treeD = Resources.Load<GameObject>("Kenney/tile-tree-double");
+            var treeQ = Resources.Load<GameObject>("Kenney/tile-tree-quad");
+            var rock = Resources.Load<GameObject>("Kenney/tile-rock");
             if (grass == null) return;
             float side = MapData.TILE * SCALE; // flush — 길 타일 잔디 벽이 이음새를 이룬다
 
@@ -586,10 +579,42 @@ namespace GodTD.View
                 }
                 else
                 {
-                    var gt = SpawnTile(grass, px, py, side, TILE_TOP, 0f, "Grass");
+                    // 잔디 셀 = 3D 기복 타일 혼합. 언덕(낮음) 위주로 지형을 세우고 나무·바위를 흩뿌린다.
+                    // 경로에서 먼 셀일수록 나무를 짙게(시야 방해 최소). 회전도 셀마다 달라 반복감 제거.
+                    bool far = PerpDistToPath(px, py) > MapData.TILE * 2.2f && !IsNearSlot2(px, py, 1.6f);
+                    var prefab = GrassPick(hh, far, grass, hill, tree, treeD, treeQ, rock);
+                    var gt = SpawnTile(prefab, px, py, side, TILE_TOP, (hh & 3) * 90f, "Grass");
                     TintTile(gt, GRASS_TINT * v);
                 }
             }
+        }
+
+        /// <summary>잔디 셀 타일 선택 — 언덕 위주 저기복 + 나무·바위 악센트. far면 나무를 짙게.</summary>
+        static GameObject GrassPick(int hh, bool far, GameObject grass, GameObject hill,
+            GameObject tree, GameObject treeD, GameObject treeQ, GameObject rock)
+        {
+            int r = hh % 100;
+            if (far)
+            {
+                if (r < 22) return hill ?? grass;
+                if (r < 45) return tree ?? grass;
+                if (r < 57) return treeD ?? grass;
+                if (r < 64) return treeQ ?? grass;
+                if (r < 80) return rock ?? grass;
+                return grass;
+            }
+            // 경로·슬롯 인접: 낮은 기복만 (언덕·바위·평지) — 시야 방해 최소
+            if (r < 46) return hill ?? grass;
+            if (r < 62) return rock ?? grass;
+            if (r < 72) return tree ?? grass;
+            return grass;
+        }
+
+        static bool IsNearSlot2(float px, float py, float tiles)
+        {
+            foreach (var s in MapData.SLOT_POS)
+                if (MapData.Hypot(s.X - px, s.Y - py) < MapData.TILE * tiles) return true;
+            return false;
         }
 
         /// <summary>Kenney 타일 렌더러에 _BaseColor 틴트 (MPB — 공유 머티리얼 오염 없음).</summary>
@@ -604,24 +629,6 @@ namespace GodTD.View
         }
 
         /// <summary>나무·바위 디테일 — 슬롯·경로 아닌 잔디 셀에 드문드문 (결정적 배치).</summary>
-        void BuildDetails()
-        {
-            var tree = Resources.Load<GameObject>("Kenney/detail-tree");
-            var rocks = Resources.Load<GameObject>("Kenney/detail-rocks");
-            for (int gx = -7; gx <= 7; gx++)
-            for (int gy = -7; gy <= 7; gy++)
-            {
-                int h = ((gx * 73856093) ^ (gy * 19349663)) & 0x7fffffff;
-                if (h % 3 != 0) continue; // ~1/3 셀 — 프리뷰처럼 우거지게
-                float px = MapData.CENTER.X + gx * MapData.TILE;
-                float py = MapData.CENTER.Y + gy * MapData.TILE;
-                if (IsNearSlot(px, py) || PerpDistToPath(px, py) < MapData.TILE * 0.8f) continue;
-                var prefab = (h % 2 == 0) ? tree : rocks;
-                if (prefab == null) continue;
-                SpawnProp(prefab, px, py, MapData.TILE * SCALE * 0.55f, (h % 4) * 90f, "Detail");
-            }
-        }
-
         static bool IsNearSlot(float px, float py)
         {
             foreach (var s in MapData.SLOT_POS)
