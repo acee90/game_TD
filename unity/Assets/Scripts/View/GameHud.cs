@@ -29,6 +29,9 @@ namespace GodTD.View
 
         // ── 좌하단: 선택 정보 ──
         RectTransform infoRoot;      // 그림자 루트 (배치 단위)
+        // F3 — 부활 배너: 선택 상태와 무관하게 정보 카드 위에 뜬다 (§7.13). 모달 아님.
+        Image respawnBanner;
+        TextMeshProUGUI respawnText;
         Image infoAccent;
         TextMeshProUGUI infoEyebrow;
         TextMeshProUGUI selTitle;
@@ -52,7 +55,10 @@ namespace GodTD.View
         readonly HudButton[] bossButtons = new HudButton[Balance.BOSS_MAX_LEVEL];
         float bossStackTop;          // IsPointerOverHud용 — 카드+보스 소환대 스택의 상단 y
         static readonly Color BOSS_COL = UiTheme.Hex("#A94832");
-        (Image bg, Image fill) bossCd;   // 소환대 전폭 공용 쿨타임 게이지(칸별 숫자 대체)
+        // F2 (§7.13) — 전폭 쿨타임 바 폐기 → 버튼별 radial 봉인 + 중앙 남은 초.
+        // 게임 쿨타임처럼 버튼 위에서 읽힌다. 전부 raycastTarget=false — 클릭은 버튼이 받는다.
+        readonly Image[] bossSeals = new Image[Balance.BOSS_MAX_LEVEL];
+        readonly TextMeshProUGUI[] bossSealSecs = new TextMeshProUGUI[Balance.BOSS_MAX_LEVEL];
         static readonly string[] ROMAN = { "I", "II", "III", "IV", "V", "VI" };
 
         // ── 공용 툴팁 (선택정보 위) ──
@@ -69,6 +75,21 @@ namespace GodTD.View
         TextMeshProUGUI overlaySub;
         readonly List<HudButton> overlayCards = new List<HudButton>();
         HudButton overlayAction;     // 리롤 / 다시 시작
+
+        // F4 — 증강 기록 (§7.13): 읽기 전용 오버레이. 게임을 멈추지 않는다.
+        Image historyDim;
+        TextMeshProUGUI historySynergy;
+        RectTransform historyContent;
+
+        // F1 — 증강 오클릭 방지 (§7.13): XP 연타 중 카드가 포인터 밑에 나타나 눌리는 사고.
+        // 새 선택 화면(choices 참조 교체)마다 1초 입력 잠금. 리롤은 의도된 클릭이라 안 건다.
+        // 게임이 일시정지 상태라 반드시 unscaledTime을 쓴다.
+        const float AUGMENT_LOCK_SECONDS = 1f;
+        const float AUGMENT_RISE_SECONDS = 0.18f;
+        float augmentLockUntil = -999f;
+        List<AugmentCard> lastAugmentChoices;
+        int lastRerollsUsed;
+        readonly List<CanvasGroup> overlayCardGroups = new List<CanvasGroup>();
 
         int builtW, builtH;
         float displayMineral;        // 카운트업 주스
@@ -87,6 +108,8 @@ namespace GodTD.View
             view = GetComponent<GameView>();
             view.Hud = this;
             BuildCanvas();
+            // F4 — '증강 기록' 커맨드의 UI 콜백 배선 (Core 무의존 View 동작)
+            CommandCard.OpenAugmentHistory = OpenAugmentHistory;
         }
 
         // ───────── 조립 ─────────
@@ -110,7 +133,8 @@ namespace GodTD.View
             BuildCardPanel();
             BuildBossButtons();
             BuildMessage();
-            BuildOverlay();
+            BuildAugmentHistory();
+            BuildOverlay();   // 증강 선택·게임오버가 기록보다 위에 그려져야 한다 (뒤에 조립 = 위)
             ApplyLayout();
         }
 
@@ -251,6 +275,29 @@ namespace GodTD.View
                 TextAlignmentOptions.TopLeft);
             UiKit.Rect(selBody.gameObject, t, Vector2.zero, Vector2.one,
                 new Vector2(UiTheme.Pad, 8f), new Vector2(-UiTheme.Pad, -84f));
+
+            // F3 — 부활 배너 (§7.13): 정보 카드 상단에 붙는 고대비 스트립. 입력을 받지 않고
+            // (raycast 차단 없음 = 타워 조작 자유), 영웅색 실루엣 + 하트 아이콘으로 색각 비의존.
+            respawnBanner = UiKit.Panel("RespawnBanner", infoRoot, UiTheme.Hex("#33161A", 0.94f), 8f);
+            UiKit.Rect(respawnBanner.gameObject, infoRoot,
+                new Vector2(0, 1), new Vector2(0, 1), new Vector2(0, 8f), new Vector2(206f, 44f));
+            respawnBanner.raycastTarget = false;
+
+            var reviveIcon = new GameObject("Icon").AddComponent<Image>();
+            reviveIcon.transform.SetParent(respawnBanner.transform, false);
+            reviveIcon.sprite = HudIcons.Get(HudIcon.Life);
+            reviveIcon.color = UiTheme.HeroCol;
+            reviveIcon.raycastTarget = false;
+            UiKit.Rect(reviveIcon.gameObject, respawnBanner.transform,
+                new Vector2(0, 0.5f), new Vector2(0, 0.5f), new Vector2(10f, -9f), new Vector2(28f, 9f));
+
+            respawnText = UiKit.Text("Text", respawnBanner.transform, UiTheme.FontLabel,
+                UiTheme.TextMain, TextAlignmentOptions.MidlineLeft, FontStyles.Bold);
+            respawnText.raycastTarget = false;
+            UiKit.Rect(respawnText.gameObject, respawnBanner.transform,
+                Vector2.zero, Vector2.one, new Vector2(36f, 2f), new Vector2(-8f, -2f));
+
+            respawnBanner.gameObject.SetActive(false);
         }
 
         /// <summary>선택정보 위에 뜨는 작은 유리판 — hover된 커맨드/보스 버튼의 설명을 보여준다.</summary>
@@ -302,10 +349,30 @@ namespace GodTD.View
                     () => view.Game.SummonBoss(level), 5f);
                 bossButtons[i].Label.fontSize = 13f;
                 bossButtons[i].Detail.fontSize = 8f;
-            }
 
-            // 공용 쿨타임 게이지 — 칸별 숫자 대신 소환대 전폭 봉인 바 하나
-            bossCd = UiKit.Bar("BossCd", bossBody, UiTheme.Hex("#C6A15B"));
+                // F2 — 버튼별 radial 봉인: 12시 시작 시계방향, 남은 비율만큼 어둡게 덮는다.
+                // 쿨타임이 줄수록 봉인이 시계방향으로 걷힌다. 숫자는 그 위 중앙.
+                var seal = new GameObject("Seal").AddComponent<Image>();
+                seal.transform.SetParent(bossButtons[i].transform, false);
+                seal.color = UiTheme.Hex("#0D0A07", 0.72f);
+                seal.type = Image.Type.Filled;
+                seal.fillMethod = Image.FillMethod.Radial360;
+                seal.fillOrigin = (int)Image.Origin360.Top;
+                seal.fillClockwise = true;
+                seal.raycastTarget = false;
+                UiKit.Rect(seal.gameObject, bossButtons[i].transform,
+                    Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
+
+                var secs = UiKit.Text("Secs", seal.transform, 12f, UiTheme.Hex("#C6A15B"),
+                    TextAlignmentOptions.Center, FontStyles.Bold);
+                secs.raycastTarget = false;
+                UiKit.Rect(secs.gameObject, seal.transform,
+                    Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
+
+                bossSeals[i] = seal;
+                bossSealSecs[i] = secs;
+                seal.gameObject.SetActive(false);
+            }
         }
 
         void BuildMessage()
@@ -314,6 +381,127 @@ namespace GodTD.View
                 TextAlignmentOptions.Bottom);
             UiKit.Rect(msgText.gameObject, root, new Vector2(0.25f, 0), new Vector2(0.75f, 0),
                 new Vector2(0, 6f), new Vector2(0, 26f));
+        }
+
+        /// <summary>
+        /// F4 (§7.13) — 증강 기록 오버레이. 획득한 증강을 순서대로 다시 보는 읽기 전용 목록.
+        /// 게임을 일시정지하지 않는다 — backdrop은 월드 오클릭만 막고, Esc/닫기로 복귀한다.
+        /// 3장 선택 오버레이를 재사용하지 않고 세로 ScrollRect를 쓴다.
+        /// </summary>
+        void BuildAugmentHistory()
+        {
+            historyDim = UiKit.Panel("AugmentHistory", root, UiTheme.Hex("#0D0A07", 0.78f), 0);
+            UiKit.Rect(historyDim.gameObject, root, Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
+            historyDim.raycastTarget = true; // 월드 오클릭 차단 — 게임은 계속 돈다
+
+            var title = UiKit.Text("Title", historyDim.transform, UiTheme.FontTitle, UiTheme.Gold,
+                TextAlignmentOptions.Center, FontStyles.Bold);
+            title.text = "증강 기록";
+            UiKit.Rect(title.gameObject, historyDim.transform,
+                new Vector2(0, 0.84f), new Vector2(1, 0.92f), Vector2.zero, Vector2.zero);
+
+            // 활성 시너지 인장 줄 — 목록 상단에 모아 보여준다
+            historySynergy = UiKit.Text("Synergy", historyDim.transform, UiTheme.FontSmall,
+                UiTheme.TextMain, TextAlignmentOptions.Center);
+            UiKit.Rect(historySynergy.gameObject, historyDim.transform,
+                new Vector2(0, 0.78f), new Vector2(1, 0.84f), Vector2.zero, Vector2.zero);
+
+            // 세로 스크롤 목록
+            var scrollGo = new GameObject("Scroll", typeof(RectTransform), typeof(Image), typeof(ScrollRect));
+            scrollGo.transform.SetParent(historyDim.transform, false);
+            scrollGo.GetComponent<Image>().color = UiTheme.Hex("#161009", 0.85f);
+            UiKit.Rect(scrollGo, historyDim.transform,
+                new Vector2(0.28f, 0.16f), new Vector2(0.72f, 0.78f), Vector2.zero, Vector2.zero);
+            var scroll = scrollGo.GetComponent<ScrollRect>();
+            scroll.horizontal = false;
+            scroll.scrollSensitivity = 24f;
+
+            var viewportGo = new GameObject("Viewport", typeof(RectTransform), typeof(Image), typeof(Mask));
+            viewportGo.transform.SetParent(scrollGo.transform, false);
+            UiKit.Rect(viewportGo, scrollGo.transform, Vector2.zero, Vector2.one,
+                new Vector2(4f, 4f), new Vector2(-4f, -4f));
+            viewportGo.GetComponent<Image>().color = Color.white;
+            viewportGo.GetComponent<Mask>().showMaskGraphic = false;
+
+            var contentGo = new GameObject("Content",
+                typeof(RectTransform), typeof(VerticalLayoutGroup), typeof(ContentSizeFitter));
+            contentGo.transform.SetParent(viewportGo.transform, false);
+            historyContent = (RectTransform)contentGo.transform;
+            historyContent.anchorMin = new Vector2(0, 1);
+            historyContent.anchorMax = new Vector2(1, 1);
+            historyContent.pivot = new Vector2(0.5f, 1f);
+            historyContent.offsetMin = Vector2.zero;
+            historyContent.offsetMax = Vector2.zero;
+            var layout = contentGo.GetComponent<VerticalLayoutGroup>();
+            layout.padding = new RectOffset(10, 10, 8, 8);
+            layout.spacing = 6f;
+            layout.childControlWidth = true;
+            layout.childControlHeight = true;   // TMP preferredHeight로 행 높이 자동
+            layout.childForceExpandWidth = true;
+            layout.childForceExpandHeight = false;
+            contentGo.GetComponent<ContentSizeFitter>().verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+
+            scroll.viewport = (RectTransform)viewportGo.transform;
+            scroll.content = historyContent;
+
+            var close = UiKit.Button("Close", historyDim.transform, () => CloseAugmentHistory(), 8f);
+            UiKit.Rect(close.gameObject, historyDim.transform,
+                new Vector2(0.44f, 0.08f), new Vector2(0.56f, 0.14f), Vector2.zero, Vector2.zero);
+            close.Label.alignment = TextAlignmentOptions.Center;
+            close.Label.text = "닫기 (Esc)";
+            UiKit.Rect(close.Label.gameObject, close.transform,
+                Vector2.zero, Vector2.one, new Vector2(4f, 2f), new Vector2(-4f, -2f));
+
+            historyDim.gameObject.SetActive(false);
+        }
+
+        /// <summary>F4 — 기록 열기: 획득 순서대로 같은 (증강, 등급)을 ×N으로 접어 나열한다.</summary>
+        public void OpenAugmentHistory()
+        {
+            var hero = view.Game.Hero;
+            if (hero.AugmentCards.Count == 0) return;
+
+            // 이전 행 제거 (열 때마다 재구축 — 저빈도라 풀링 불필요)
+            for (int i = historyContent.childCount - 1; i >= 0; i--)
+                Destroy(historyContent.GetChild(i).gameObject);
+
+            // 같은 (id, 등급)은 한 행 ×N — 획득 순서는 첫 등장 기준으로 보존
+            var groups = new List<(AugmentCard first, int count)>();
+            foreach (var card in hero.AugmentCards)
+            {
+                int at = groups.FindIndex(g =>
+                    g.first.Augment.Id == card.Augment.Id && g.first.Rarity == card.Rarity);
+                if (at >= 0) groups[at] = (groups[at].first, groups[at].count + 1);
+                else groups.Add((card, 1));
+            }
+
+            foreach (var (card, count) in groups)
+            {
+                var rarity = Augments.RARITIES[card.Rarity];
+                var row = UiKit.Text("Row", historyContent, UiTheme.FontCaption, UiTheme.TextMain,
+                    TextAlignmentOptions.TopLeft);
+                row.textWrappingMode = TextWrappingModes.Normal;
+                row.text =
+                    $"<color={Augments.KindColor(card.Augment.Kind)}>{Augments.KindLabel(card.Augment.Kind)}</color> " +
+                    $"<color={rarity.Color}>{rarity.Label}</color> <b>{card.Augment.Name}</b>" +
+                    (count > 1 ? $" <color=#FFD23F>×{count}</color>" : "") +
+                    $"\n<color=#8A93AD>{card.Augment.Description}</color>";
+            }
+
+            var synergy = new System.Text.StringBuilder();
+            foreach (var s in Augments.ActiveSynergies(hero.AugmentCards))
+                synergy.Append($"<color=#FFD23F>★{s.Name}</color>  ");
+            historySynergy.text = synergy.Length > 0 ? synergy.ToString() : "<color=#8A93AD>활성 시너지 없음</color>";
+
+            historyDim.gameObject.SetActive(true);
+        }
+
+        /// <summary>F4 — 기록 닫기. 열려 있었으면 true (GameView가 Esc 우선순위 판단에 쓴다).</summary>
+        public bool CloseAugmentHistory()
+        {
+            if (historyDim == null || !historyDim.gameObject.activeSelf) return false;
+            historyDim.gameObject.SetActive(false);
+            return true;
         }
 
         void BuildOverlay()
@@ -359,6 +547,8 @@ namespace GodTD.View
                     new Vector2(10f, 10f), new Vector2(-10f, -62f));
 
                 overlayCards.Add(btn);
+                // F1 — 잠금 중 페이드·상승 연출과 레이캐스트 차단용
+                overlayCardGroups.Add(btn.gameObject.AddComponent<CanvasGroup>());
             }
 
             overlayAction = UiKit.Button("Action", overlayDim.transform, ClickOverlayAction, 10f);
@@ -405,10 +595,6 @@ namespace GodTD.View
                     new Vector2(x0, -CARD_HEADER - 52f), new Vector2(x0 + bossW, -CARD_HEADER));
             }
 
-            // 공용 쿨타임 게이지 — 소환대 하단 전폭 (칸별 숫자 대체)
-            UiKit.Rect(bossCd.bg.gameObject, bossBody, new Vector2(0, 0), new Vector2(1, 0),
-                new Vector2(UiTheme.Pad, 3f), new Vector2(-UiTheme.Pad, 9f));
-
             for (int i = 0; i < CommandCard.SLOTS; i++)
             {
                 int col = i % 3, row = i / 3;
@@ -437,6 +623,7 @@ namespace GodTD.View
         public bool IsPointerOverHud(Vector2 mouseScreenPos)
         {
             if (overlayDim != null && overlayDim.gameObject.activeSelf) return true;
+            if (historyDim != null && historyDim.gameObject.activeSelf) return true; // F4
             // 전폭 바가 아니므로 판 사이 틈으로는 보드를 클릭할 수 있다
             if (TopPlateScreenRect(0f, W_STATUS).Contains(mouseScreenPos)) return true;
             if (TopPlateScreenRect(0.5f, W_RESOURCE).Contains(mouseScreenPos)) return true;
@@ -472,8 +659,39 @@ namespace GodTD.View
             RefreshSelection(game);
             RefreshCard(game);
             RefreshBoss(game);
+            RefreshRespawn(game);
             RefreshOverlay(game);
             TickFeedback();
+        }
+
+        /// <summary>
+        /// F5 — 공격속도 표기 (§7.13): 간격(초/회)이 아니라 초당 공격 횟수로 통일한다.
+        /// 큰 값 = 빠른 공격. 10 미만은 둘째 자리, 10 이상은 첫째 자리. 0 나눗셈만 방어.
+        /// </summary>
+        static string AttackRate(float interval)
+        {
+            float rate = 1f / Mathf.Max(0.01f, interval);
+            return rate >= 10f ? $"{rate:0.0}회/초" : $"{rate:0.00}회/초";
+        }
+
+        /// <summary>F3 — 사망 중 부활 배너 (§7.13). 선택 상태와 무관하게 보인다.</summary>
+        void RefreshRespawn(Game game)
+        {
+            var hero = game.Hero;
+            bool show = !hero.Alive && !game.Over;
+            if (respawnBanner.gameObject.activeSelf != show)
+                respawnBanner.gameObject.SetActive(show);
+            if (!show)
+            {
+                respawnBanner.rectTransform.localScale = Vector3.one;
+                return;
+            }
+            respawnText.text = $"영웅 부활  <b>{Mathf.CeilToInt(hero.RespawnTimer)}</b>";
+            // 마지막 3초 — 초 경계마다 한 번씩 커졌다 가라앉는 펄스 (타이머가 줄어드는 방향이라
+            // 소수부가 1→0으로 감쇠한다 = 경계 직후 스파이크)
+            float frac = hero.RespawnTimer - Mathf.Floor(hero.RespawnTimer);
+            float pulse = hero.RespawnTimer <= 3f ? 1f + 0.14f * frac : 1f;
+            respawnBanner.rectTransform.localScale = Vector3.one * pulse;
         }
 
         /// <summary>스탯 그룹 흔들림 발화 — 남은 시간을 상한으로 세팅(중첩 방지).</summary>
@@ -551,8 +769,8 @@ namespace GodTD.View
                 }
                 else if (cd)
                 {
-                    // 쿨타임 = 전폭 게이지가 담당 → 칸은 남은 초만
-                    b.Detail.text = $"{Mathf.CeilToInt(game.BossCooldown)}s";
+                    // F2 — 쿨타임은 버튼 위 radial 봉인 + 중앙 숫자가 담당. 하단엔 보상 유지.
+                    b.Detail.text = $"+{Balance.BOSS_KILL_MINERAL[i]}";
                     b.ClearReasonMark();
                     lastBossCmds[i] = $"Lv{level} 적장 · 소환 쿨타임 {Mathf.CeilToInt(game.BossCooldown)}초.";
                 }
@@ -564,17 +782,22 @@ namespace GodTD.View
                 }
                 b.Interactable = game.CanSummonBossLevel(level);
 
+                // F2 — 잠긴 단계는 자물쇠 우선(봉인·숫자 없음). 해금 단계만 전역 쿨타임을 표시.
+                bool showSeal = unlocked && cd;
+                if (bossSeals[i].gameObject.activeSelf != showSeal)
+                    bossSeals[i].gameObject.SetActive(showSeal);
+                if (showSeal)
+                {
+                    bossSeals[i].fillAmount =
+                        game.BossCooldown / Mathf.Max(0.01f, Balance.BOSS_COOLDOWN_SECONDS);
+                    bossSealSecs[i].text = Mathf.CeilToInt(game.BossCooldown).ToString();
+                }
+
                 // 최고 소환가능 단계만 맥동(주스), 나머지는 안정. Interactable 세팅 다음에 색 지정.
                 b.Label.color = (i == summonable && !cd)
                     ? Color.Lerp(UiTheme.TextMain, BOSS_COL, pulse)
                     : UiTheme.TextMain;
             }
-
-            // 공용 쿨타임 게이지 — 봉인이 풀리는 진행도
-            bossCd.bg.gameObject.SetActive(cd);
-            if (cd)
-                UiKit.SetBar(bossCd.fill,
-                    1f - game.BossCooldown / Mathf.Max(0.01f, Balance.BOSS_COOLDOWN_SECONDS));
         }
 
         void RefreshTop(Game game)
@@ -655,7 +878,8 @@ namespace GodTD.View
 
                 float dps = stats.Damage / stats.AttackInterval;
                 selStats.text =
-                    $"공격력 <color=#E8ECF6>{stats.Damage:0}</color> · DPS <color=#E8ECF6>{dps:0}</color> · 사거리 {stats.Range:0}";
+                    $"공격력 <color=#E8ECF6>{stats.Damage:0}</color> · 공속 <color=#E8ECF6>{AttackRate(stats.AttackInterval)}</color>" +
+                    $" · DPS <color=#E8ECF6>{dps:0}</color> · 사거리 {stats.Range:0}";
 
                 var augs = new System.Text.StringBuilder();
                 foreach (var c in hero.AugmentCards)
@@ -685,7 +909,8 @@ namespace GodTD.View
                 float dmg = Combat.Damage(tower, game.Upgrades);
                 float interval = Combat.AttackInterval(tower);
                 selStats.text =
-                    $"공격력 <color=#E8ECF6>{dmg:0}</color> · DPS <color=#E8ECF6>{dmg / interval:0}</color> · 사거리 {Combat.Range(tower):0}";
+                    $"공격력 <color=#E8ECF6>{dmg:0}</color> · 공속 <color=#E8ECF6>{AttackRate(interval)}</color>" +
+                    $" · DPS <color=#E8ECF6>{dmg / interval:0}</color> · 사거리 {Combat.Range(tower):0}";
                 selBody.text = $"【 {Units.TagLabel(tower.Def)} 】";
             }
             else if (sel.IsEmptyTile)
@@ -809,6 +1034,7 @@ namespace GodTD.View
             overlayMode = mode;
             overlayDim.gameObject.SetActive(mode != OverlayMode.None);
             if (mode == OverlayMode.None) return;
+            CloseAugmentHistory(); // F4 — 증강 선택·게임오버가 뜨면 기록은 접는다
 
             switch (mode)
             {
@@ -819,6 +1045,19 @@ namespace GodTD.View
 
         void RefreshAugmentOverlay(Game game)
         {
+            // F1 — 새 선택 화면(참조 교체)마다 1초 잠금. 리롤(RerollsUsed 증가)은 예외.
+            // 연속 레벨업(PendingAugmentPicks)도 화면마다 choices가 새 리스트라 매번 다시 잠긴다.
+            if (!ReferenceEquals(game.AugmentChoices, lastAugmentChoices))
+            {
+                bool byReroll = game.RerollsUsed > lastRerollsUsed;
+                if (!byReroll) augmentLockUntil = Time.unscaledTime + AUGMENT_LOCK_SECONDS;
+                lastAugmentChoices = game.AugmentChoices;
+            }
+            lastRerollsUsed = game.RerollsUsed;
+            bool locked = Time.unscaledTime < augmentLockUntil;
+            // 잠금이 풀리면 0.18초에 걸쳐 카드가 올라오며 밝아진다
+            float rise = Mathf.Clamp01((Time.unscaledTime - augmentLockUntil) / AUGMENT_RISE_SECONDS);
+
             overlayTitle.text = "증강 선택";
             overlaySub.text = $"영웅 Lv{game.Hero.Level} — 하나를 고르세요";
 
@@ -834,14 +1073,20 @@ namespace GodTD.View
                     $"<color={Augments.KindColor(choice.Augment.Kind)}><size=10>{Augments.KindLabel(choice.Augment.Kind)}</size></color>" +
                     $"  <color={rarity.Color}>{rarity.Label}</color>\n<b>{choice.Augment.Name}</b>";
                 btn.Detail.text = choice.Augment.Description;
-                btn.Interactable = true;
+                btn.Interactable = !locked;
+
+                var cg = overlayCardGroups[i];
+                cg.blocksRaycasts = !locked;
+                cg.alpha = locked ? 0.45f : 0.45f + 0.55f * rise;
+                var rt = (RectTransform)btn.transform;
+                rt.anchoredPosition = new Vector2(rt.anchoredPosition.x, -10f * (1f - rise));
             }
 
             int left = Augments.AUGMENT_REROLL_MAX - game.RerollsUsed;
             overlayAction.gameObject.SetActive(true);
             overlayAction.Label.text = left > 0 ? $"리롤 — {game.RerollCost} 마정석 ({left}회)" : "리롤 소진";
             overlayAction.Detail.text = "";
-            overlayAction.Interactable = game.CanReroll;
+            overlayAction.Interactable = game.CanReroll && !locked;
         }
 
         void RefreshGameOver(Game game)
@@ -859,13 +1104,22 @@ namespace GodTD.View
         void ClickOverlayCard(int index)
         {
             var game = view.Game;
-            if (overlayMode == OverlayMode.Augment) game.ChooseAugment(index);
+            if (overlayMode == OverlayMode.Augment)
+            {
+                // F1 — Interactable만 믿지 않고 콜백에서도 잠금을 재검사한다 (§7.13)
+                if (Time.unscaledTime < augmentLockUntil) return;
+                game.ChooseAugment(index);
+            }
         }
 
         void ClickOverlayAction()
         {
             var game = view.Game;
-            if (overlayMode == OverlayMode.Augment) game.RerollAugments();
+            if (overlayMode == OverlayMode.Augment)
+            {
+                if (Time.unscaledTime < augmentLockUntil) return; // F1 — 리롤도 잠금 재검사
+                game.RerollAugments();
+            }
             else if (overlayMode == OverlayMode.GameOver) view.Restart();
         }
     }

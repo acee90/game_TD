@@ -182,13 +182,16 @@ function selectionInfo(game: Game): string {
   }
   const dmg = damage(tower, game.upgrades).toFixed(0);
   const dps = (damage(tower, game.upgrades) / attackInterval(tower)).toFixed(0);
+  // F5 (unity-hud-playtest-v0.1) — 간격(초/회)이 아니라 초당 공격 횟수. 큰 값 = 빠른 공격.
+  const rate = 1 / Math.max(0.01, attackInterval(tower));
+  const rateText = rate >= 10 ? rate.toFixed(1) : rate.toFixed(2);
   return `
     <div class="name" style="color:${RACE_COLOR[tower.def.race]}">
       ${tower.def.name}
       <span class="chip">${TIER_LABEL[tower.tier]}</span>
       <span class="chip">【 ${tagLabel(tower.def)} 】</span>
     </div>
-    <div class="dim">${RACES[tower.def.race]} · 공격력 ${dmg} · 간격 ${attackInterval(tower).toFixed(2)}s
+    <div class="dim">${RACES[tower.def.race]} · 공격력 ${dmg} · 공속 ${rateText}회/초
       · DPS ${dps} · 사거리 ${range(tower).toFixed(0)}</div>`;
 }
 

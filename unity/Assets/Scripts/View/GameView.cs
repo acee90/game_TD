@@ -91,6 +91,7 @@ namespace GodTD.View
         float heroLastAttackCooldown;
         int lastHeroLevel = 1;
         bool heroWasAlive = true;
+        TextMesh respawnLabel;   // F3 — 제단 위 부활 카운트다운 빌보드
         GameObject decoyObject;
 
         LineRenderer selectionRing;
@@ -271,6 +272,7 @@ namespace GodTD.View
         void HandleEscape()
         {
             if (!Input.GetKeyDown(KeyCode.Escape)) return;
+            if (Hud != null && Hud.CloseAugmentHistory()) return; // F4 — 기록 오버레이 먼저 닫는다
             if (Page != CardPage.Root) Page = CardPage.Root;   // 하위 메뉴 → 루트
             else SetSelection(Selection.None);                 // 루트 → 선택 해제
         }
@@ -1031,6 +1033,23 @@ namespace GodTD.View
             }
             heroWasAlive = alive;
             heroObject.SetActive(alive);
+
+            // F3 — 사망 중 제단 위에 남은 부활 초를 빌보드로 (§7.13). HUD 배너와 같은 숫자.
+            if (!alive && !Game.Over)
+            {
+                if (respawnLabel == null)
+                {
+                    respawnLabel = MakeWorldLabel(transform, "", HERO, 0.085f, Vector3.zero);
+                    respawnLabel.transform.position = W(MapData.CENTER.X, MapData.CENTER.Y, 2.4f);
+                    respawnLabel.fontStyle = FontStyle.Bold;
+                }
+                respawnLabel.gameObject.SetActive(true);
+                respawnLabel.text = $"부활 {Mathf.CeilToInt(hero.RespawnTimer)}";
+            }
+            else if (respawnLabel != null && respawnLabel.gameObject.activeSelf)
+            {
+                respawnLabel.gameObject.SetActive(false);
+            }
             if (alive)
             {
                 var nextPosition = W(hero.X, hero.Y, heroAnimator != null

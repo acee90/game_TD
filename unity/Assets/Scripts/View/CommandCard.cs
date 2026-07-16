@@ -73,6 +73,12 @@ namespace GodTD.View
     {
         public const int SLOTS = 9;
 
+        /// <summary>
+        /// F4 (§7.13) — '증강 기록' 칸의 UI 콜백. 게임 상태를 바꾸지 않는 순수 View 동작이라
+        /// Game 메서드가 아니라 GameHud가 Awake에서 배선한다.
+        /// </summary>
+        public static Action OpenAugmentHistory;
+
         /// <summary>칸 인덱스 → 단축키. 위치가 곧 키다.</summary>
         public static readonly KeyCode[] HOTKEYS =
         {
@@ -135,6 +141,15 @@ namespace GodTD.View
                 () => game.BuyXp(), HERO, HudIcon.Xp,
                 reason: game.CanBuyXp ? DisableReason.None : DisableReason.Cost,
                 tooltip: $"영웅 경험치 +{HeroData.XP_BUY_AMOUNT}. 필요 금화 {HeroData.XP_BUY_GOLD}.");
+
+            // F4 — 이미 고른 증강을 다시 보는 읽기 전용 기록. 0개면 자리 유지 + 비활성.
+            bool hasAugments = hero.AugmentCards.Count > 0;
+            c[6] = new Command("증강 기록",
+                hasAugments ? $"{hero.AugmentCards.Count}장" : "획득한 증강 없음",
+                hasAugments,
+                () => OpenAugmentHistory?.Invoke(), HERO, HudIcon.Score,
+                reason: hasAugments ? DisableReason.None : DisableReason.Locked,
+                tooltip: "획득한 증강과 활성 시너지를 다시 봅니다. 게임은 멈추지 않습니다.");
 
             if (hero.Skill == null) return;   // 스킬 증강을 아직 못 뽑았다
             c[3] = new Command("스킬 피해",
