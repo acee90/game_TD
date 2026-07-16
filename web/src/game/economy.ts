@@ -13,7 +13,7 @@ export interface KillIncome {
 }
 
 /**
- * 누적 킬이 `before` → `after`로 올랐을 때 지급할 미네랄.
+ * 누적 킬이 `before` → `after`로 올랐을 때 지급할 금화.
  * 반복 20킬 보상은 없앴다(balance.ts waveReward 참조). 남은 건 마일스톤 미션뿐이다.
  */
 export function killIncome(before: number, after: number): KillIncome {

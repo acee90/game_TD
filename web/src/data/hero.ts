@@ -326,16 +326,16 @@ export interface AugmentEffect {
   readonly deathBlast?: number;
   /** 폭발 반경 */
   readonly deathBlastRadius?: number;
-  /** 처치당 추가 미네랄 */
+  /** 처치당 추가 금화 */
   readonly mineralPerKill?: number;
-  /** 라운드마다 미네랄 (고정값) */
+  /** 라운드마다 금화 (고정값) */
   readonly mineralPerWave?: number;
   /**
    * 라운드 보상 배수. 보상은 `10 + 3×라운드`라 라운드가 갈수록 커진다 —
    * 고정 가산(라운드마다 +6)은 R30에서 보상의 6%밖에 안 됐다. 경제는 배수여야 큰다.
    */
   readonly waveRewardMult?: number;
-  /** 라운드마다 가스 */
+  /** 라운드마다 마정석 */
   readonly gasPerWave?: number;
   /** 부활 대기시간 감소(초). 음수면 늘어난다 */
   readonly respawnCut?: number;
@@ -800,24 +800,24 @@ export const AUGMENTS: readonly Augment[] = [
     effect: { waveStackDamage: 0.05 }, penalty: { moveSpeedMult: 0.9 } },
 
   // ══ 경제 (econ) — 수입과 경험치. TFT 증강의 중심축(43%)이 여기다.
-  { id: 'greed', kind: 'econ', name: '탐욕', description: '처치당 미네랄 +2', maxStacks: 3,
+  { id: 'greed', kind: 'econ', name: '탐욕', description: '처치당 금화 +2', maxStacks: 3,
     effect: { mineralPerKill: 2 } },
   { id: 'harvest', kind: 'econ', name: '수확', description: '라운드 보상 +40%', maxStacks: 3,
     effect: { waveRewardMult: 1.4 } },
-  { id: 'gasvein', kind: 'econ', name: '가스 정맥', description: '라운드마다 가스 +5', maxStacks: 3,
+  { id: 'gasvein', kind: 'econ', name: '마정석 정맥', description: '라운드마다 마정석 +5', maxStacks: 3,
     effect: { gasPerWave: 5 } },
   { id: 'scholar', kind: 'econ', name: '학자', description: '경험치 획득 +40%', maxStacks: 3,
     effect: { xpMult: 1.4 } },
-  { id: 'prospector', kind: 'econ', name: '시굴자', description: '처치당 미네랄 +1, 라운드 보상 +25%',
+  { id: 'prospector', kind: 'econ', name: '시굴자', description: '처치당 금화 +1, 라운드 보상 +25%',
     maxStacks: 2, effect: { mineralPerKill: 1, waveRewardMult: 1.25 } },
-  { id: 'apprentice', kind: 'econ', name: '수련', description: '경험치 획득 +20%, 처치당 미네랄 +1',
+  { id: 'apprentice', kind: 'econ', name: '수련', description: '경험치 획득 +20%, 처치당 금화 +1',
     maxStacks: 3, effect: { xpMult: 1.2, mineralPerKill: 1 } },
   // 아레나 'GoH 갈망' 계열 — 힘을 팔아 돈을 산다
   { id: 'tycoon', kind: 'econ', name: '재벌', description: '라운드 보상 +90% · 공격력 -15%',
     maxStacks: 2, effect: { waveRewardMult: 1.9 }, penalty: { damageMult: 0.85 } },
-  { id: 'bounty', kind: 'econ', name: '현상금 사냥꾼', description: '처치당 미네랄 +4 · 최대 체력 -10%',
+  { id: 'bounty', kind: 'econ', name: '현상금 사냥꾼', description: '처치당 금화 +4 · 최대 체력 -10%',
     maxStacks: 2, effect: { mineralPerKill: 4 }, penalty: { hpMult: 0.9 } },
-  { id: 'investment', kind: 'econ', name: '투자', description: '라운드마다 가스 +8 · 부활 대기 3초 증가',
+  { id: 'investment', kind: 'econ', name: '투자', description: '라운드마다 마정석 +8 · 부활 대기 3초 증가',
     maxStacks: 2, effect: { gasPerWave: 8 }, penalty: { respawnCut: -3 } },
 
   // ══ 유틸 (util) — 기동 · 부활 · 타워 지휘 · 어그로
@@ -884,10 +884,10 @@ export function skillGateAllows(augment: Augment, currentSkill: SkillId | null):
  */
 export const ADAPTIVE_KIND_WEIGHT = 0.9;
 
-// ───────── 증강 리롤 (가스) ─────────
+// ───────── 증강 리롤 (마정석) ─────────
 export const AUGMENT_REROLL_MAX = 2;
 export const AUGMENT_REROLL_BASE_GAS = 12;
-/** n번째 리롤(0부터)의 가스 값 — 같은 선택 안에서 두 번째가 더 비싸다 */
+/** n번째 리롤(0부터)의 마정석 값 — 같은 선택 안에서 두 번째가 더 비싸다 */
 export const augmentRerollCost = (used: number): number => AUGMENT_REROLL_BASE_GAS * (used + 1);
 
 /** 같은 계열 증강이 이만큼 모이면 특화가 발동한다 */
@@ -934,9 +934,9 @@ export const SYNERGIES: Record<AugmentKind, { readonly specialist: SynergyBonus;
       effect: { growthMult: 2.2, damageMult: 1.4 } },
   },
   econ: {
-    specialist: { name: '축재', description: '처치당 미네랄 +2, 라운드 보상 +30%, 경험치 +25%',
+    specialist: { name: '축재', description: '처치당 금화 +2, 라운드 보상 +30%, 경험치 +25%',
       effect: { mineralPerKill: 2, waveRewardMult: 1.3, xpMult: 1.25 } },
-    master: { name: '대부호', description: '라운드 보상 +80%, 라운드마다 가스 +8, 경험치 +60%',
+    master: { name: '대부호', description: '라운드 보상 +80%, 라운드마다 마정석 +8, 경험치 +60%',
       effect: { waveRewardMult: 1.8, gasPerWave: 8, xpMult: 1.6 } },
   },
   util: {

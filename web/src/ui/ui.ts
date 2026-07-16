@@ -46,10 +46,6 @@ export interface Elements {
   readonly augCards: HTMLElement;
   readonly bossOpen: HTMLButtonElement;
   readonly bossOpenSub: HTMLElement;
-  readonly bossOverlay: HTMLElement;
-  readonly bossOverlayState: HTMLElement;
-  readonly bossClose: HTMLButtonElement;
-  readonly bossLevels: readonly HTMLButtonElement[];
   readonly probe: HTMLButtonElement;
   readonly reroll: HTMLButtonElement;
   readonly gasSkillRow: HTMLElement;
@@ -104,10 +100,6 @@ export function bindElements(): Elements {
     augCards: $('augCards'),
     bossOpen: $<HTMLButtonElement>('bossOpen'),
     bossOpenSub: $('bossOpen').querySelector('.sub') as HTMLElement,
-    bossOverlay: $('bossOverlay'),
-    bossOverlayState: $('bossOverlayState'),
-    bossClose: $<HTMLButtonElement>('bossClose'),
-    bossLevels: [1, 2, 3, 4, 5, 6].map((n) => $<HTMLButtonElement>(`boss${n}`)),
     probe: $<HTMLButtonElement>('probe'),
     reroll: $<HTMLButtonElement>('reroll'),
     gasSkillRow: $('gasSkillRow'),
@@ -132,7 +124,7 @@ function bossStateLabel(game: Game): string {
   const gate =
     game.bossCooldown > 0
       ? `쿨타임 ${Math.ceil(game.bossCooldown)}s`
-      : `소환 가능 Lv1~Lv${game.maxBossLevel}`;
+      : `Lv${game.maxBossLevel} 소환`;
   return fighting + gate;
 }
 
@@ -296,9 +288,9 @@ function refreshHero(el: Elements, game: Game): void {
     el.skillText.textContent = `${skill.def.name}${damage}${targets} · ${state}`;
 
     el.gasSkillRow.hidden = false;
-    el.gasSkillDmg.textContent = `스킬 피해 +8% · ${game.gasSkillCost('damage')}가스 (${hero.gasSkillDamage})`;
+    el.gasSkillDmg.textContent = `스킬 피해 +8% · ${game.gasSkillCost('damage')}마정석 (${hero.gasSkillDamage})`;
     el.gasSkillDmg.disabled = !game.canBuyGasSkill('damage');
-    el.gasSkillCdr.textContent = `필요 마나 -6% · ${game.gasSkillCost('cdr')}가스 (${hero.gasSkillCdr})`;
+    el.gasSkillCdr.textContent = `필요 마나 -6% · ${game.gasSkillCost('cdr')}마정석 (${hero.gasSkillCdr})`;
     el.gasSkillCdr.disabled = !game.canBuyGasSkill('cdr');
   }
 
@@ -320,7 +312,7 @@ function refreshAugmentOverlay(el: Elements, game: Game): void {
     `영웅 Lv${game.hero.level} — 하나를 고르세요`;
   const left = HD.AUGMENT_REROLL_MAX - game.rerollsUsed;
   el.reroll.textContent =
-    left > 0 ? `리롤 ${game.rerollCost}가스 · ${left}회 남음 (보유 ${Math.floor(game.gas)})` : '리롤 소진';
+    left > 0 ? `리롤 ${game.rerollCost}마정석 · ${left}회 남음 (보유 ${Math.floor(game.gas)})` : '리롤 소진';
   el.reroll.disabled = !game.canReroll;
   el.augCards.innerHTML = game.augmentChoices
     .map((card, i) => {
@@ -353,17 +345,9 @@ export function refresh(el: Elements, game: Game): void {
   const bossLabel = bossStateLabel(game);
   el.bossOpenSub.textContent = bossLabel;
   el.bossOpen.classList.toggle('ready', game.bossCooldown <= 0);
-  el.bossOverlayState.textContent = bossLabel;
-  el.bossLevels.forEach((button, i) => {
-    const level = i + 1;
-    const open = level <= game.maxBossLevel;
-    button.disabled = !game.canSummonBossLevel(level);
-    button.textContent = open ? `Lv${level}\n+${B.BOSS_KILL_MINERAL[i]}` : `Lv${level} 🔒`;
-    button.classList.toggle('ready', open);
-    button.classList.toggle('top', open && level === game.maxBossLevel);
-  });
+  el.bossOpen.disabled = !game.canSummonBossLevel(game.maxBossLevel);
 
-  el.probe.textContent = `프로브 ${game.probeCost} (${game.probes}/${B.PROBE_MAX})`;
+  el.probe.textContent = `광부 ${game.probeCost} (${game.probes}/${B.PROBE_MAX})`;
   el.probe.disabled = game.probes >= B.PROBE_MAX || game.mineral < game.probeCost;
 
   el.spawn.textContent = `유닛 생성 ${game.spawnCost}`;
@@ -388,7 +372,7 @@ export function refresh(el: Elements, game: Game): void {
   el.upgrades.forEach((button, i) => {
     const race = i as Race;
     const cost = game.upgradeCost(race);
-    button.textContent = `${RACES[race]} +${game.upgrades[race]} · ${cost}가스`;
+    button.textContent = `${RACES[race]} +${game.upgrades[race]} · ${cost}마정석`;
     button.disabled = game.gas < cost;
   });
 

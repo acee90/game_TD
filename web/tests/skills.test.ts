@@ -227,6 +227,7 @@ describe('스킬 시전', () => {
 
   test('회오리를 쥐면 소용돌이가 적을 늦춘다', () => {
     const game = new Game();
+    game.round = 5; // 완전 템포(초반 슬로우 배제)에서 감속 지속시간 자체를 검증
     game.hero.addAugment(card('skill_whirlwind'));
     game.hero.addAugment(card('cyclone'));
     const enemy = mob(game.hero.distance - 20);
@@ -344,6 +345,7 @@ describe('허수아비 — 원거리 영웅의 탱커', () => {
 
   test('수명이 다하면 사라진다', () => {
     const game = new Game();
+    game.round = 5; // 완전 템포(초반 슬로우 배제)에서 허수아비 수명 자체를 검증
     game.hero.addAugment(card('skill_decoy'));
     castNow(game);
 

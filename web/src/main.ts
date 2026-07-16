@@ -57,13 +57,8 @@ el.buyXp.addEventListener('click', () => game.buyXp());
 el.reroll.addEventListener('click', () => game.rerollAugments());
 el.gasSkillDmg.addEventListener('click', () => game.buyGasSkill('damage'));
 el.gasSkillCdr.addEventListener('click', () => game.buyGasSkill('cdr'));
-// 보스 소환은 커맨드창이 아니라 독립 오버레이에서 — 열기/닫기/배경 클릭 닫기
-el.bossOpen.addEventListener('click', () => el.bossOverlay.classList.add('open'));
-el.bossClose.addEventListener('click', () => el.bossOverlay.classList.remove('open'));
-el.bossOverlay.addEventListener('click', (event) => {
-  if (event.target === el.bossOverlay) el.bossOverlay.classList.remove('open');
-});
-el.bossLevels.forEach((button, i) => button.addEventListener('click', () => game.summonBoss(i + 1)));
+// 보스 소환은 1-depth — 버튼을 누르면 소환 가능한 최고 레벨을 바로 부른다(레벨 선택 없음)
+el.bossOpen.addEventListener('click', () => game.summonBoss());
 el.upgrades.forEach((button, i) => button.addEventListener('click', () => game.upgrade(i as Race)));
 el.augCards.addEventListener('click', (event) => {
   const card = (event.target as HTMLElement).closest<HTMLElement>('.augcard');
@@ -82,7 +77,6 @@ const KEYS: Record<string, () => void> = {
   '4': () => game.upgrade(3),
 };
 window.addEventListener('keydown', (event) => {
-  if (event.key === 'Escape') el.bossOverlay.classList.remove('open');
   KEYS[event.key.toLowerCase()]?.();
 });
 

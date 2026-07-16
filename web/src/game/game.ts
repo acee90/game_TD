@@ -428,7 +428,7 @@ export class Game {
     if (this.augmentChoices.length === 0) hero.pendingAugmentPicks = 0;
   }
 
-  // ── 증강 리롤 (가스) ──
+  // ── 증강 리롤 (마정석) ──
   get rerollCost(): number {
     return H.augmentRerollCost(this.rerollsUsed);
   }
@@ -441,7 +441,7 @@ export class Game {
     );
   }
 
-  /** 선택지 3장을 가스로 다시 뽑는다 — 한 선택당 최대 2회 */
+  /** 선택지 3장을 마정석로 다시 뽑는다 — 한 선택당 최대 2회 */
   rerollAugments(): boolean {
     if (this.augmentChoices.length === 0) return false;
     if (this.rerollsUsed >= H.AUGMENT_REROLL_MAX) {
@@ -450,7 +450,7 @@ export class Game {
     }
     const cost = this.rerollCost;
     if (this.gas < cost) {
-      this.message = `가스 부족 — 리롤 ${cost} 필요.`;
+      this.message = `마정석 부족 — 리롤 ${cost} 필요.`;
       return false;
     }
     this.gas -= cost;
@@ -459,7 +459,7 @@ export class Game {
     return true;
   }
 
-  // ── 가스 스킬 개조 ──
+  // ── 마정석 스킬 개조 ──
   gasSkillCost(track: 'damage' | 'cdr'): number {
     return K.gasSkillCost(track === 'damage' ? this.hero.gasSkillDamage : this.hero.gasSkillCdr);
   }
@@ -468,7 +468,7 @@ export class Game {
     return !this.over && this.hero.skillId !== null && this.gas >= this.gasSkillCost(track);
   }
 
-  /** 가스로 스킬을 개조한다 — 종족 업그레이드와 같은 지갑을 두고 경쟁한다 */
+  /** 마정석로 스킬을 개조한다 — 종족 업그레이드와 같은 지갑을 두고 경쟁한다 */
   buyGasSkill(track: 'damage' | 'cdr'): boolean {
     if (this.hero.skillId === null) {
       this.message = '개조할 스킬이 없습니다 — 스킬 증강을 먼저 얻으세요.';
@@ -476,7 +476,7 @@ export class Game {
     }
     const cost = this.gasSkillCost(track);
     if (this.gas < cost) {
-      this.message = `가스 부족 — 개조 ${cost} 필요.`;
+      this.message = `마정석 부족 — 개조 ${cost} 필요.`;
       return false;
     }
     this.gas -= cost;
@@ -523,6 +523,8 @@ export class Game {
       return false;
     }
     this.bossCooldown = B.BOSS_COOLDOWN_SECONDS;
+    // 보스는 HP·속도 원본 그대로. 초반 느린 템포는 update의 combatDt가 보스·영웅·타워를 통째로
+    // 같은 비율로 늦추므로(순수 슬로우모션) 보스전 난이도는 불변이다 — 여기서 손댈 게 없다.
     this.spawn({
       kind: 'boss',
       name: `Lv${level} BOSS`,
@@ -552,7 +554,7 @@ export class Game {
     }
     const cost = this.spawnCost;
     if (this.mineral < cost) {
-      this.message = `미네랄 부족 — ${cost} 필요.`;
+      this.message = `금화 부족 — ${cost} 필요.`;
       return false;
     }
     this.mineral -= cost;
@@ -685,31 +687,31 @@ export class Game {
     return true;
   }
 
-  // ── 프로브 / 업그레이드 ──
+  // ── 광부 / 업그레이드 ──
   get probeCost(): number {
     return B.probeCost(this.probes);
   }
 
   buyProbe(): boolean {
     if (this.probes >= B.PROBE_MAX) {
-      this.message = `프로브는 최대 ${B.PROBE_MAX}기입니다.`;
+      this.message = `광부는 최대 ${B.PROBE_MAX}기입니다.`;
       return false;
     }
     const cost = this.probeCost;
     if (this.mineral < cost) {
-      this.message = `미네랄 부족 — 프로브 ${cost} 필요.`;
+      this.message = `금화 부족 — 광부 ${cost} 필요.`;
       return false;
     }
     this.mineral -= cost;
     this.probes++;
-    this.message = `프로브 ${this.probes}기 — 가스를 채취합니다. 다음 ${this.probeCost}.`;
+    this.message = `광부 ${this.probes}기 — 마정석를 채취합니다. 다음 ${this.probeCost}.`;
     return true;
   }
 
   upgrade(race: Race): boolean {
     const cost = B.upgradeGasCost(this.upgrades[race]);
     if (this.gas < cost) {
-      this.message = `가스 부족 — 업그레이드 ${cost} 필요.`;
+      this.message = `마정석 부족 — 업그레이드 ${cost} 필요.`;
       return false;
     }
     this.gas -= cost;
@@ -734,7 +736,7 @@ export class Game {
   /** 골드로 XP 구매 (TFT식) — 영웅 성장의 주 연료 */
   buyXp(): boolean {
     if (!this.canBuyXp) {
-      this.message = `미네랄 부족 — XP 구매 ${H.XP_BUY_GOLD} 필요.`;
+      this.message = `금화 부족 — XP 구매 ${H.XP_BUY_GOLD} 필요.`;
       return false;
     }
     this.mineral -= H.XP_BUY_GOLD;
@@ -758,8 +760,8 @@ export class Game {
       if (stats.gasPerWave > 0) this.gas += stats.gasPerWave;
       if (stats.mineralPerWave > 0 || stats.gasPerWave > 0) {
         const parts: string[] = [];
-        if (stats.mineralPerWave > 0) parts.push(`+${stats.mineralPerWave} 미네랄`);
-        if (stats.gasPerWave > 0) parts.push(`+${stats.gasPerWave} 가스`);
+        if (stats.mineralPerWave > 0) parts.push(`+${stats.mineralPerWave} 금화`);
+        if (stats.gasPerWave > 0) parts.push(`+${stats.gasPerWave} 마정석`);
         this.float(this.hero.x, this.hero.y, parts.join(' · '), '#8fd6ff');
       }
 
@@ -771,7 +773,8 @@ export class Game {
     }
 
     this.round++;
-    const hp = B.enemyHP(this.round);
+    // 초반 느린 템포 — 몹 체력을 ×p로 낮춘다. 이동·공속은 update의 combatDt가 함께 늦춘다.
+    const hp = Math.round(B.enemyHP(this.round) * B.earlyTempo(this.round));
     const armor = B.enemyArmor(this.round);
 
     const waveType = B.waveTypeOf(this.round);
@@ -811,7 +814,7 @@ export class Game {
     this.mineral += B.LEAK_MINERAL;
     this.score = Math.max(0, this.score - S.leakPenalty(this.round) * cost);
     const [x, y] = pathPos(enemy.distance);
-    this.float(x, y, `Life -${cost} · 미네랄 +${B.LEAK_MINERAL}`, '#ff5a3c');
+    this.float(x, y, `Life -${cost} · 금화 +${B.LEAK_MINERAL}`, '#ff5a3c');
     if (enemy.kind === 'boss') {
       this.message = `${enemy.name} 돌파! 다음 레벨은 열리지 않습니다.`;
     }
@@ -841,7 +844,7 @@ export class Game {
         : this.bossCleared >= B.BOSS_MAX_LEVEL
           ? ' · 모든 보스를 잡았습니다.'
           : ` · Lv${level + 1} 소환이 열렸습니다.`;
-      this.message = `Lv${level} BOSS 처치! +${reward} 미네랄${suffix}`;
+      this.message = `Lv${level} BOSS 처치! +${reward} 금화${suffix}`;
       return;
     }
 
@@ -934,17 +937,21 @@ export class Game {
       }
     }
 
-    this.advanceEnemies(dt);
+    // 초반 느린 템포 — 전투 스텝만 combatDt로 늦춘다(순수 슬로우모션). 위의 라운드 타이머·
+    // 스폰·마정석·보스 쿨다운은 실시간 dt를 써서 라운드 진행 속도는 그대로 유지한다.
+    const combatDt = dt * B.earlyTempo(this.round);
 
-    this.fireTowers(dt);
-    this.stepHero(dt);
+    this.advanceEnemies(combatDt);
+
+    this.fireTowers(combatDt);
+    this.stepHero(combatDt);
     // 영웅 생사와 무관하게 돌아야 한다 — 화상·장판은 계속 타고, 사망 폭발은 죽는 순간 터진다
-    this.tickBurns(dt);
-    this.tickBeam(dt);
-    this.tickZones(dt);
+    this.tickBurns(combatDt);
+    this.tickBeam(combatDt);
+    this.tickZones(combatDt);
     this.tickNova();
     if (this.shouldAutoCastSkill) this.useSkill();
-    this.stepDecoy(dt);
+    this.stepDecoy(combatDt);
 
     for (const enemy of this.enemies) {
       if (enemy.hp <= 0 && !enemy.dead) {
@@ -955,7 +962,8 @@ export class Game {
     if (this.selectedEnemy?.dead) this.selectedEnemy = null;
     this.enemies = this.enemies.filter((e) => !e.dead);
 
-    for (const shot of this.shots) shot.life -= dt;
+    // 투사체 궤적은 전투의 일부 — combatDt로 함께 늦춘다. (아래 떠오르는 텍스트는 UI라 실시간)
+    for (const shot of this.shots) shot.life -= combatDt;
     this.shots = this.shots.filter((s) => s.life > 0);
     for (const f of this.floats) {
       f.life -= dt;
