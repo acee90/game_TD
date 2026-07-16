@@ -438,9 +438,9 @@ describe('증강 효과 — 가산 합산이 기본, 곱연산은 소수 정예 
     expect(stats.splashRadius).toBe(45 + 40);
   });
 
-  test('전쟁군주는 타워를 강화한다 — 두 장이면 가산으로 +24%', () => {
+  test('전쟁군주는 타워를 강화한다 — 두 장이면 가산으로 +40%', () => {
     const stats = computeStats(1, [card('warlord'), card('warlord')]);
-    expect(stats.towerDamageMult).toBeCloseTo(1.24, 5);
+    expect(stats.towerDamageMult).toBeCloseTo(1.4, 5);
   });
 });
 

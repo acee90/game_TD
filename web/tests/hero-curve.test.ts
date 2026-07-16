@@ -1,6 +1,8 @@
 // 영웅 파워 커브의 기준선 (2026-07-13 3안 개편 후).
 // 골드 → XP → 레벨업 → 세 스탯 자동 균등 성장. 레벨 배수는 폐지 — 파워는 스탯 × 증강뿐이다.
-// 목표: R45(성장 정지)에 Lv 25~30 · 같은 골드의 한계 DPS 영웅 ≈ 타워 (income-curve.csv).
+// 목표 (2026-07-16 D3 재정의): 수입 20% 투자로 R45에 Lv ~24 · 실질 상한 ~Lv43.
+// 배경: economy-power-rebalance.md — XP 20골드 고정 + 완만한 지수(1.06)가
+// "최소 타워 + 영웅 몰빵"을 지배 전략으로 만들어 성장 지수를 1.10으로 올렸다.
 
 import { describe, expect, test } from 'vitest';
 import * as B from '../src/data/balance';
@@ -36,12 +38,12 @@ describe('경험치 비용 — 지수', () => {
     expect(H.xpToNext(30)).toBeGreaterThan(H.xpToNext(10) * 2.5);
   });
 
-  test('실질 상한 ≈ Lv60대 — R60 고점 수입(8,572) 전액으로도 Lv65는 못 산다', () => {
-    expect(xpToLevel(65)).toBeGreaterThan(8572);
+  test('실질 상한 ≈ Lv30대 후반 — R60 고점 수입(8,572) 전액으로도 Lv40은 못 산다', () => {
+    expect(xpToLevel(40)).toBeGreaterThan(8572);
   });
 });
 
-describe('레벨 속도 — 골드가 주 연료다 (설계: R45에 Lv 25~30)', () => {
+describe('레벨 속도 — 골드가 주 연료다 (설계: 수입 20%로 R45에 Lv ~21)', () => {
   test('킬 XP만으로는 Lv25에 한참 못 미친다 — 부축이다', () => {
     const hero = new Hero();
     for (let r = 1; r <= 45; r++) {
@@ -51,7 +53,7 @@ describe('레벨 속도 — 골드가 주 연료다 (설계: R45에 Lv 25~30)', 
     expect(hero.level).toBeLessThan(25);
   });
 
-  test('수입 저점의 ~25%를 XP에 넣으면 R45에 Lv 25~30', () => {
+  test('수입 저점의 ~20%를 XP에 넣으면 R45에 Lv 19~24', () => {
     const hero = new Hero();
     const goldBudget = 3651 * 0.2; // income-curve.csv R45 저점 × 20%
     let spent = 0;
@@ -64,8 +66,8 @@ describe('레벨 속도 — 골드가 주 연료다 (설계: R45에 Lv 25~30)', 
       }
       hero.pendingAugmentPicks = 0;
     }
-    expect(hero.level).toBeGreaterThanOrEqual(25);
-    expect(hero.level).toBeLessThanOrEqual(31);
+    expect(hero.level).toBeGreaterThanOrEqual(19);
+    expect(hero.level).toBeLessThanOrEqual(24);
   });
 });
 
@@ -101,6 +103,18 @@ describe('증강이 역전을 만든다 — 레벨이 아니라', () => {
     const focused = heroDps(24, ['marksman', 'marksman', 'marksman']); // 강화 3 = 특화
     const mixed = heroDps(24, ['marksman', 'marksman', 'plating']); // 강화 2 + 방어 1 — 특화 미발동
     expect(focused).toBeGreaterThan(mixed);
+  });
+});
+
+describe('타워 증강 — 2장 이상이면 끝까지 타워가 앞선다 (2026-07-16 사용자 지시)', () => {
+  test('전쟁군주 2장 + 가스 업그레이드 L10이면 GOD 타워가 풀투자 영웅을 이긴다', () => {
+    // 실버 대 실버 종반 비교 — 타워 쪽: 주력 병과 L10(가산 ×5) × 전쟁군주 2장(+30%)
+    const towerStats = computeStats(38, [card('warlord'), card('warlord')]);
+    const godEndgame =
+      GOD_TOWER_DPS * (1 + B.UPGRADE_DAMAGE_PER_LEVEL * 10) * towerStats.towerDamageMult;
+    // 영웅 쪽: 강화 5장(대특화 '초월' 발동) 풀투자
+    const heroEndgame = heroDps(38, ['might', 'might', 'might', 'vigor', 'vigor']);
+    expect(godEndgame).toBeGreaterThan(heroEndgame);
   });
 });
 

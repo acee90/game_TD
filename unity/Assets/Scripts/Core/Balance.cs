@@ -73,7 +73,9 @@ namespace GodTD.Core
         public const int SPAWN_UNIT_MINERAL = 12; // 소용돌이 클릭 → Lv1 생성 (strings:412)
         // 30 → 100 (2026-07-11): 프로브가 타워 2.5기 값이라 무조건 1순위였다.
         // 100이면 오프닝(시작 55) 구매가 불가능하고, 생존 우위가 +8R → +2R로 압축된다. ← web
-        public const int PROBE_MINERAL = 100;
+        // 100 → 60 (2026-07-16): 진입가 100은 초반 보상의 3배 — 가스 엔진 시동이 안 걸렸다.
+        // 오프닝 구매 불가(시작 55 < 60)는 유지. 지수 성장(×1.5)도 유지. ← web
+        public const int PROBE_MINERAL = 60;
 
         /// <summary>
         /// 유닛 생성 비용 — 누적 생성 횟수에 선형으로 오른다. ← web/src/data/balance.ts
@@ -103,9 +105,14 @@ namespace GodTD.Core
         public const int PROBE_MAX = 16;
         public const float GAS_PER_PROBE_SECOND = 0.25f;
 
-        /// <summary>파일런 종족 업그레이드. 가스 소비. 원본은 SC 네이티브라 비용 미확인(§8.4~8.5) [프로토]</summary>
-        public const float UPGRADE_MULT = 1.1f;
-        public static int UpgradeGasCost(int level) => 8 + 4 * level + level * level;
+        /// <summary>
+        /// 파일런 종족 업그레이드. 가스 소비. [프로토]
+        /// 2026-07-16 개편(economy-power-rebalance D1): 복리 ×1.1^L → 가산 1+0.4L,
+        /// 비용 8+4L+L² → 선형 2+4L. 가산+선형만이 "레벨이 오를수록 효율 감소"를 만든다.
+        /// 첫 업 2 = 시작 가스 6으로 3개 병과 1업. ← web/src/data/balance.ts
+        /// </summary>
+        public const float UPGRADE_DAMAGE_PER_LEVEL = 0.4f;
+        public static int UpgradeGasCost(int level) => 2 + 4 * level;
 
         // ───────── 보스 소환 ─────────
         // 소환은 라운드 진행과 무관한 상시 액션이고 쿨타임만 있다. 비용 없음.
@@ -123,8 +130,9 @@ namespace GodTD.Core
         /// </summary>
         // 레벨 성장 2.15 → 2.5 (2026-07-11): "항상 최고 소환" 처치율이 Lv6 96%였다.
         // 2.5에서 Lv5 54% · Lv6 75% — 레벨이 오를수록 리스크가 생긴다. ← web
-        public static float BossHP(int level) => 1150f * MathF.Pow(2.5f, level - 1);
-        public static float BossArmor(int level) => 3f * level;
+        // 2026-07-16: 기본공 7→4에 맞춰 HP 1150→700, 장갑 3L→1.5L (장갑은 감산이라 함께 절반).
+        public static float BossHP(int level) => 700f * MathF.Pow(2.5f, level - 1);
+        public static float BossArmor(int level) => 1.5f * level;
         public const float BOSS_SPEED = 26f;
 
         /// <summary>보스가 일주를 끝내면 라이프 손실이 크다 [프로토]</summary>
@@ -145,16 +153,32 @@ namespace GodTD.Core
 
         // ── 2026-07-11 재설계: 웨이브 총 체력 = 목표 clear(초) × 기대 유효 DPS ← web/src/data/balance.ts
         // 시뮬(48판)로 측정한 기대 유효 DPS(장갑 감산 반영, P50)의 구분지수 근사.
-        // 벽(R45+)은 지수 — 선형이면 지수로 크는 보드가 결국 이긴다. 보정 4회 이력은 웹 주석 참조.
+        // 벽은 지수 — 선형이면 지수로 크는 보드가 결국 이긴다. 보정 5회 이력은 웹 주석 참조.
+        // 2026-07-16 재적합: 기본공 7→4 + 가산 가스 업그레이드로 곡선 전면 갱신 (후반 성장 7.1%/R).
         public static float ExpectedBoardDps(int round)
         {
-            if (round <= 13) return 58f * MathF.Pow(1.22f, round - 1);
-            if (round <= 31) return 632f * MathF.Pow(1.105f, round - 13);
-            return 3830f * MathF.Pow(1.035f, round - 31);
+            if (round <= 13) return 37f * MathF.Pow(1.22f, round - 1);
+            if (round <= 31) return 420f * MathF.Pow(1.086f, round - 13);
+            return 1850f * MathF.Pow(1.071f, round - 31);
         }
 
-        public static float TargetClearSeconds(int round) =>
-            round <= 44 ? 18f + 0.45f * (round - 1) : 37.4f * MathF.Pow(1.2f, round - 44);
+        // 6차 (2026-07-16): 킥 있는 벽 폐지 → 성장률 연속 램프 (R30~48에 1.4%→20% 선형,
+        // 이후 유지). 최종 보스 없음 — R60도 그냥 강한 웨이브라 "갑자기 벽"이 없어야 한다.
+        // 목표: R60 도달 ≤10% · 클리어 ≤5%. ← web/src/data/balance.ts
+        public const int WAVE_RAMP_START = 30;
+        public const int WAVE_RAMP_END = 48;
+        public const float WAVE_BASE_RATE = 0.014f;
+        public const float WAVE_MAX_RATE = 0.2f;
+        public static float TargetClearSeconds(int round)
+        {
+            if (round <= WAVE_RAMP_START) return 18f + 0.45f * (round - 1);
+            float slope = (WAVE_MAX_RATE - WAVE_BASE_RATE) / (WAVE_RAMP_END - WAVE_RAMP_START);
+            float clearAtStart = 18f + 0.45f * (WAVE_RAMP_START - 1);
+            float t = MathF.Min(round, WAVE_RAMP_END) - WAVE_RAMP_START;
+            float ramp = MathF.Exp(WAVE_BASE_RATE * t + slope * t * t / 2f);
+            float tail = round > WAVE_RAMP_END ? MathF.Exp(WAVE_MAX_RATE * (round - WAVE_RAMP_END)) : 1f;
+            return clearAtStart * ramp * tail;
+        }
 
         public static float EnemyHP(int round) =>
             MathF.Max(1f, MathF.Round(ExpectedBoardDps(round) * TargetClearSeconds(round) / EnemyCount(round)));
@@ -165,7 +189,8 @@ namespace GodTD.Core
         /// "다음 계단 전에 티어를 올려야 한다"는 목표가 분명해진다. [프로토]
         /// </summary>
         public const int ENEMY_ARMOR_STEP_ROUNDS = 5;
-        public const int ENEMY_ARMOR_PER_STEP = 3;
+        // 2026-07-16: 3 → 1.5 — 기본공 7→4와 세트 (장갑은 감산이라 원피해와 함께 절반).
+        public const float ENEMY_ARMOR_PER_STEP = 1.5f;
         public static float EnemyArmor(int round) => (round / ENEMY_ARMOR_STEP_ROUNDS) * ENEMY_ARMOR_PER_STEP;
 
         /// <summary>
@@ -216,7 +241,8 @@ namespace GodTD.Core
         // ───────── 전투 (전부 [프로토]) ─────────
         // 원본은 무기슬롯→유닛 바인딩 정보가 없어 실제 공격력을 읽을 수 없다(§11.3).
         // 태그 3종의 전투 의미도 원본이 정의하지 않는다. 아래는 태그 이름에서 유도한 설계다.
-        public const float BASE_DAMAGE = 7f;
+        // 7 → 4 (2026-07-16 economy-power-rebalance D2): 공짜 파워를 가스 업그레이드로 이관. ← web
+        public const float BASE_DAMAGE = 4f;
         public static readonly float[] TIER_DAMAGE = { 1f, 3f, 9f, 28f, 95f };
         public static readonly float[] TIER_RANGE = { 120f, 140f, 160f, 185f, 225f };
         public const float BASE_ATTACK_INTERVAL = 0.9f;

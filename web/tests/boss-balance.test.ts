@@ -47,13 +47,23 @@ function fightLv1Boss(seed: number, budget: number): Fight {
 }
 
 const SEEDS = Array.from({ length: 40 }, (_, i) => i + 1);
+/** 같은 40판을 두 번 돌리지 않도록 예산별로 캐시한다 — 전투가 길어 판당 1~3초 걸린다 */
+const fightsCache = new Map<number, Fight[]>();
+const fightsAt = (budget: number): Fight[] => {
+  let fights = fightsCache.get(budget);
+  if (!fights) {
+    fights = SEEDS.map((s) => fightLv1Boss(s, budget));
+    fightsCache.set(budget, fights);
+  }
+  return fights;
+};
 const killRate = (budget: number): number =>
-  SEEDS.filter((s) => fightLv1Boss(s, budget).killed).length / SEEDS.length;
+  fightsAt(budget).filter((f) => f.killed).length / SEEDS.length;
 
 /** 조합(2단계) 유무로 가른 킬레이트 — towers < 산 유닛 수면 조합이 일어난 것 */
 function killRateBy(budget: number): { merged: number; plain: number } {
   const unitCount = Math.floor(budget / B.SPAWN_UNIT_MINERAL);
-  const fights = SEEDS.map((s) => fightLv1Boss(s, budget));
+  const fights = fightsAt(budget);
   const merged = fights.filter((f) => f.towers < unitCount);
   const plain = fights.filter((f) => f.towers >= unitCount);
   return {
@@ -67,13 +77,13 @@ describe('Lv1 보스 — 시작 전력으로 넘을 수 있어야 한다', () =>
     expect(Math.floor(B.START_MINERAL / B.SPAWN_UNIT_MINERAL)).toBe(4);
   });
 
-  test('75 미네랄(6기)이면 거의 어떤 뽑기 운에도 Lv1 보스를 잡는다', () => {
+  test('75 미네랄(6기)이면 거의 어떤 뽑기 운에도 Lv1 보스를 잡는다', { timeout: 60_000 }, () => {
     // 보스는 영웅에게 저지되지 않으므로 자리 운이 최악이면 아주 드물게 새어나간다.
     // 2026-07-11 웨이브 재설계(몹 20~36기)로 잡몹이 타워 사격을 나눠 받아 0.95 → 0.85로 완화.
     expect(killRate(COMFORTABLE_BUDGET)).toBeGreaterThanOrEqual(0.85);
   });
 
-  test('시작 미네랄만으로는 뽑기 운이다 — 2단계가 떠야 잡는 판이 된다', () => {
+  test('시작 미네랄만으로는 뽑기 운이다 — 2단계가 떠야 잡는 판이 된다', { timeout: 60_000 }, () => {
     const overall = killRate(B.START_MINERAL);
     expect(overall).toBeGreaterThanOrEqual(0.2); // 스탯이 선택 카드로 배분되며 즉시 적립 시절보다 미세 하향
     expect(overall).toBeLessThan(0.9);
@@ -86,7 +96,7 @@ describe('Lv1 보스 — 시작 전력으로 넘을 수 있어야 한다', () =>
     expect(plain).toBeLessThan(0.35);
   });
 
-  test('Lv1 보스가 즉사하지는 않는다', () => {
+  test('Lv1 보스가 즉사하지는 않는다', { timeout: 60_000 }, () => {
     const fastest = Math.min(...SEEDS.map((s) => fightLv1Boss(s, COMFORTABLE_BUDGET).seconds));
     expect(fastest).toBeGreaterThan(3);
   });

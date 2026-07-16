@@ -43,6 +43,7 @@ docs/
 | [kris-cooper-bran-the-breaker-kris-cooper.jpg](reference/kris-cooper-bran-the-breaker-kris-cooper.jpg) | 현행 (화풍 참조) | 외부 화풍 레퍼런스 — 선·면·팔레트만 참고, 출하 리소스 아님 |
 | [wandering-knight-concept-v1.png](reference/wandering-knight-concept-v1.png) | 현행 (아트 기준) | Meshy용 방랑기사 정면 콘셉트 v1 |
 | [wandering-archer-concept-v1.png](reference/wandering-archer-concept-v1.png) | 현행 (아트 기준) | Meshy용 방랑궁수 정면 콘셉트 v1 |
+| [wandering-archer-chibi-tpose-concept-v1.png](reference/wandering-archer-chibi-tpose-concept-v1.png) | 현행 (모델링 기준) | Meshy용 치비 로우폴리 방랑궁수 T포즈 v1 |
 | [god-td-system-notes-v0.1.md](reference/god-td-system-notes-v0.1.md) | 보관 | 초기 시스템 정리 (맵분석으로 대체) |
 | [god-td-ops-layer-analysis-v0.1.md](reference/god-td-ops-layer-analysis-v0.1.md) | 보관 | 운영 레이어 초기 분석 |
 
@@ -60,6 +61,7 @@ docs/
 |---|---|---|
 | [unity-sync-plan.md](exec-plans/unity-sync-plan.md) | 진행 중 | Unity 동기화 이어하기 (미커밋 부분 반영 상태 포함) |
 | [unity-hud-redesign.md](exec-plans/unity-hud-redesign.md) | 초안 | H1~H4 구현 이력 + H5 프로덕션 HUD 업그레이드 계획 |
+| [economy-power-rebalance.md](exec-plans/economy-power-rebalance.md) | 구현됨 | 영웅 비용 스케일링 + 가스 업그레이드 개편 — 시뮬 검증 완료, 사람 플레이테스트 대기 |
 
 ## balance/ — 자동 생성 시트
 

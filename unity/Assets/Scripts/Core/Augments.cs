@@ -240,8 +240,8 @@ namespace GodTD.Core
                 new AugmentEffect { MineralPerKill = 1 }),
             new Augment("phoenix", AugmentKind.Utility, "불사조", "부활 대기 4초 감소", 2,
                 new AugmentEffect { RespawnCut = 4f }),
-            new Augment("warlord", AugmentKind.Utility, "전쟁군주", "모든 타워 공격력 +12%", 3,
-                new AugmentEffect { TowerDamageMult = 1.12f }),
+            new Augment("warlord", AugmentKind.Utility, "전쟁군주", "모든 타워 공격력 +20%", 3,
+                new AugmentEffect { TowerDamageMult = 1.2f }), // 1.12 → 1.2 (2026-07-16 2차: 타워증강 2장이면 끝까지 타워 우위) ← web
 
             // ── 액티브 스킬 획득 (영웅은 하나만 든다)
             new Augment("skill_whirlwind", AugmentKind.Tank, "소용돌이",

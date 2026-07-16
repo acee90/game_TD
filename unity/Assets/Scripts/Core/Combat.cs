@@ -39,8 +39,10 @@ namespace GodTD.Core
         }
 
         /// <summary>종족 업그레이드는 곱연산 복리. 크리쳐도 자체 업그레이드 라인이 있다(strings:664 '크리업').</summary>
+        // 가산 — 레벨당 기본공의 40%씩 (2026-07-16, 복리 폐지). 선형 비용과 짝지어
+        // 레벨이 오를수록 가스 효율이 떨어진다 — 몰빵 폭주 방지. ← web/src/game/combat.ts
         public static float UpgradeMultiplier(UpgradeLevels levels, Race race) =>
-            MathF.Pow(Balance.UPGRADE_MULT, levels[race]);
+            1f + Balance.UPGRADE_DAMAGE_PER_LEVEL * levels[race];
 
         public static float Damage(Tower tower, UpgradeLevels levels) =>
             Balance.BASE_DAMAGE *

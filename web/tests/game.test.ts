@@ -174,12 +174,23 @@ describe('라운드 진행 — 고정 간격', () => {
       expect(waveHp(r)).toBeLessThan(target * 1.03);
     }
 
-    // 목표 clear: R1부터 긴장(18초), R44까지 선형, 이후 지수 벽 (4차 보정 — balance.ts 주석)
+    // 목표 clear: R1부터 긴장(18초). 6차 보정 — 킥 없는 성장률 연속 램프 (balance.ts 주석)
     expect(B.targetClearSeconds(1)).toBeCloseTo(18, 1);
-    expect(B.targetClearSeconds(44)).toBeGreaterThan(35);
-    // 벽은 지수다 — 선형이면 보드 성장(지수)이 결국 이긴다
-    const wallGrowth = B.targetClearSeconds(55) / B.targetClearSeconds(54);
-    expect(wallGrowth).toBeGreaterThan(1.15);
+    // 후반 성장률은 보드 후반 성장(+7.1%/라운드)을 확실히 앞선다 — 아니면 생존 보드가
+    // 곡선을 따돌리고 영생한다 (거듭제곱 꼬리로 확인한 함정)
+    const lateGrowth = B.targetClearSeconds(56) / B.targetClearSeconds(55);
+    expect(lateGrowth).toBeGreaterThan(1.1);
+    // 킥 없음 — 성장률이 갑자기 점프하지 않는다 (라운드 간 성장률 증가폭 ≤ 2%p).
+    // 선형 오프닝(≤램프 시작)은 상대 성장률이 자연 감소하므로 단조 검사는 램프부터.
+    let prevRate = B.targetClearSeconds(2) / B.targetClearSeconds(1);
+    for (let r = 2; r < 70; r++) {
+      const rate = B.targetClearSeconds(r + 1) / B.targetClearSeconds(r);
+      if (r >= B.WAVE_RAMP_START) {
+        expect(rate).toBeGreaterThanOrEqual(prevRate - 1e-9); // 램프 이후 완화 구간 없음
+      }
+      expect(rate - prevRate).toBeLessThan(0.02); // 벽 킥 금지
+      prevRate = rate;
+    }
 
     // 총 체력은 단조 증가 — 사이클 경계 포함
     for (let r = 1; r < 60; r++) {
