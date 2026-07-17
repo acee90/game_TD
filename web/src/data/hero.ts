@@ -80,10 +80,13 @@ export const SKILL_PER_INT = 0.035;
  *
  * 2 + L/10 → 1 + L/7 (2026-07-16, economy-power-rebalance 2차): 영웅 파워커브를
  * **뒤로** 민다(사용자 지시: "영웅이 타워보다 강해지는 건 R45 이후"). 중반 레벨(15~25)의
- * 포인트를 깎고 후반 레벨을 굵게 — Lv20 스탯 -20%, Lv40 -2%로 총량은 거의 보존된다.
- * 늦게 피지만 늦게는 강하다 — 영웅 빌드의 고점(클리어력)은 살린다.
+ * 포인트를 깎고 후반 레벨을 굵게.
+ *
+ * 1 + L/7 → 1 + L/6 (2026-07-17 4차): 후반이 너무 얇았다 — 플레이테스트
+ * "Lv30 넘게 투자해도 골드 대비 파워가 약함". Lv30 이하는 거의 그대로 두고
+ * (Lv30 스탯 +3%), Lv35+가 굵어진다(Lv38 +14%) — XP 지수 완화(1.12→1.10)와 세트.
  */
-export const levelStatPoints = (level: number): number => 1 + Math.floor(level / 7);
+export const levelStatPoints = (level: number): number => 1 + Math.floor(level / 6);
 
 /** 해당 레벨까지 각 스탯이 공통으로 받은 자연 성장치. 총 예산을 3등분해 기존 파워 총량을 보존한다. */
 export function statBonusByLevel(level: number): number {
@@ -128,11 +131,15 @@ export const XP_BUY_AMOUNT = 20;
  *
  * 1.10 → 1.12 (같은 날 2차): 교차(영웅이 최강 타워를 3라운드 연속 넘는 시점) 중앙이
  * 여전히 R10대였다. 영웅 개화를 R45+로 미는 두 노브 중 하나 — 다른 하나는
- * levelStatPoints 백로딩. 새 창: 수입 20%로 R45에 Lv ~21, 실질 상한 ~Lv38.
- * tests/hero-curve.test.ts가 이 창을 지킨다.
+ * levelStatPoints 백로딩.
+ *
+ * 1.12 → 1.10 (2026-07-17 4차): 과했다 — 플레이테스트 "Lv32에 4천 골드를 넣어도
+ * 타워가 월등". Lv32 누적이 4,256골드로 게임 수입의 대부분이었다. 1.10이면 2,750.
+ * 후반 가치는 levelStatPoints 상향(1+L/7 → 1+L/6)과 세트로 회복한다.
+ * 새 창: 수입 20%로 R45에 Lv ~24, 실질 상한 ~Lv43. tests/hero-curve.test.ts가 지킨다.
  */
 export const XP_BASE_COST = 14;
-export const XP_COST_GROWTH = 1.12;
+export const XP_COST_GROWTH = 1.1;
 export const xpToNext = (level: number): number =>
   Math.round(XP_BASE_COST * Math.pow(XP_COST_GROWTH, level));
 

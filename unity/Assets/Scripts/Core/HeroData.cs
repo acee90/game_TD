@@ -70,8 +70,8 @@ namespace GodTD.Core
         /// 3등분해 파워 총량을 보존하면서 중간 빌드 전환 비용을 없앤다.
         /// </summary>
         /// <summary>레벨업이 세 스탯에 나눠 주는 총 포인트 — 후반 레벨일수록 굵게</summary>
-        // 2+L/10 → 1+L/7 (2026-07-16 2차): 파워커브 백로딩 — 중반 -20%, 후반 보존. ← web
-        public static int LevelStatPoints(int level) => 1 + level / 7;
+        // 2+L/10 → 1+L/7 → 1+L/6 (2026-07-17 4차): 백로딩 유지 + 후반 상향 (Lv38 +14%). ← web
+        public static int LevelStatPoints(int level) => 1 + level / 6;
 
         /// <summary>해당 레벨까지 각 스탯이 공통으로 받은 자연 성장치.</summary>
         public static float StatBonusByLevel(int level)
@@ -108,8 +108,8 @@ namespace GodTD.Core
         /// 1.10이면 골드 2배당 +7레벨 — 새 창: 수입 20%로 R45에 Lv~24, 실질 상한 ~Lv43. ← web
         /// </summary>
         public const float XP_BASE_COST = 14f;
-        // 1.10 → 1.12 (2026-07-16 2차): 영웅 개화를 뒤로 — 수입 20%로 R45에 Lv~21, 상한 ~Lv38. ← web
-        public const float XP_COST_GROWTH = 1.12f;
+        // 1.12 → 1.10 (2026-07-17 4차): Lv30+ 비용 완화 — 후반 가치는 LevelStatPoints 상향과 세트. ← web
+        public const float XP_COST_GROWTH = 1.1f;
         public static int XpToNext(int level) =>
             (int)MathF.Round(XP_BASE_COST * MathF.Pow(XP_COST_GROWTH, level));
 

@@ -181,11 +181,13 @@ function selectionInfo(game: Game): string {
     return '<span class="dim">빈 타일 = 유닛 생성 · 유닛 타일 = 정보 · 몹/보스 클릭 = 스탯. 같은 유닛 2기가 모이면 자동 조합됩니다.</span>';
   }
   const total = damage(tower, game.upgrades);
-  // 기본공과 강화(가스 업그레이드) 몫을 분리해 보여준다 (플레이테스트 2026-07-17 요청)
+  // 공격력은 합계가 주인공, 분해는 칩+호버로 (플레이테스트 2026-07-17 2차: 가독성)
   const base = damage(tower, [0, 0, 0, 0]);
   const upLevel = game.upgrades[tower.def.race];
   const upText =
-    upLevel > 0 ? ` <span class="chip">기본 ${base.toFixed(0)} + 강화Lv${upLevel} ${(total - base).toFixed(0)}</span>` : '';
+    upLevel > 0
+      ? ` <span class="chip" title="기본 ${base.toFixed(0)} + 강화 ${(total - base).toFixed(0)}">강화 Lv${upLevel}</span>`
+      : '';
   const dps = (total / attackInterval(tower)).toFixed(0);
   // F5 (unity-hud-playtest-v0.1) — 간격(초/회)이 아니라 초당 공격 횟수. 큰 값 = 빠른 공격.
   const rate = 1 / Math.max(0.01, attackInterval(tower));
@@ -196,7 +198,7 @@ function selectionInfo(game: Game): string {
       <span class="chip">${TIER_LABEL[tower.tier]}</span>
       <span class="chip">【 ${tagLabel(tower.def)} 】</span>
     </div>
-    <div class="dim">${RACES[tower.def.race]} · 공격력 ${total.toFixed(0)}${upText} · 공속 ${rateText}회/초
+    <div class="dim">${RACES[tower.def.race]} · 공격력 <b>${total.toFixed(0)}</b>${upText} · 공속 ${rateText}회/초
       · DPS ${dps} · 사거리 ${range(tower).toFixed(0)}</div>`;
 }
 

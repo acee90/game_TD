@@ -58,7 +58,10 @@ export const KILL_MILESTONES: readonly (readonly [kills: number, mineral: number
  * 그러면 유닛 1기당 20킬을 모아야 해서 초반이 굶는다. 라운드마다 목돈이 들어오는 편이
  * 타워를 세우는 리듬과 맞는다. [프로토]
  */
-export const waveReward = (round: number): number => 10 + 3 * round;
+// 2026-07-17 (4차): R35+ 이차항 가산 — "R40부터 급격히 어려워지는데 보상은 선형"
+// (플레이테스트). 후반 라운드 돌파가 목돈이 되어 종반 벽과 나란히 큰다.
+export const waveReward = (round: number): number =>
+  Math.round(10 + 3 * round + 0.1 * Math.max(0, round - 35) ** 2);
 
 /** 누출 시 라이프 -1 · 미네랄 +5. strings:358 'Life -1 ! ! ! ! !미네랄 +5' [원본확정] */
 export const LEAK_MINERAL = 5;
@@ -92,7 +95,9 @@ export const SPAWN_UNIT_MINERAL = 12; // 소용돌이 클릭 → Lv1 생성 (str
  * (고정 12일 때: GOD 1기 R20 · 5기 R32 · R51에 20기 · R61 포화) [프로토]
  */
 export const SPAWN_FREE_COUNT = 8;
-export const SPAWN_COST_GROWTH = 0.45;
+// 0.45 → 0.35 (2026-07-17 4차): "타워 뽑는 골드가 너무 급격히 오른다"(플레이테스트).
+// 목표: 광부 2~3 + 타워만 운영 시 R40에 GOD ~4기.
+export const SPAWN_COST_GROWTH = 0.35;
 export const spawnUnitCost = (spawned: number): number =>
   Math.round(SPAWN_UNIT_MINERAL + SPAWN_COST_GROWTH * Math.max(0, spawned - SPAWN_FREE_COUNT));
 /**
@@ -115,7 +120,9 @@ export const PROBE_COST_GROWTH = 1.5;
 export const probeCost = (owned: number): number =>
   Math.round(PROBE_MINERAL * Math.pow(PROBE_COST_GROWTH, owned));
 export const PROBE_MAX = 16;
-export const GAS_PER_PROBE_SECOND = 0.25;
+// 0.25 → 0.4 (2026-07-17 4차): 기본공을 3으로 더 깎은 몫을 가스 축이 받는다 —
+// 업그레이드가 보드 파워의 주축이 된다. 광부 2~3기로도 엔진이 돈다.
+export const GAS_PER_PROBE_SECOND = 0.4;
 
 /**
  * 파일런 종족 업그레이드. 가스 소비. 원본은 SC 네이티브라 비용 미확인(§8.4~8.5) [프로토]
@@ -131,7 +138,9 @@ export const GAS_PER_PROBE_SECOND = 0.25;
  * 구매(목표 R60)에서도 제어 가능하다(몰빵 30업 = ×13 vs 복리 ×17+).
  * 첫 업 2 = 시작 가스 6으로 **3개 병과 1업** — 초반 웨이브를 업그레이드로 버틴다.
  */
-export const UPGRADE_DAMAGE_PER_LEVEL = 0.4;
+// 0.4 → 0.45 (2026-07-17 4차): 기본공 3 체제에서 구매 파워의 몫을 더 키운다 —
+// 타워증강 앵커(전쟁군주 2장 + 몰빵 L15 > 풀투자 영웅)도 이 값이어야 성립한다.
+export const UPGRADE_DAMAGE_PER_LEVEL = 0.45;
 export const upgradeGasCost = (level: number): number => 2 + 4 * level;
 
 // ───────── 보스 소환 ─────────
@@ -159,8 +168,11 @@ export const BOSS_COOLDOWN_SECONDS = 45; // [프로토]
 // Lv4 첫 클리어 중앙 R15 · Lv5 R22 · Lv6 R22로 소진이 너무 빨랐다 (플레이테스트:
 // "R20~25에 Lv4·5, GOD 1기면 Lv6도" — GOD 1기 이후 타워 건설이 무의미해짐).
 // Lv1~2 앵커(base 700)는 유지 — 초반 리듬 불변, 상위 레벨만 가팔라진다.
-export const bossHP = (level: number): number => 700 * Math.pow(3.0, level - 1);
-export const bossArmor = (level: number): number => 1.5 * level;
+// 2026-07-17 (4차): 성장 3.0 → 3.4 — GOD 다수 체제(가스 0.4/s·생성비 완화)에서
+// "GOD 1기 + 3~4업이면 R20에 Lv6"이 또 뚫렸다. base 700 → 550은 기본공 4→3 동행
+// (Lv1 앵커 = 시작 자원으로 처치 — boss-balance.test.ts). Lv6 = 250k (종반 보드 몫).
+export const bossHP = (level: number): number => 550 * Math.pow(3.4, level - 1);
+export const bossArmor = (level: number): number => 1.1 * level; // 기본공 3 동행
 export const BOSS_SPEED = 26;
 /**
  * 보스 누출 = 잡몹과 같은 **라이프 -1** (2026-07-17, 2+L → 1).
@@ -209,9 +221,11 @@ export const posInCycle = (round: number): number => (round - 1) % CYCLE_ROUNDS;
  * 공짜 파워를 깎고 구매 파워로 옮긴 개편의 의도된 모양이다.
  */
 export const expectedBoardDps = (round: number): number => {
-  if (round <= 13) return 37 * Math.pow(1.22, round - 1);
-  if (round <= 31) return 420 * Math.pow(1.086, round - 13);
-  return 1850 * Math.pow(1.071, round - 31);
+  // 2026-07-17 4차 재적합 (정책 6 × 시드 8): 기본공 3·가스 0.4/s·생성비 0.35·보상 가속.
+  // 후반 성장률 7.1% → 8.8%/라운드 — 더 부유한 경제가 보드를 더 오래 키운다.
+  if (round <= 13) return 28 * Math.pow(1.195, round - 1);
+  if (round <= 31) return 237 * Math.pow(1.116, round - 13);
+  return 1705 * Math.pow(1.088, round - 31);
 };
 
 /**
@@ -241,9 +255,11 @@ export const expectedBoardDps = (round: number): number => {
  *   (1차 시도 RAMP_END 52·0.18은 통과율 31%로 물렀다).
  */
 export const WAVE_RAMP_START = 30;
-export const WAVE_RAMP_END = 48;
+// 48 → 52 (2026-07-17 4차): "R40부터 급격히 어려워진다" — 램프를 늘려 R40 시점
+// 성장률을 12.9% → 10.4%로 눌러 절벽 체감을 완화한다 (보드 후반 성장 8.8%와의 간극 축소).
+export const WAVE_RAMP_END = 52;
 export const WAVE_BASE_RATE = 0.014; // R30 시점 선형 구간의 상대 성장률과 일치 (0.45/31.1)
-export const WAVE_MAX_RATE = 0.22; // 연속 복리 ×e^0.22 ≈ ×1.246 — 0.20은 보스 무해화 후 클리어율 11.6%로 물렀다 (2026-07-17)
+export const WAVE_MAX_RATE = 0.25; // ×e^0.25 ≈ ×1.284 — 4차 경제(보상 가속·가스 0.4)가 종반을 밀어올려 0.22로는 도달 16% (2026-07-17)
 const RATE_SLOPE = (WAVE_MAX_RATE - WAVE_BASE_RATE) / (WAVE_RAMP_END - WAVE_RAMP_START);
 const CLEAR_AT_RAMP_START = 18 + 0.45 * (WAVE_RAMP_START - 1);
 export const targetClearSeconds = (round: number): number => {
@@ -265,7 +281,8 @@ export const enemyHP = (round: number): number =>
 export const ENEMY_ARMOR_STEP_ROUNDS = 5;
 // 2026-07-16: 3 → 1.5 — 기본공 7→4와 세트. 장갑은 감산이라 원피해가 절반이 되면
 // 같이 절반이 돼야 "계단 전에 티어를 올려라"의 압력이 그대로 유지된다.
-export const ENEMY_ARMOR_PER_STEP = 1.5;
+// 2026-07-17: 1.5 → 1.1 — 기본공 4→3 동행 (장갑/기본공 비율 유지).
+export const ENEMY_ARMOR_PER_STEP = 1.1;
 export const enemyArmor = (round: number): number =>
   Math.floor(round / ENEMY_ARMOR_STEP_ROUNDS) * ENEMY_ARMOR_PER_STEP;
 
@@ -340,8 +357,11 @@ export const waveTypeOf = (round: number): WaveType =>
  * 2026-07-16: 7 → 4 (economy-power-rebalance D2). 공짜 파워를 줄이고 깎인 몫을
  * 가스 업그레이드(구매 파워)로 옮긴다 — "재화 = 전투력" 저울에 타워도 올린다.
  * 1/3(≈2.3)까지 깎으면 Lv1 유닛 원피해가 장갑(감산) 밑으로 깔려 티어1이 죽어서 1/2 근처로.
+ *
+ * 2026-07-17 (4차): 4 → 3 — "기본 공격력을 더 대폭 깎고 가스 획득량을 올리자"
+ * (플레이테스트). 장갑도 비율 유지를 위해 1.5 → 1.1로 동행 (장갑/기본공 ≈ 0.375).
  */
-export const BASE_DAMAGE = 4;
+export const BASE_DAMAGE = 3;
 export const TIER_DAMAGE = [1, 3, 9, 28, 95] as const;
 export const TIER_RANGE = [120, 140, 160, 185, 225] as const;
 export const BASE_ATTACK_INTERVAL = 0.9;

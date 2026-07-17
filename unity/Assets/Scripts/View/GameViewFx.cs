@@ -57,6 +57,11 @@ namespace GodTD.View
         // ── 임포트한 파티클 팩(URP 변환) 프리팹 — Resources/Fx/*, 풀링 재사용 ──
         // 코드 생성 버스트 위에 얹는 '고급' 착탄·총구 연출. 프리팹이 없으면 코드 FX만으로 폴백한다.
         GameObject fxMuzzle, fxExplosion, fxPlasma, fxSparks;
+        /// <summary>
+        /// VFX 리뷰에서 임포트 팩 오버레이만 끄고 코드 FX와 비교한다.
+        /// 기본값 true라 실제 게임 동작은 바뀌지 않는다.
+        /// </summary>
+        public bool ImportedFxEnabled { get; set; } = true;
         const float FX_MUZZLE_SCALE = 0.22f;
         const float FX_IMPACT_SCALE = 0.28f;
         const float FX_SPLASH_SCALE = 0.42f;
@@ -194,6 +199,12 @@ namespace GodTD.View
             fxActive.Clear();
             foreach (var p in pulses) { p.Active = false; p.Go.SetActive(false); }
             foreach (var r in rings) { r.Active = false; r.Line.gameObject.SetActive(false); }
+            foreach (var a in aoeAreas)
+            {
+                a.Active = false;
+                a.Disc.SetActive(false);
+                a.Ring.gameObject.SetActive(false);
+            }
             foreach (var pair in floatTexts) Destroy(pair.Value.gameObject);
             floatTexts.Clear();
             foreach (var pair in enemyBars) Destroy(pair.Value.Root);
@@ -221,7 +232,7 @@ namespace GodTD.View
         /// <summary>착탄/총구 위치에 팩 프리팹을 재생. 프리팹 null이면 무시(코드 FX 폴백).</summary>
         void SpawnFx(GameObject prefab, Vector3 pos, float scale)
         {
-            if (prefab == null || fxActive.Count >= FX_MAX_ACTIVE) return;
+            if (!ImportedFxEnabled || prefab == null || fxActive.Count >= FX_MAX_ACTIVE) return;
             if (!fxPool.TryGetValue(prefab, out var pool)) { pool = new Stack<ParticleSystem>(); fxPool[prefab] = pool; }
             ParticleSystem ps = pool.Count > 0 ? pool.Pop() : null;
             if (ps == null)

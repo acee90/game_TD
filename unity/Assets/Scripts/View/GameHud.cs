@@ -916,16 +916,16 @@ namespace GodTD.View
                 selMeta.text = $"<color=#8A93AD>{Units.TIER_LABEL[tower.Tier]}</color>";
                 float dmg = Combat.Damage(tower, game.Upgrades);
                 float interval = Combat.AttackInterval(tower);
-                selStats.text =
-                    $"공격력 <color=#E8ECF6>{dmg:0}</color> · 공속 <color=#E8ECF6>{AttackRate(interval)}</color>" +
-                    $" · DPS <color=#E8ECF6>{dmg / interval:0}</color> · 사거리 {Combat.Range(tower):0}";
-                // 기본공과 강화(가스 업그레이드) 몫을 분리해 보여준다 (플레이테스트 2026-07-17)
+                // 합계가 주인공, 분해는 괄호 안에 작게 — "공격력 45 (27+18 · Lv3)" (2026-07-17 2차)
                 float baseDmg = Combat.Damage(tower, UpgradeLevels.Zero);
                 int upLevel = game.Upgrades[tower.Def.Race];
-                string upLine = upLevel > 0
-                    ? $"  <color=#85A875>기본 {baseDmg:0} + 강화Lv{upLevel} +{dmg - baseDmg:0}</color>"
+                string breakdown = upLevel > 0
+                    ? $"<size=9><color=#85A875>({baseDmg:0}+{dmg - baseDmg:0}·Lv{upLevel})</color></size> "
                     : "";
-                selBody.text = $"【 {Units.TagLabel(tower.Def)} 】{upLine}";
+                selStats.text =
+                    $"공격력 <color=#E8ECF6>{dmg:0}</color> {breakdown}· 공속 <color=#E8ECF6>{AttackRate(interval)}</color>" +
+                    $" · DPS <color=#E8ECF6>{dmg / interval:0}</color> · 사거리 {Combat.Range(tower):0}";
+                selBody.text = $"【 {Units.TagLabel(tower.Def)} 】";
             }
             else if (sel.IsEmptyTile)
             {
