@@ -26,8 +26,11 @@ namespace GodTD.Core
         public readonly SkillId Id;
         public readonly string Name;
         public readonly string Description;
-        /// <summary>쿨타임(초)</summary>
-        public readonly float Cooldown;
+        /// <summary>
+        /// 시전에 필요한 마나 (TFT식). **쿨타임은 없다** (2026-07-17 웹 동기화).
+        /// 마나는 평타(+10)와 피격(+8)으로 찬다 — 공속이 곧 스킬 회전이고 탱커도 자주 쓴다.
+        /// </summary>
+        public readonly float ManaMax;
         /// <summary>영웅 공격력 대비 피해 배수. 0이면 피해가 없는 스킬.</summary>
         public readonly float DamageMult;
         /// <summary>효과 반경 (0이면 반경 개념 없음)</summary>
@@ -36,18 +39,22 @@ namespace GodTD.Core
         public readonly int Targets;
         /// <summary>자동 시전 조건: 유효 사거리 안에 적이 이만큼 있어야 쏜다</summary>
         public readonly int AutoCastMinTargets;
+        /// <summary>필요 마나가 영웅 공격 속도를 따라 줄어드는가 — 허수아비처럼 '손이 빠르면 자주'</summary>
+        public readonly bool ScalesWithAttackSpeed;
 
-        public SkillDef(SkillId id, string name, string description, float cooldown,
-            float damageMult, float radius, int targets, int autoCastMinTargets)
+        public SkillDef(SkillId id, string name, string description, float manaMax,
+            float damageMult, float radius, int targets, int autoCastMinTargets,
+            bool scalesWithAttackSpeed = false)
         {
             Id = id;
             Name = name;
             Description = description;
-            Cooldown = cooldown;
+            ManaMax = manaMax;
             DamageMult = damageMult;
             Radius = radius;
             Targets = targets;
             AutoCastMinTargets = autoCastMinTargets;
+            ScalesWithAttackSpeed = scalesWithAttackSpeed;
         }
     }
 
@@ -57,7 +64,8 @@ namespace GodTD.Core
     /// </summary>
     public struct SkillMods
     {
-        public float CooldownMult;
+        /// <summary>필요 마나 배수 (옛 쿨감의 자리) — 가산 폴드, 하한 MANA_MAX_FLOOR</summary>
+        public float ManaMaxMult;
         public float DamageMult;
         public float RadiusAdd;
         public int ExtraTargets;
@@ -73,7 +81,7 @@ namespace GodTD.Core
 
         public static SkillMods None => new SkillMods
         {
-            CooldownMult = 1f,
+            ManaMaxMult = 1f,
             DamageMult = 1f,
             RadiusAdd = 0f,
             ExtraTargets = 0,
@@ -88,7 +96,7 @@ namespace GodTD.Core
     /// <summary>증강이 기여하는 스킬 개조 조각 — TS의 Partial&lt;SkillMods&gt;에 해당</summary>
     public sealed class SkillModPatch
     {
-        public float? CooldownMult;
+        public float? ManaMaxMult;
         public float? DamageMult;
         public float? RadiusAdd;
         public int? ExtraTargets;
@@ -103,16 +111,17 @@ namespace GodTD.Core
     public sealed class ResolvedSkill
     {
         public readonly SkillDef Def;
-        public readonly float Cooldown;
+        /// <summary>시전에 필요한 마나 — 개조·공속 반영 후</summary>
+        public readonly float ManaMax;
         public readonly float DamageMult;
         public readonly float Radius;
         public readonly int Targets;
         public readonly SkillMods Mods;
 
-        public ResolvedSkill(SkillDef def, float cooldown, float damageMult, float radius, int targets, SkillMods mods)
+        public ResolvedSkill(SkillDef def, float manaMax, float damageMult, float radius, int targets, SkillMods mods)
         {
             Def = def;
-            Cooldown = cooldown;
+            ManaMax = manaMax;
             DamageMult = damageMult;
             Radius = radius;
             Targets = targets;
@@ -126,20 +135,21 @@ namespace GodTD.Core
         {
             [SkillId.Whirlwind] = new SkillDef(SkillId.Whirlwind, "소용돌이",
                 "주변의 적 전체에 공격력 3배 피해",
-                cooldown: 8f, damageMult: 3f, radius: 70f, targets: 0,
+                manaMax: 100f, damageMult: 3f, radius: 70f, targets: 0,
                 autoCastMinTargets: 2), // 하나 때리자고 쓰기엔 아깝다
             [SkillId.Volley] = new SkillDef(SkillId.Volley, "일제 사격",
                 "사거리 안 적 4명에게 각각 공격력 2배 피해",
-                cooldown: 7f, damageMult: 2f, radius: 0f, targets: 4, // 반경 0 = 영웅 사거리를 쓴다
+                manaMax: 90f, damageMult: 2f, radius: 0f, targets: 4, // 반경 0 = 영웅 사거리를 쓴다
                 autoCastMinTargets: 1), // 단일에도 값어치가 있다
             [SkillId.Meteor] = new SkillDef(SkillId.Meteor, "유성",
                 "적이 가장 많은 곳에 공격력 6배 광역 피해",
-                cooldown: 13f, damageMult: 6f, radius: 85f, targets: 0,
+                manaMax: 160f, damageMult: 6f, radius: 85f, targets: 0,
                 autoCastMinTargets: 3), // 뭉쳤을 때만 값어치가 있다
             [SkillId.Decoy] = new SkillDef(SkillId.Decoy, "허수아비",
                 "앞쪽에 미끼를 세워 몹을 붙잡는다 (피해 없음)",
-                cooldown: 18f, damageMult: 0f, radius: 0f, targets: 0,
-                autoCastMinTargets: 2), // 막을 게 있어야 세운다
+                manaMax: 220f, damageMult: 0f, radius: 0f, targets: 0,
+                autoCastMinTargets: 2, // 막을 게 있어야 세운다
+                scalesWithAttackSpeed: true), // 손이 빠르면 미끼도 자주 — 탱커가 민첩에 투자할 이유
         };
 
         public static readonly SkillId[] SKILL_IDS =
@@ -157,9 +167,16 @@ namespace GodTD.Core
         /// <summary>허수아비를 세울 만한가 — 영웅 앞쪽 이 거리 안에 몹이 있으면 세운다</summary>
         public const float DECOY_AUTOCAST_RANGE = 170f;
 
+        // ───────── 마나 (TFT식, 2026-07-17 웹 동기화) ─────────
+        // 평타를 칠 때와 맞을 때 찬다. 가득 차면 자동 시전 후 0으로.
+        public const float MANA_PER_ATTACK = 10f;
+        public const float MANA_ON_DAMAGED = 8f;
+        /// <summary>필요 마나 배수의 가산 폴드 하한 — 이보다 싸질 수 없다 (난사 폭주 방지)</summary>
+        public const float MANA_MAX_FLOOR = 0.4f;
+
         // ───────── 가스 스킬 개조 트랙 ─────────
         // 가스의 두 번째 소비처 — "타워 업그레이드냐 영웅 스킬이냐"가 선택이 되도록.
-        // 트랙은 둘: 스킬 피해 +8%/구매(곱), 쿨타임 -6%/구매(곱, 하한은 Resolve의 1초).
+        // 트랙은 둘: 스킬 피해 +8%/구매(곱), 필요 마나 -6%/구매(곱, 하한은 Resolve가 지킨다).
         public const float GAS_SKILL_DAMAGE_MULT = 1.08f;
         public const float GAS_SKILL_CDR_MULT = 0.94f;
         public const int GAS_SKILL_BASE_COST = 30;
@@ -167,13 +184,17 @@ namespace GodTD.Core
         public static int GasSkillCost(int bought) =>
             (int)MathF.Round(GAS_SKILL_BASE_COST * MathF.Pow(GAS_SKILL_COST_GROWTH, bought));
 
-        /// <summary>여러 조각을 접는다. 곱셈형은 곱하고, 덧셈형은 더하고, 감속은 가장 강한 것을 쓴다.</summary>
+        /// <summary>
+        /// 여러 조각을 접는다. 마나 배수는 **가산** 폴드(하한 MANA_MAX_FLOOR — 웹과 동일),
+        /// 덧셈형은 더하고, 감속은 가장 강한 것을 쓴다.
+        /// </summary>
         public static SkillMods FoldMods(IReadOnlyList<SkillModPatch> patches)
         {
             var mods = SkillMods.None;
+            float manaBonus = 0f;
             foreach (var p in patches)
             {
-                if (p.CooldownMult.HasValue) mods.CooldownMult *= p.CooldownMult.Value;
+                if (p.ManaMaxMult.HasValue) manaBonus += p.ManaMaxMult.Value - 1f;
                 if (p.DamageMult.HasValue) mods.DamageMult *= p.DamageMult.Value;
                 if (p.RadiusAdd.HasValue) mods.RadiusAdd += p.RadiusAdd.Value;
                 if (p.ExtraTargets.HasValue) mods.ExtraTargets += p.ExtraTargets.Value;
@@ -183,16 +204,21 @@ namespace GodTD.Core
                 if (p.DecoyHpMult.HasValue) mods.DecoyHpMult *= p.DecoyHpMult.Value;
                 if (p.DecoyTaunts == true) mods.DecoyTaunts = true;
             }
+            mods.ManaMaxMult = MathF.Max(MANA_MAX_FLOOR, 1f + manaBonus);
             return mods;
         }
 
-        public static ResolvedSkill Resolve(SkillId id, SkillMods mods)
+        /// <summary>attackSpeedRatio = 기본 공격 간격 / 실제 공격 간격 (공속이 빠를수록 > 1)</summary>
+        public static ResolvedSkill Resolve(SkillId id, SkillMods mods, float attackSpeedRatio = 1f)
         {
             var def = SKILLS[id];
+            // 허수아비류 — 공속이 필요 마나를 깎는다 (하한 30%, 웹과 동일)
+            float asCut = def.ScalesWithAttackSpeed
+                ? MathF.Max(0.3f, 1f / MathF.Max(0.01f, attackSpeedRatio))
+                : 1f;
             return new ResolvedSkill(
                 def,
-                // 쿨타임은 1초 밑으로 내려가지 않는다
-                cooldown: MathF.Max(1f, def.Cooldown * mods.CooldownMult),
+                manaMax: MathF.Max(10f, def.ManaMax * mods.ManaMaxMult * asCut),
                 damageMult: def.DamageMult * mods.DamageMult,
                 radius: def.Radius + (def.Radius > 0f ? mods.RadiusAdd : 0f),
                 targets: def.Targets + (def.Targets > 0 ? mods.ExtraTargets : 0),

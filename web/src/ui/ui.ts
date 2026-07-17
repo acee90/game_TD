@@ -180,15 +180,23 @@ function selectionInfo(game: Game): string {
   if (!tower) {
     return '<span class="dim">빈 타일 = 유닛 생성 · 유닛 타일 = 정보 · 몹/보스 클릭 = 스탯. 같은 유닛 2기가 모이면 자동 조합됩니다.</span>';
   }
-  const dmg = damage(tower, game.upgrades).toFixed(0);
-  const dps = (damage(tower, game.upgrades) / attackInterval(tower)).toFixed(0);
+  const total = damage(tower, game.upgrades);
+  // 기본공과 강화(가스 업그레이드) 몫을 분리해 보여준다 (플레이테스트 2026-07-17 요청)
+  const base = damage(tower, [0, 0, 0, 0]);
+  const upLevel = game.upgrades[tower.def.race];
+  const upText =
+    upLevel > 0 ? ` <span class="chip">기본 ${base.toFixed(0)} + 강화Lv${upLevel} ${(total - base).toFixed(0)}</span>` : '';
+  const dps = (total / attackInterval(tower)).toFixed(0);
+  // F5 (unity-hud-playtest-v0.1) — 간격(초/회)이 아니라 초당 공격 횟수. 큰 값 = 빠른 공격.
+  const rate = 1 / Math.max(0.01, attackInterval(tower));
+  const rateText = rate >= 10 ? rate.toFixed(1) : rate.toFixed(2);
   return `
     <div class="name" style="color:${RACE_COLOR[tower.def.race]}">
       ${tower.def.name}
       <span class="chip">${TIER_LABEL[tower.tier]}</span>
       <span class="chip">【 ${tagLabel(tower.def)} 】</span>
     </div>
-    <div class="dim">${RACES[tower.def.race]} · 공격력 ${dmg} · 간격 ${attackInterval(tower).toFixed(2)}s
+    <div class="dim">${RACES[tower.def.race]} · 공격력 ${total.toFixed(0)}${upText} · 공속 ${rateText}회/초
       · DPS ${dps} · 사거리 ${range(tower).toFixed(0)}</div>`;
 }
 
@@ -302,18 +310,39 @@ function refreshHero(el: Elements, game: Game): void {
   }
 }
 
+// F1 (unity-hud-playtest-v0.1) — 증강 오클릭 방지: 새 선택 화면마다 1초 입력 잠금.
+// XP 연타 중 카드가 포인터 밑에 나타나 같은 클릭 흐름에 눌리는 사고를 막는다.
+// 리롤(rerollsUsed 증가)로 바뀐 선택지는 의도된 클릭이라 잠그지 않는다.
+const AUGMENT_LOCK_MS = 1000;
+let augLockUntil = 0;
+let lastAugChoices: unknown = null;
+let lastRerollsUsed = 0;
+
+/** 잠금 중인가 — 카드·리롤 클릭 핸들러가 재검사한다 */
+export function augmentInputLocked(): boolean {
+  return performance.now() < augLockUntil;
+}
+
 function refreshAugmentOverlay(el: Elements, game: Game): void {
   if (game.augmentChoices.length === 0) {
     el.augOverlay.style.display = 'none';
     return;
   }
+  if (game.augmentChoices !== lastAugChoices) {
+    const byReroll = game.rerollsUsed > lastRerollsUsed;
+    if (!byReroll) augLockUntil = performance.now() + AUGMENT_LOCK_MS;
+    lastAugChoices = game.augmentChoices;
+  }
+  lastRerollsUsed = game.rerollsUsed;
+  const locked = augmentInputLocked();
+
   el.augOverlay.style.display = 'flex';
   el.augSub.textContent =
     `영웅 Lv${game.hero.level} — 하나를 고르세요`;
   const left = HD.AUGMENT_REROLL_MAX - game.rerollsUsed;
   el.reroll.textContent =
     left > 0 ? `리롤 ${game.rerollCost}마정석 · ${left}회 남음 (보유 ${Math.floor(game.gas)})` : '리롤 소진';
-  el.reroll.disabled = !game.canReroll;
+  el.reroll.disabled = !game.canReroll || locked;
   el.augCards.innerHTML = game.augmentChoices
     .map((card, i) => {
       const kindColor = HD.AUGMENT_KIND_COLOR[card.augment.kind];
@@ -321,11 +350,15 @@ function refreshAugmentOverlay(el: Elements, game: Game): void {
       const rarity = HD.RARITIES[card.rarity];
       // 대가가 달린 증강은 한눈에 보여야 한다 — 설명의 '·' 뒤가 대가다
       const risk = HD.isRisky(card.augment) ? `<span class="risk">⚠ 대가</span>` : '';
-      return `<button class="augcard" data-index="${i}" style="border-color:${rarity.color}">
+      // 설명 수치는 실버 기준이다 — 등급이 효과를 키우는 걸 배지로 알린다
+      // (플레이테스트 2026-07-17: "실버·골드 속사의 공속 증가가 같아 보인다")
+      const power = rarity.power > 1 ? ` <b>효과 ×${rarity.power}</b>` : '';
+      const lockStyle = locked ? ';opacity:.45;pointer-events:none' : '';
+      return `<button class="augcard" data-index="${i}" style="border-color:${rarity.color}${lockStyle}">
         <div class="k">
           <span style="color:${kindColor}">${kindLabel}</span>
           ${risk}
-          <span class="rar" style="color:${rarity.color}">${rarity.label}</span>
+          <span class="rar" style="color:${rarity.color}">${rarity.label}${power}</span>
         </div>
         <div class="n">${card.augment.name}</div>
         <div class="d">${card.augment.description}</div>

@@ -23,15 +23,14 @@ docs/
 | [game-system-spec.md](design/game-system-spec.md) | 현행 | 코어 루프 + 시스템 명세 + 목표 지표 + 설계 결정 기록 |
 | [backlog.md](design/backlog.md) | 현행 | 미확정 아이디어 대기실 (기각 사유 포함) |
 
-## reports/ — 측정 리포트 (정량 근거)
+## reports/ — 측정·플레이테스트 리포트 (정량·정성 근거)
 
 | 문서 | 상태 | 내용 |
 |---|---|---|
 | [dopamine-design-review-v0.1.md](reports/dopamine-design-review-v0.1.md) | 현행 | 보상 리듬 측정, 증강 스케줄 80/20 |
 | [ga-policy-validation-v0.1.md](reports/ga-policy-validation-v0.1.md) | 현행 | GA 운영정책 검증 v0.1/v0.2 |
 | [hero-tower-power-balance-v0.1.md](reports/hero-tower-power-balance-v0.1.md) | 현행 | 영웅/타워 딜 지분·구간별 커브 실측 |
-
-플레이테스트(정성) 기록은 아직 없다 — 첫 테스트 시 `reports/playtest-*.md`로 추가.
+| [unity-hud-playtest-v0.1.md](reports/unity-hud-playtest-v0.1.md) | 현행 | Unity HUD 입력 안전·상태 가독성·영웅 이동 정성 관찰 6건 |
 
 ## reference/ — 원본·외부 게임 분석
 
@@ -43,6 +42,7 @@ docs/
 | [kris-cooper-bran-the-breaker-kris-cooper.jpg](reference/kris-cooper-bran-the-breaker-kris-cooper.jpg) | 현행 (화풍 참조) | 외부 화풍 레퍼런스 — 선·면·팔레트만 참고, 출하 리소스 아님 |
 | [wandering-knight-concept-v1.png](reference/wandering-knight-concept-v1.png) | 현행 (아트 기준) | Meshy용 방랑기사 정면 콘셉트 v1 |
 | [wandering-archer-concept-v1.png](reference/wandering-archer-concept-v1.png) | 현행 (아트 기준) | Meshy용 방랑궁수 정면 콘셉트 v1 |
+| [wandering-archer-chibi-tpose-concept-v1.png](reference/wandering-archer-chibi-tpose-concept-v1.png) | 현행 (모델링 기준) | Meshy용 치비 로우폴리 방랑궁수 T포즈 v1 |
 | [god-td-system-notes-v0.1.md](reference/god-td-system-notes-v0.1.md) | 보관 | 초기 시스템 정리 (맵분석으로 대체) |
 | [god-td-ops-layer-analysis-v0.1.md](reference/god-td-ops-layer-analysis-v0.1.md) | 보관 | 운영 레이어 초기 분석 |
 
@@ -60,6 +60,8 @@ docs/
 |---|---|---|
 | [unity-sync-plan.md](exec-plans/unity-sync-plan.md) | 진행 중 | Unity 동기화 이어하기 (미커밋 부분 반영 상태 포함) |
 | [unity-hud-redesign.md](exec-plans/unity-hud-redesign.md) | 초안 | H1~H4 구현 이력 + H5 프로덕션 HUD 업그레이드 계획 |
+| [hero-point-movement.md](exec-plans/hero-point-movement.md) | 초안 | 클릭 지점 영웅 이동 모델 + 목적지·경로 표시 |
+| [economy-power-rebalance.md](exec-plans/economy-power-rebalance.md) | 구현됨 | 영웅 비용 스케일링 + 가스 업그레이드 개편 — 시뮬 검증 완료, 사람 플레이테스트 대기 |
 
 ## balance/ — 자동 생성 시트
 

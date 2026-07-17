@@ -95,7 +95,12 @@ export const SPAWN_FREE_COUNT = 8;
 export const SPAWN_COST_GROWTH = 0.45;
 export const spawnUnitCost = (spawned: number): number =>
   Math.round(SPAWN_UNIT_MINERAL + SPAWN_COST_GROWTH * Math.max(0, spawned - SPAWN_FREE_COUNT));
-export const PROBE_MINERAL = 100;
+/**
+ * 100 → 60 (2026-07-16, economy-power-rebalance D4). 진입가 100은 초반 라운드 보상
+ * (10+3r)의 3배를 넘어서 시뮬·플레이 모두 프로브 0~1기로 끝났다 — 가스 엔진이
+ * 아예 시동이 안 걸렸다. 지수 성장(×1.5)은 유지 — "몇 기까지"의 딜레마는 그대로다.
+ */
+export const PROBE_MINERAL = 60;
 
 // ── 타워 복제 ('복제 장치' 증강) ──
 // 복제 가능 티어 상한은 라운드와 영웅 레벨 중 **더 빠른 쪽**을 따라 오른다.
@@ -112,9 +117,22 @@ export const probeCost = (owned: number): number =>
 export const PROBE_MAX = 16;
 export const GAS_PER_PROBE_SECOND = 0.25;
 
-/** 파일런 종족 업그레이드. 가스 소비. 원본은 SC 네이티브라 비용 미확인(§8.4~8.5) [프로토] */
-export const UPGRADE_MULT = 1.1;
-export const upgradeGasCost = (level: number): number => 8 + 4 * level + level * level;
+/**
+ * 파일런 종족 업그레이드. 가스 소비. 원본은 SC 네이티브라 비용 미확인(§8.4~8.5) [프로토]
+ *
+ * ── 2026-07-16 개편 (docs/exec-plans/economy-power-rebalance.md D1) ──
+ * 복리 ×1.1^L → **가산 1 + 0.4L**, 비용 8+4L+L² → **선형 2+4L**.
+ *
+ * 기준선 측정: 옛 곡선에서 R60까지 총 구매 4회, 가스 잔고 만년 6 — 엔진이 죽어 있었다.
+ * 첫 업 8은 시작 가스 6보다 커서 초반 업그레이드가 아예 잠겼다.
+ *
+ * 가산+선형 조합만이 "레벨이 오를수록 효율이 떨어진다"를 만든다 — 복리+선형은
+ * 반대로 레벨이 오를수록 효율이 좋아져 한 병과 몰빵이 폭주한다. 가산은 40~50회
+ * 구매(목표 R60)에서도 제어 가능하다(몰빵 30업 = ×13 vs 복리 ×17+).
+ * 첫 업 2 = 시작 가스 6으로 **3개 병과 1업** — 초반 웨이브를 업그레이드로 버틴다.
+ */
+export const UPGRADE_DAMAGE_PER_LEVEL = 0.4;
+export const upgradeGasCost = (level: number): number => 2 + 4 * level;
 
 // ───────── 보스 소환 ─────────
 // 소환은 라운드 진행과 무관한 상시 액션이고 쿨타임만 있다. 비용 없음.
@@ -135,11 +153,23 @@ export const BOSS_COOLDOWN_SECONDS = 45; // [프로토]
  * 영구 현금인출기였다. 2.8은 Lv6 처치율 0%로 과잉. 2.5에서 Lv4 59% · Lv5 67% ·
  * Lv6 84%로 레벨이 오를수록 리스크가 생긴다. 웨이브 재설계 후 재측정 대상.
  */
-export const bossHP = (level: number): number => 1150 * Math.pow(2.5, level - 1);
-export const bossArmor = (level: number): number => 3 * level;
+// 2026-07-16: 기본공 7→4에 맞춰 HP 1150→700, 장갑 3L→1.5L (economy-power-rebalance D2).
+// 장갑은 타격당 감산이라 원피해가 함께 줄면 절반으로 내려야 상대 감산율이 보존된다.
+// 2026-07-17: 레벨 성장 2.5 → 3.0 — 사다리 측정("항상 최고 소환" 봇, 시드 12)에서
+// Lv4 첫 클리어 중앙 R15 · Lv5 R22 · Lv6 R22로 소진이 너무 빨랐다 (플레이테스트:
+// "R20~25에 Lv4·5, GOD 1기면 Lv6도" — GOD 1기 이후 타워 건설이 무의미해짐).
+// Lv1~2 앵커(base 700)는 유지 — 초반 리듬 불변, 상위 레벨만 가팔라진다.
+export const bossHP = (level: number): number => 700 * Math.pow(3.0, level - 1);
+export const bossArmor = (level: number): number => 1.5 * level;
 export const BOSS_SPEED = 26;
-/** 보스가 일주를 끝내면 라이프 손실이 크다 [프로토] */
-export const bossLeakLives = (level: number): number => 2 + level;
+/**
+ * 보스 누출 = 잡몹과 같은 **라이프 -1** (2026-07-17, 2+L → 1).
+ *
+ * 보스의 진짜 리스크는 라이프가 아니라 **기회비용**이다 — 못 잡으면 그 쿨타임(45초)
+ * 동안 처치 보상을 못 얻는다. 라이프 폭탄(2+L)까지 얹으면 상위 보스 도전이 이중으로
+ * 처벌되어 소환 자체를 꺼리게 된다. 소환은 공격적일수록 좋고, 실패는 시간으로 갚는다.
+ */
+export const bossLeakLives = (_level: number): number => 1;
 
 // ───────── 적 웨이브 (§9) ─────────
 // 원본은 특정 라운드에 이름 붙은 GOD 적이 나오지만(trigger #268~#286), 그 사이 라운드의
@@ -170,13 +200,18 @@ export const posInCycle = (round: number): number => (round - 1) % CYCLE_ROUNDS;
  * 기대 유효 DPS (P50) — scratch-model.ts 측정의 구분지수 근사.
  *
  * 주의: 이 곡선은 웨이브 난이도에 **되먹임**된다 — 웨이브가 세지면 몹이 오래 살고,
- * 영웅 막타 XP가 늘어 증강이 빨라져 DPS/수입 비율이 1.5 → 2.0~2.5로 오른다.
+ * 영웅 막타 XP가 늘어 증강이 빨라져 DPS/수입 비율이 오른다.
  * (압박이 성장을 가속하는 자기 균형 고리.) 그래서 새 웨이브 아래에서 재측정해 갱신했다.
+ *
+ * 2026-07-16 재적합 (economy-power-rebalance §3-4, 정책 6 × 시드 8):
+ * 기본공 7→4로 초·중반이 내려가고(R1 58→37, R31 3830→1842), 가산 가스
+ * 업그레이드 엔진이 후반 성장률을 3.5% → **7.1%/라운드**로 올렸다 —
+ * 공짜 파워를 깎고 구매 파워로 옮긴 개편의 의도된 모양이다.
  */
 export const expectedBoardDps = (round: number): number => {
-  if (round <= 13) return 58 * Math.pow(1.22, round - 1);
-  if (round <= 31) return 632 * Math.pow(1.105, round - 13);
-  return 3830 * Math.pow(1.035, round - 31);
+  if (round <= 13) return 37 * Math.pow(1.22, round - 1);
+  if (round <= 31) return 420 * Math.pow(1.086, round - 13);
+  return 1850 * Math.pow(1.071, round - 31);
 };
 
 /**
@@ -192,9 +227,32 @@ export const expectedBoardDps = (round: number): number => {
  *   벽을 미는 동안 보드가 계속 자라기 때문. ×1.18은 R58~75(중앙 R68)로 당겼다.
  * - 4차: 기울기 0.45, 벽 R44부터 ×1.20 — 사망 중앙값을 R50대로. 유한 종결(R60 최종 보스)이
  *   구현되면 마지막 1%는 보스가 가른다. 봇 기준 정밀 보정은 여기까지 — 이후는 사람 플레이테스트.
+ * - 5차 (2026-07-16, economy-power-rebalance): 가산 가스 업그레이드로 보드 후반 성장률이
+ *   3.5% → 7.1%/라운드가 되어 벽을 미는 힘이 커졌다(사망 중앙 R63~64로 밀림).
+ *   벽 시작을 R44 → R40으로 당겨 중앙을 R50대로 되돌린다.
+ * - 6차 (2026-07-16, 사용자 지시): **킥 있는 벽 폐지 → 성장률 연속 램프.** 최종 보스는
+ *   없다 — R60도 그냥 강한 웨이브이므로 "갑자기 높아진 난이도를 벽으로 느끼면" 안 된다.
+ *   옛 곡선은 R40에서 성장률이 1.3% → 20%로 점프하는 킥이었다. 새 곡선은 성장률 자체가
+ *   R30부터 R48까지 **선형으로** 1.4% → 20%(연속 복리)로 오르고(로그-2차) 그 뒤 유지된다 —
+ *   값도 기울기도 연속이라 "여기부터 벽"인 지점이 없다. 상한 0.20은 보드 후반 성장률
+ *   (+7.1%/라운드)을 확실히 앞서는 값 — 이보다 낮게 깔리면 R50을 넘긴 보드가 곡선을
+ *   따돌리고 영생한다(거듭제곱 꼬리로 시도했다가 이 함정을 확인).
+ *   목표: R60 도달 ≤10%, R60 통과(클리어) ≤5% — 상수는 시드 시뮬로 보정
+ *   (1차 시도 RAMP_END 52·0.18은 통과율 31%로 물렀다).
  */
-export const targetClearSeconds = (round: number): number =>
-  round <= 44 ? 18 + 0.45 * (round - 1) : 37.4 * Math.pow(1.2, round - 44);
+export const WAVE_RAMP_START = 30;
+export const WAVE_RAMP_END = 48;
+export const WAVE_BASE_RATE = 0.014; // R30 시점 선형 구간의 상대 성장률과 일치 (0.45/31.1)
+export const WAVE_MAX_RATE = 0.22; // 연속 복리 ×e^0.22 ≈ ×1.246 — 0.20은 보스 무해화 후 클리어율 11.6%로 물렀다 (2026-07-17)
+const RATE_SLOPE = (WAVE_MAX_RATE - WAVE_BASE_RATE) / (WAVE_RAMP_END - WAVE_RAMP_START);
+const CLEAR_AT_RAMP_START = 18 + 0.45 * (WAVE_RAMP_START - 1);
+export const targetClearSeconds = (round: number): number => {
+  if (round <= WAVE_RAMP_START) return 18 + 0.45 * (round - 1);
+  const t = Math.min(round, WAVE_RAMP_END) - WAVE_RAMP_START;
+  const ramp = Math.exp(WAVE_BASE_RATE * t + (RATE_SLOPE * t * t) / 2);
+  const tail = round > WAVE_RAMP_END ? Math.exp(WAVE_MAX_RATE * (round - WAVE_RAMP_END)) : 1;
+  return CLEAR_AT_RAMP_START * ramp * tail;
+};
 
 /** 웨이브 총 체력 → 몹 1기 체력. "새 몹이 사이클마다 굵어지는" 리듬은 count 리셋이 만든다 */
 export const enemyHP = (round: number): number =>
@@ -205,7 +263,9 @@ export const enemyHP = (round: number): number =>
  * "다음 계단 전에 티어를 올려야 한다"는 목표가 분명해진다. [프로토]
  */
 export const ENEMY_ARMOR_STEP_ROUNDS = 5;
-export const ENEMY_ARMOR_PER_STEP = 3;
+// 2026-07-16: 3 → 1.5 — 기본공 7→4와 세트. 장갑은 감산이라 원피해가 절반이 되면
+// 같이 절반이 돼야 "계단 전에 티어를 올려라"의 압력이 그대로 유지된다.
+export const ENEMY_ARMOR_PER_STEP = 1.5;
 export const enemyArmor = (round: number): number =>
   Math.floor(round / ENEMY_ARMOR_STEP_ROUNDS) * ENEMY_ARMOR_PER_STEP;
 
@@ -276,7 +336,12 @@ export const waveTypeOf = (round: number): WaveType =>
 // ───────── 전투 (전부 [프로토]) ─────────
 // 원본은 무기슬롯→유닛 바인딩 정보가 없어 실제 공격력을 읽을 수 없다(§11.3).
 // 태그 3종의 전투 의미도 원본이 정의하지 않는다. 아래는 태그 이름에서 유도한 설계다.
-export const BASE_DAMAGE = 7;
+/**
+ * 2026-07-16: 7 → 4 (economy-power-rebalance D2). 공짜 파워를 줄이고 깎인 몫을
+ * 가스 업그레이드(구매 파워)로 옮긴다 — "재화 = 전투력" 저울에 타워도 올린다.
+ * 1/3(≈2.3)까지 깎으면 Lv1 유닛 원피해가 장갑(감산) 밑으로 깔려 티어1이 죽어서 1/2 근처로.
+ */
+export const BASE_DAMAGE = 4;
 export const TIER_DAMAGE = [1, 3, 9, 28, 95] as const;
 export const TIER_RANGE = [120, 140, 160, 185, 225] as const;
 export const BASE_ATTACK_INTERVAL = 0.9;

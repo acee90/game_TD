@@ -91,7 +91,7 @@ namespace GodTD.Core
                 case SkillId.Meteor: CastMeteor(skill); break;
                 case SkillId.Decoy: CastDecoy(skill); break;
             }
-            hero.SkillCooldown = skill.Cooldown;
+            hero.SpendMana(); // 쿨타임 없음 — 마나를 비우고 다시 채운다
             return true;
         }
 

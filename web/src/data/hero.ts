@@ -75,8 +75,15 @@ export const MIN_ATTACK_INTERVAL = 0.25;
 /** 지능 1당 스킬 피해 +3.5% */
 export const SKILL_PER_INT = 0.035;
 
-/** 레벨업이 세 스탯에 나눠 주는 총 포인트 — 후반 레벨일수록 굵게 */
-export const levelStatPoints = (level: number): number => 2 + Math.floor(level / 10);
+/**
+ * 레벨업이 세 스탯에 나눠 주는 총 포인트 — 후반 레벨일수록 굵게.
+ *
+ * 2 + L/10 → 1 + L/7 (2026-07-16, economy-power-rebalance 2차): 영웅 파워커브를
+ * **뒤로** 민다(사용자 지시: "영웅이 타워보다 강해지는 건 R45 이후"). 중반 레벨(15~25)의
+ * 포인트를 깎고 후반 레벨을 굵게 — Lv20 스탯 -20%, Lv40 -2%로 총량은 거의 보존된다.
+ * 늦게 피지만 늦게는 강하다 — 영웅 빌드의 고점(클리어력)은 살린다.
+ */
+export const levelStatPoints = (level: number): number => 1 + Math.floor(level / 7);
 
 /** 해당 레벨까지 각 스탯이 공통으로 받은 자연 성장치. 총 예산을 3등분해 기존 파워 총량을 보존한다. */
 export function statBonusByLevel(level: number): number {
@@ -110,19 +117,28 @@ export const XP_BUY_AMOUNT = 20;
  *
  * 선형(14 + 1.5×레벨)일 때는 영웅이 64레벨까지 올라갔다. 영웅 공격력이 레벨당 ×1.16이라
  * 레벨이 두 배면 파워가 수십 배가 되는데, 레벨 자체에 제동이 없으니 후반이 무의미하게
- * 부풀었다. 지수 비용은 고레벨을 실질적으로 봉인한다 — 50레벨 비용이 선형의 세 배다.
+ * 부풀었다. 지수 비용은 고레벨을 실질적으로 봉인한다.
  *
- * 1.06이면 30레벨이 R30~35에 오는 창을 지키면서(막타 30%, 보스 2라운드마다) 최고 레벨이
- * R86에 47쯤에서 멎는다. tests/hero-curve.test.ts가 이 창을 지킨다.
+ * 1.06 → 1.10 (2026-07-16, economy-power-rebalance D3 — B안 "필요 경험치 증가" 채택).
+ * 플레이테스트: 타워 비용은 라운드가 갈수록 오르는데 XP는 20골드 고정이라 고레벨에서도
+ * "버튼 몇 번에 확 레벨업"했다 — 최소 타워 + 영웅 몰빵이 지배 전략이 됐다.
+ * 기준선 측정: 골드 70%를 영웅에 부으면 R25에 영웅 DPS가 필드 최강 타워의 ×15.7,
+ * 생존은 타워몰빵과 동급. 1.10이면 골드 2배당 +7레벨(1.06은 +12)로 한계 효용이 더
+ * 빨리 꺾인다.
+ *
+ * 1.10 → 1.12 (같은 날 2차): 교차(영웅이 최강 타워를 3라운드 연속 넘는 시점) 중앙이
+ * 여전히 R10대였다. 영웅 개화를 R45+로 미는 두 노브 중 하나 — 다른 하나는
+ * levelStatPoints 백로딩. 새 창: 수입 20%로 R45에 Lv ~21, 실질 상한 ~Lv38.
+ * tests/hero-curve.test.ts가 이 창을 지킨다.
  */
 export const XP_BASE_COST = 14;
-export const XP_COST_GROWTH = 1.06;
+export const XP_COST_GROWTH = 1.12;
 export const xpToNext = (level: number): number =>
   Math.round(XP_BASE_COST * Math.pow(XP_COST_GROWTH, level));
 
 /**
  * 킬 XP는 부축이다 (0.65 → 0.3, 2026-07-11 2안 개편) — 주 연료는 골드 구매(XP_BUY_GOLD).
- * 레벨 속도 목표: R45(성장 정지)에 Lv 25~30, 라운드당 ~0.6레벨.
+ * 레벨 속도 목표: 수입 20% 투자 기준 R45에 Lv ~24 (2026-07-16 D3 재정의).
  */
 export const XP_PER_MOB = 0.3;
 export const HERO_LASTHIT_XP_MULT = 2;
@@ -153,13 +169,13 @@ export const enemyDamage = (round: number): number =>
   ENEMY_DAMAGE_BASE + ENEMY_DAMAGE_PER_ROUND * round;
 
 /**
- * 보스 접촉 피해.
+ * 보스 접촉 피해 — **전 레벨 무해** (2026-07-17 플레이테스트, 3→6).
  *
- * **Lv3까지는 영웅·허수아비를 공격하지 않고 그냥 지나간다** (플레이테스트 2026-07-11:
- * 저레벨 보스는 "소환하면 얻는 소득"이고, 위협은 못 잡았을 때의 누출 라이프(2+L)만으로
- * 충분하다). Lv4부터는 잡몹 여러 기 몫으로 때린다 — 고레벨 소환의 대가.
+ * 2026-07-11에는 Lv4+가 영웅을 때렸지만("고레벨 소환의 대가"), 실제로는 보스의 위협이
+ * 두 겹이 될 필요가 없었다 — 리스크는 누출 라이프 -1과 **기회비용**(못 잡으면 쿨타임
+ * 동안 보상 없음)으로 충분하고, 영웅 위협은 사냥꾼 웨이브가 전담한다. 보스는 그냥 지나간다.
  */
-export const BOSS_HARMLESS_MAX_LEVEL = 3;
+export const BOSS_HARMLESS_MAX_LEVEL = 6;
 export const bossDamage = (level: number, round: number): number =>
   level <= BOSS_HARMLESS_MAX_LEVEL ? 0 : enemyDamage(round) * (1.5 + 0.5 * level);
 
@@ -821,10 +837,12 @@ export const AUGMENTS: readonly Augment[] = [
     maxStacks: 2, effect: { gasPerWave: 8 }, penalty: { respawnCut: -3 } },
 
   // ══ 유틸 (util) — 기동 · 부활 · 타워 지휘 · 어그로
-  { id: 'warlord', kind: 'util', name: '전쟁군주', description: '모든 타워 공격력 +12%', maxStacks: 3,
-    effect: { towerDamageMult: 1.12 } },
-  { id: 'commander', kind: 'util', name: '지휘관', description: '모든 타워 공격력 +8%, 타워 사거리 +10%',
-    maxStacks: 3, effect: { towerDamageMult: 1.08, towerRangeMult: 1.1 } },
+  // 타워 지휘 3종 상향 (2026-07-16 2차): "타워 증강 2장 이상이면 끝까지 타워가 영웅을
+  // 앞선다"(사용자 지시)를 실버 대 실버 기준으로 보장 — hero-curve.test.ts 앵커가 지킨다.
+  { id: 'warlord', kind: 'util', name: '전쟁군주', description: '모든 타워 공격력 +20%', maxStacks: 3,
+    effect: { towerDamageMult: 1.2 } },
+  { id: 'commander', kind: 'util', name: '지휘관', description: '모든 타워 공격력 +10%, 타워 사거리 +10%',
+    maxStacks: 3, effect: { towerDamageMult: 1.1, towerRangeMult: 1.1 } },
   { id: 'rally', kind: 'util', name: '결집', description: '모든 타워 사거리 +15%', maxStacks: 2,
     effect: { towerRangeMult: 1.15 } },
   { id: 'swift', kind: 'util', name: '신속', description: '이동 속도 +25%', maxStacks: 2,
@@ -836,8 +854,8 @@ export const AUGMENTS: readonly Augment[] = [
     maxStacks: 2, effect: { aggroRangeMult: 1.5 } },
   { id: 'vanguard', kind: 'util', name: '선봉', description: '어그로 범위 +35%, 받는 피해 10% 감소',
     maxStacks: 2, effect: { aggroRangeMult: 1.35, damageReduction: 0.1 } },
-  { id: 'beacon', kind: 'util', name: '봉화', description: '모든 타워 공격력 +20% · 이동 속도 -15%',
-    maxStacks: 2, effect: { towerDamageMult: 1.2 }, penalty: { moveSpeedMult: 0.85 } },
+  { id: 'beacon', kind: 'util', name: '봉화', description: '모든 타워 공격력 +25% · 이동 속도 -15%',
+    maxStacks: 2, effect: { towerDamageMult: 1.25 }, penalty: { moveSpeedMult: 0.85 } },
   { id: 'martyr', kind: 'util', name: '순교', description: '부활 대기 6초 감소 · 최대 체력 -10%',
     maxStacks: 1, effect: { respawnCut: 6 }, penalty: { hpMult: 0.9 } },
   /**

@@ -10,7 +10,7 @@
 //   │ Z │ X │ C │   6 7 8
 //   └───┴───┴───┘
 //
-// 영웅 스킬은 자동 시전이라 버튼이 아니다 — 상세 열의 쿨타임 게이지로 표시한다.
+// 영웅 스킬은 자동 시전이라 버튼이 아니다 — 상세 열의 마나 게이지로 표시한다.
 // 이 파일은 "무엇을 그릴지"만 정한다. 그리는 것은 GameHud가 한다.
 
 using System;
@@ -72,6 +72,12 @@ namespace GodTD.View
     public static class CommandCard
     {
         public const int SLOTS = 9;
+
+        /// <summary>
+        /// F4 (§7.13) — '증강 기록' 칸의 UI 콜백. 게임 상태를 바꾸지 않는 순수 View 동작이라
+        /// Game 메서드가 아니라 GameHud가 Awake에서 배선한다.
+        /// </summary>
+        public static Action OpenAugmentHistory;
 
         /// <summary>칸 인덱스 → 단축키. 위치가 곧 키다.</summary>
         public static readonly KeyCode[] HOTKEYS =
@@ -136,6 +142,15 @@ namespace GodTD.View
                 reason: game.CanBuyXp ? DisableReason.None : DisableReason.Cost,
                 tooltip: $"영웅 경험치 +{HeroData.XP_BUY_AMOUNT}. 필요 금화 {HeroData.XP_BUY_GOLD}.");
 
+            // F4 — 이미 고른 증강을 다시 보는 읽기 전용 기록. 0개면 자리 유지 + 비활성.
+            bool hasAugments = hero.AugmentCards.Count > 0;
+            c[6] = new Command("증강 기록",
+                hasAugments ? $"{hero.AugmentCards.Count}장" : "획득한 증강 없음",
+                hasAugments,
+                () => OpenAugmentHistory?.Invoke(), HERO, HudIcon.Score,
+                reason: hasAugments ? DisableReason.None : DisableReason.Locked,
+                tooltip: "획득한 증강과 활성 시너지를 다시 봅니다. 게임은 멈추지 않습니다.");
+
             if (hero.Skill == null) return;   // 스킬 증강을 아직 못 뽑았다
             c[3] = new Command("스킬 피해",
                 $"+8% · {Gs(game.GasSkillCost(GasSkillTrack.Damage))} · Lv{hero.GasSkillDamage}",
@@ -143,12 +158,12 @@ namespace GodTD.View
                 () => game.BuyGasSkill(GasSkillTrack.Damage), GAS, HudIcon.SkillDamage,
                 reason: game.CanBuyGasSkill(GasSkillTrack.Damage) ? DisableReason.None : DisableReason.Cost,
                 tooltip: $"영웅 스킬 피해 +8%. 필요 마정석 {game.GasSkillCost(GasSkillTrack.Damage)}.");
-            c[4] = new Command("쿨타임",
+            c[4] = new Command("필요 마나",
                 $"-6% · {Gs(game.GasSkillCost(GasSkillTrack.Cdr))} · Lv{hero.GasSkillCdr}",
                 game.CanBuyGasSkill(GasSkillTrack.Cdr),
                 () => game.BuyGasSkill(GasSkillTrack.Cdr), GAS, HudIcon.Cooldown,
                 reason: game.CanBuyGasSkill(GasSkillTrack.Cdr) ? DisableReason.None : DisableReason.Cost,
-                tooltip: $"영웅 스킬 쿨타임 -6%. 필요 마정석 {game.GasSkillCost(GasSkillTrack.Cdr)}.");
+                tooltip: $"영웅 스킬 필요 마나 -6% — 더 자주 터진다. 필요 마정석 {game.GasSkillCost(GasSkillTrack.Cdr)}.");
         }
 
         // ── 타워: 판매뿐. GOD 타입 변경(금화 리롤)은 게임 시스템이라 보류 — c[1] 자리를 비워 둔다. ──

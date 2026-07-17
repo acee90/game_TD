@@ -240,8 +240,8 @@ namespace GodTD.Core
                 new AugmentEffect { MineralPerKill = 1 }),
             new Augment("phoenix", AugmentKind.Utility, "불사조", "부활 대기 4초 감소", 2,
                 new AugmentEffect { RespawnCut = 4f }),
-            new Augment("warlord", AugmentKind.Utility, "전쟁군주", "모든 타워 공격력 +12%", 3,
-                new AugmentEffect { TowerDamageMult = 1.12f }),
+            new Augment("warlord", AugmentKind.Utility, "전쟁군주", "모든 타워 공격력 +20%", 3,
+                new AugmentEffect { TowerDamageMult = 1.2f }), // 1.12 → 1.2 (2026-07-16 2차: 타워증강 2장이면 끝까지 타워 우위) ← web
 
             // ── 액티브 스킬 획득 (영웅은 하나만 든다)
             new Augment("skill_whirlwind", AugmentKind.Tank, "소용돌이",
@@ -258,8 +258,9 @@ namespace GodTD.Core
                 new AugmentEffect(), grantsSkill: SkillId.Decoy),
 
             // ── 스킬 공용 강화 (스킬을 든 뒤에만 등장)
-            new Augment("skill_cdr", AugmentKind.Utility, "냉각", "스킬 쿨타임 20% 감소", 3,
-                new AugmentEffect(), skillMod: new SkillModPatch { CooldownMult = 0.8f }, requiresAnySkill: true),
+            // 쿨타임 폐지 → 마나 (2026-07-17 웹 동기화): 웹의 '집중 수련'(필요 마나 -15%)에 대응
+            new Augment("skill_cdr", AugmentKind.Utility, "집중 수련", "필요 마나 15% 감소", 3,
+                new AugmentEffect(), skillMod: new SkillModPatch { ManaMaxMult = 0.85f }, requiresAnySkill: true),
             new Augment("skill_amp", AugmentKind.Stat, "증폭", "스킬 피해 +45%", 3,
                 new AugmentEffect(), skillMod: new SkillModPatch { DamageMult = 1.45f }, requiresAnySkill: true),
 

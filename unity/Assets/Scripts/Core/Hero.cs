@@ -54,6 +54,12 @@ namespace GodTD.Core
         public float Distance;
         /// <summary>경로 위 목적지</summary>
         public float TargetDistance;
+        /// <summary>
+        /// 횡방향 오프셋 (hero-point-movement.md) — 경로 중심선에서 좌측 법선 방향으로
+        /// 비낀 거리(px). 길 보행 폭 안에서 실제 클릭 지점까지 간다. 몹 판정은 1D 그대로. ← web
+        /// </summary>
+        public float Lateral;
+        public float TargetLateral;
 
         public float Hp;
         public int Level = 1;
@@ -61,8 +67,11 @@ namespace GodTD.Core
         public bool Alive = true;
         public float RespawnTimer;
         public float AttackCooldown;
-        /// <summary>액티브 스킬 재사용 대기</summary>
-        public float SkillCooldown;
+        /// <summary>
+        /// 마나 (TFT식, 2026-07-17 웹 동기화 — 쿨타임 폐지). 평타(+10)·피격(+8)으로 차고,
+        /// 가득 차면 자동 시전 후 0으로 돌아간다. 공속이 곧 스킬 회전이다.
+        /// </summary>
+        public float Mana;
         /// <summary>가스로 산 스킬 개조 횟수</summary>
         public int GasSkillDamage;
         public int GasSkillCdr;
@@ -81,8 +90,8 @@ namespace GodTD.Core
             Hp = Stats.MaxHp;
         }
 
-        public float X => MapData.PathPos(Distance).X;
-        public float Y => MapData.PathPos(Distance).Y;
+        public float X => MapData.PathPosLateral(Distance, Lateral).X;
+        public float Y => MapData.PathPosLateral(Distance, Lateral).Y;
 
         public HeroStats Stats => ComputeStats(Level, AugmentCards);
 
@@ -124,23 +133,49 @@ namespace GodTD.Core
                         { DamageMult = MathF.Pow(Skills.GAS_SKILL_DAMAGE_MULT, GasSkillDamage) });
                 if (GasSkillCdr > 0)
                     patches.Add(new SkillModPatch
-                        { CooldownMult = MathF.Pow(Skills.GAS_SKILL_CDR_MULT, GasSkillCdr) });
-                return Skills.Resolve(id.Value, Skills.FoldMods(patches));
+                        { ManaMaxMult = MathF.Pow(Skills.GAS_SKILL_CDR_MULT, GasSkillCdr) });
+                // 허수아비류 — 공속이 빠를수록 필요 마나가 준다
+                float attackSpeedRatio = HeroData.HERO_ATTACK_INTERVAL / Stats.AttackInterval;
+                return Skills.Resolve(id.Value, Skills.FoldMods(patches), attackSpeedRatio);
             }
         }
 
-        public bool SkillReady => Alive && SkillIdHeld.HasValue && SkillCooldown <= 0f;
-
-        /// <summary>클릭 좌표를 경로에 투영해서 목적지로 삼는다</summary>
-        public void MoveTo(float x, float y)
+        /// <summary>마나가 가득 찼는가 — 쿨타임은 없다</summary>
+        public bool SkillReady
         {
-            TargetDistance = MapData.NearestPathDistance(x, y);
+            get
+            {
+                if (!Alive || !SkillIdHeld.HasValue) return false;
+                var skill = Skill;
+                return skill != null && Mana >= skill.ManaMax;
+            }
         }
 
-        /// <summary>경로 위 거리를 직접 지정 (테스트·내부용)</summary>
+        /// <summary>평타·피격이 마나를 채운다. 상한은 현재 스킬의 필요 마나.</summary>
+        public void GainMana(float amount)
+        {
+            var skill = Skill;
+            if (skill == null) return;
+            Mana = MathF.Min(skill.ManaMax, Mana + amount);
+        }
+
+        /// <summary>시전 — 마나를 비운다</summary>
+        public void SpendMana() => Mana = 0f;
+
+        /// <summary>클릭 좌표를 (진행도, 횡오프셋)으로 분해해 목적지로 삼는다. 보정된 실제 목적지를 돌려준다.</summary>
+        public MapData.PathProjection MoveTo(float x, float y)
+        {
+            var p = MapData.ProjectToPath(x, y);
+            TargetDistance = p.Distance;
+            TargetLateral = p.Lateral;
+            return p;
+        }
+
+        /// <summary>경로 위 거리를 직접 지정 (테스트·내부용) — 중앙선으로 간다</summary>
         public void MoveToDistance(float distance)
         {
             TargetDistance = MathF.Min(MapData.PATH_LENGTH, MathF.Max(0f, distance));
+            TargetLateral = 0f;
         }
 
         /// <summary>경험치를 넣고, 레벨이 오르면 오른 레벨 수를 돌려준다</summary>
@@ -164,6 +199,8 @@ namespace GodTD.Core
         {
             if (!Alive) return;
             Hp -= raw * (1f - Stats.DamageReduction);
+            // 맞으면 마나가 찬다 (TFT식) — 탱커가 스킬을 자주 쓰는 이유
+            GainMana(Skills.MANA_ON_DAMAGED);
             if (Hp <= 0f)
             {
                 Hp = 0f;
@@ -190,25 +227,30 @@ namespace GodTD.Core
             }
 
             AttackCooldown -= dt;
-            if (SkillCooldown > 0f) SkillCooldown = MathF.Max(0f, SkillCooldown - dt);
 
             var stats = Stats;
             if (stats.Regen > 0f) Hp = MathF.Min(stats.MaxHp, Hp + stats.Regen * dt);
 
-            float gap = TargetDistance - Distance;
-            if (MathF.Abs(gap) <= HeroData.HERO_ARRIVE_EPSILON) return;
+            // 2D 이동 예산 — 진행도·횡오프셋 벡터 길이로 속도를 나눠 대각 이동 가속을 막는다 ← web
+            float dAlong = TargetDistance - Distance;
+            float dLat = TargetLateral - Lateral;
+            float gap = MapData.Hypot(dAlong, dLat);
+            if (gap <= HeroData.HERO_ARRIVE_EPSILON) return;
 
-            float step = MathF.Min(MathF.Abs(gap), stats.MoveSpeed * dt);
-            Distance += MathF.Sign(gap) * step;
+            float step = MathF.Min(gap, stats.MoveSpeed * dt);
+            Distance += dAlong / gap * step;
+            Lateral += dLat / gap * step;
         }
 
         void Respawn()
         {
             Alive = true;
-            SkillCooldown = 0f;
+            Mana = 0f;
             Hp = Stats.MaxHp;
             Distance = AltarDistance;
             TargetDistance = AltarDistance;
+            Lateral = 0f;
+            TargetLateral = 0f;
             RespawnTimer = 0f;
         }
 

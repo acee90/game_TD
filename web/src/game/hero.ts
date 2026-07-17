@@ -2,7 +2,13 @@
 // 제단에서 부활하고, 경로에 매이지 않고 자유롭게 움직이며(타워 사이도 통과),
 // 처치 경험치로 레벨을 올리고, 일정 레벨마다 증강을 고른다.
 
-import { ALTAR_PATH_DISTANCE, PATH_LENGTH, nearestPathDistance, pathPos } from '../core/map';
+import {
+  ALTAR_PATH_DISTANCE,
+  PATH_LENGTH,
+  pathPosLateral,
+  projectToPath,
+  type PathProjection,
+} from '../core/map';
 import * as H from '../data/hero';
 import type { AugmentCard, AugmentEffect } from '../data/hero';
 import * as K from '../data/skills';
@@ -308,6 +314,12 @@ export class Hero {
   distance: number;
   /** 경로 위 목적지 */
   targetDistance: number;
+  /**
+   * 횡방향 오프셋 (hero-point-movement.md) — 경로 중심선에서 좌측 법선 방향으로
+   * 비낀 거리(px). 길 보행 폭 안에서 실제 클릭 지점까지 간다. 몹 판정은 1D 그대로.
+   */
+  lateral = 0;
+  targetLateral = 0;
 
   hp: number;
   level = 1;
@@ -346,11 +358,11 @@ export class Hero {
   }
 
   get x(): number {
-    return pathPos(this.distance)[0];
+    return pathPosLateral(this.distance, this.lateral)[0];
   }
 
   get y(): number {
-    return pathPos(this.distance)[1];
+    return pathPosLateral(this.distance, this.lateral)[1];
   }
 
   get stats(): HeroStats {
@@ -430,14 +442,18 @@ export class Hero {
     this.mana = this.stats.startingMana;
   }
 
-  /** 클릭 좌표를 경로에 투영해서 목적지로 삼는다 */
-  moveTo(x: number, y: number): void {
-    this.targetDistance = nearestPathDistance(x, y);
+  /** 클릭 좌표를 (진행도, 횡오프셋)으로 분해해 목적지로 삼는다. 보정된 실제 목적지를 돌려준다. */
+  moveTo(x: number, y: number): PathProjection {
+    const p = projectToPath(x, y);
+    this.targetDistance = p.distance;
+    this.targetLateral = p.lateral;
+    return p;
   }
 
-  /** 경로 위 거리를 직접 지정 (테스트·내부용) */
+  /** 경로 위 거리를 직접 지정 (테스트·내부용) — 중앙선으로 간다 */
   moveToDistance(distance: number): void {
     this.targetDistance = Math.min(PATH_LENGTH, Math.max(0, distance));
+    this.targetLateral = 0;
   }
 
   /** 경험치를 넣고, 레벨이 오르면 오른 레벨 수를 돌려준다 */
@@ -506,11 +522,15 @@ export class Hero {
       regen + (this.secondsSinceDamaged >= H.HERO_OOC_REGEN_DELAY ? outOfCombatRegen : 0);
     if (healing > 0) this.hp = Math.min(maxHp, this.hp + healing * dt);
 
-    const gap = this.targetDistance - this.distance;
-    if (Math.abs(gap) <= H.HERO_ARRIVE_EPSILON) return;
+    // 2D 이동 예산 — 진행도와 횡오프셋의 벡터 길이로 속도를 나눠 대각 이동 가속을 막는다
+    const dAlong = this.targetDistance - this.distance;
+    const dLat = this.targetLateral - this.lateral;
+    const gap = Math.hypot(dAlong, dLat);
+    if (gap <= H.HERO_ARRIVE_EPSILON) return;
 
-    const step = Math.min(Math.abs(gap), moveSpeed * dt);
-    this.distance += Math.sign(gap) * step;
+    const step = Math.min(gap, moveSpeed * dt);
+    this.distance += (dAlong / gap) * step;
+    this.lateral += (dLat / gap) * step;
   }
 
   private respawn(): void {
@@ -520,6 +540,8 @@ export class Hero {
     this.secondsSinceDamaged = Infinity;
     this.distance = this.altarDistance;
     this.targetDistance = this.altarDistance;
+    this.lateral = 0;
+    this.targetLateral = 0;
     this.respawnTimer = 0;
     this.justRevived = true; // Game이 이번 프레임에 부활 폭발을 터뜨린다
   }

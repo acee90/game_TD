@@ -3,7 +3,7 @@ import { TILE } from './core/map';
 import type { Race } from './data/units';
 import { Game } from './game/game';
 import { render } from './render/render';
-import { bindElements, refresh } from './ui/ui';
+import { augmentInputLocked, bindElements, refresh } from './ui/ui';
 
 const canvas = document.getElementById('canvas') as HTMLCanvasElement;
 const ctx = canvas.getContext('2d');
@@ -54,13 +54,17 @@ el.copyTower.addEventListener('click', () => {
   if (target) game.markCopyTarget(target);
 });
 el.buyXp.addEventListener('click', () => game.buyXp());
-el.reroll.addEventListener('click', () => game.rerollAugments());
+el.reroll.addEventListener('click', () => {
+  if (augmentInputLocked()) return; // F1 — 등장 직후 1초 오클릭 방지
+  game.rerollAugments();
+});
 el.gasSkillDmg.addEventListener('click', () => game.buyGasSkill('damage'));
 el.gasSkillCdr.addEventListener('click', () => game.buyGasSkill('cdr'));
 // 보스 소환은 1-depth — 버튼을 누르면 소환 가능한 최고 레벨을 바로 부른다(레벨 선택 없음)
 el.bossOpen.addEventListener('click', () => game.summonBoss());
 el.upgrades.forEach((button, i) => button.addEventListener('click', () => game.upgrade(i as Race)));
 el.augCards.addEventListener('click', (event) => {
+  if (augmentInputLocked()) return; // F1 — pointer-events만 믿지 않고 재검사
   const card = (event.target as HTMLElement).closest<HTMLElement>('.augcard');
   if (card?.dataset.index) game.chooseAugment(Number(card.dataset.index));
 });

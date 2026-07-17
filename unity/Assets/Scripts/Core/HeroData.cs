@@ -70,7 +70,8 @@ namespace GodTD.Core
         /// 3등분해 파워 총량을 보존하면서 중간 빌드 전환 비용을 없앤다.
         /// </summary>
         /// <summary>레벨업이 세 스탯에 나눠 주는 총 포인트 — 후반 레벨일수록 굵게</summary>
-        public static int LevelStatPoints(int level) => 2 + level / 10;
+        // 2+L/10 → 1+L/7 (2026-07-16 2차): 파워커브 백로딩 — 중반 -20%, 후반 보존. ← web
+        public static int LevelStatPoints(int level) => 1 + level / 7;
 
         /// <summary>해당 레벨까지 각 스탯이 공통으로 받은 자연 성장치.</summary>
         public static float StatBonusByLevel(int level)
@@ -102,11 +103,13 @@ namespace GodTD.Core
         /// 레벨이 두 배면 파워가 수십 배가 되는데, 레벨 자체에 제동이 없으니 후반이 무의미하게
         /// 부풀었다. 지수 비용은 고레벨을 실질적으로 봉인한다 — 50레벨 비용이 선형의 세 배다.
         ///
-        /// 1.06이면 30레벨이 R30~35에 오는 창을 지키면서(막타 30%, 보스 2라운드마다) 최고 레벨이
-        /// R86에 47쯤에서 멎는다.
+        /// 1.06 → 1.10 (2026-07-16, economy-power-rebalance D3): XP 20골드 고정 + 완만한 지수가
+        /// "최소 타워 + 영웅 몰빵"을 지배 전략으로 만들었다(영웅 DPS가 최강 타워의 ×15.7).
+        /// 1.10이면 골드 2배당 +7레벨 — 새 창: 수입 20%로 R45에 Lv~24, 실질 상한 ~Lv43. ← web
         /// </summary>
         public const float XP_BASE_COST = 14f;
-        public const float XP_COST_GROWTH = 1.06f;
+        // 1.10 → 1.12 (2026-07-16 2차): 영웅 개화를 뒤로 — 수입 20%로 R45에 Lv~21, 상한 ~Lv38. ← web
+        public const float XP_COST_GROWTH = 1.12f;
         public static int XpToNext(int level) =>
             (int)MathF.Round(XP_BASE_COST * MathF.Pow(XP_COST_GROWTH, level));
 
@@ -142,7 +145,8 @@ namespace GodTD.Core
 
         /// <summary>보스는 같은 라운드 잡몹 여러 기 몫으로 때린다</summary>
         /// <summary>Lv3까지는 영웅·허수아비를 공격하지 않고 지나간다 — 위협은 누출 라이프뿐 ← web</summary>
-        public const int BOSS_HARMLESS_MAX_LEVEL = 3;
+        // 3 → 6 (2026-07-17 플레이테스트): 보스는 전 레벨 무해 — 위협은 누출 라이프뿐. ← web
+        public const int BOSS_HARMLESS_MAX_LEVEL = 6;
         public static float BossDamage(int level, int round) =>
             level <= BOSS_HARMLESS_MAX_LEVEL ? 0f : EnemyDamage(round) * (1.5f + 0.5f * level);
 

@@ -83,7 +83,8 @@ namespace GodTD.Core
         /// <summary>제단은 게임 시작과 함께 십자 중앙 타일에 주어진다. 그 자리에는 타워를 놓을 수 없다.</summary>
         public Slot AltarSlot => Slots[HeroData.ALTAR_SLOT];
 
-        public void MoveHero(float x, float y) => Hero.MoveTo(x, y);
+        /// <summary>우클릭 이동 — 보정된 실제 목적지를 돌려준다 (View가 목적지 마커에 쓴다)</summary>
+        public MapData.PathProjection MoveHero(float x, float y) => Hero.MoveTo(x, y);
 
         /// <summary>증강 하나를 고른다. 남은 선택이 있으면 다음 선택지를 띄운다.</summary>
         public bool ChooseAugment(int index)
@@ -164,7 +165,7 @@ namespace GodTD.Core
             else Hero.GasSkillCdr++;
             Message = track == GasSkillTrack.Damage
                 ? $"스킬 피해 개조 +{Hero.GasSkillDamage} · 다음 {GasSkillCost(GasSkillTrack.Damage)}"
-                : $"스킬 쿨타임 개조 +{Hero.GasSkillCdr} · 다음 {GasSkillCost(GasSkillTrack.Cdr)}";
+                : $"필요 마나 개조 +{Hero.GasSkillCdr} · 다음 {GasSkillCost(GasSkillTrack.Cdr)}";
             return true;
         }
 
@@ -708,6 +709,8 @@ namespace GodTD.Core
                             X = hero.X, Y = hero.Y, Tx = t.X, Ty = t.Y, Life = 0.1f, Color = "#ffffff",
                         });
                     }
+                    // 평타가 마나를 채운다 (TFT식) — 공속이 곧 스킬 회전
+                    hero.GainMana(Skills.MANA_PER_ATTACK);
                     // 초반 느린 템포 — 영웅도 타워·몹과 같은 비율로 느리게 친다(마나 충전도 함께 느려짐)
                     hero.AttackCooldown = stats.AttackInterval / Balance.EarlyTempo(Round);
                 }

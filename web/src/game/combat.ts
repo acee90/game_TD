@@ -14,9 +14,13 @@ const combine = (tags: readonly Tag[], key: 'damage' | 'interval' | 'range'): nu
 
 export const hasTag = (def: UnitDef, tag: Tag): boolean => def.tags.includes(tag);
 
-/** 종족 업그레이드는 곱연산 복리. 크리쳐도 자체 업그레이드 라인이 있다(strings:664 '크리업'). */
+/**
+ * 종족 업그레이드는 **가산**이다 — 레벨당 기본공의 40%씩 붙는다 (2026-07-16, 복리 폐지).
+ * 선형 비용과 짝지어 레벨이 오를수록 가스 효율이 떨어진다 — 몰빵 폭주 방지.
+ * 크리쳐도 자체 업그레이드 라인이 있다(strings:664 '크리업').
+ */
 export const upgradeMultiplier = (levels: UpgradeLevels, race: Race): number =>
-  Math.pow(B.UPGRADE_MULT, levels[race]);
+  1 + B.UPGRADE_DAMAGE_PER_LEVEL * levels[race];
 
 export function damage(tower: Tower, levels: UpgradeLevels): number {
   return (

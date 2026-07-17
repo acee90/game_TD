@@ -163,24 +163,93 @@ export function pathPosOffset(d: number, lateral: number): [number, number] {
 /** 넥서스 — 보스 소환 지점. 십자 중앙. */
 export const NEXUS: Pt = CENTER;
 
+// ───────── 영웅 클릭 지점 이동 (hero-point-movement.md, 2026-07-16) ─────────
+// 영웅 위치 = 경로 진행도 + 횡방향(법선) 오프셋. 중앙선 고정을 없애되
+// 전후 진행·몸막기 의미는 유지한다. 몹 판정은 여전히 1D(distance)다.
+
 /**
- * 임의의 점에서 가장 가까운 경로 위 지점의 거리.
- * 영웅은 경로를 벗어날 수 없으므로 클릭 좌표를 여기에 투영해서 목적지로 삼는다.
+ * 길의 보행 가능 반폭(px) — 경로 중심선에서 좌우로 이만큼까지 걸을 수 있다.
+ * 경로 선의 절반 두께(12 — CLEARANCE 주석)와 같다. 몹 레인 오프셋(8)보다 넓다.
  */
-export function nearestPathDistance(x: number, y: number): number {
-  const STEPS = 600;
-  let best = 0;
+export const WALKABLE_HALF_WIDTH = 12;
+
+/**
+ * 코너 블렌딩 반경(px). 웨이포인트(90도 코너)에서 법선이 급변하므로, 코너에서
+ * 이 거리 안에 들면 횡오프셋을 선형으로 눌러 0에 수렴시킨다 — 좌표가 연속이 되어
+ * 순간이동이 없다. 영웅은 코너에서 중앙선으로 모였다가 다시 벌어진다. [프로토 가설]
+ */
+export const CORNER_BLEND = 18;
+
+/** 웨이포인트들의 누적 진행도 — 코너 블렌딩용 */
+const CUM: number[] = [0];
+for (let i = 0; i < SEGMENTS.length; i++) CUM.push(CUM[i] + SEGMENTS[i]);
+
+/** 진행도 d에서 가장 가까운 코너(내부 웨이포인트)까지의 경로거리 */
+function distToNearestCorner(d: number): number {
+  let best = Infinity;
+  // 양 끝(입구·출구)은 코너가 아니다 — 내부 웨이포인트만
+  for (let i = 1; i < CUM.length - 1; i++) best = Math.min(best, Math.abs(d - CUM[i]));
+  return best;
+}
+
+/** 코너 감쇠가 적용된 실제 좌표 — 영웅 렌더·판정이 모두 이 좌표를 쓴다 */
+export function pathPosLateral(d: number, lateral: number): [number, number] {
+  if (lateral === 0) return pathPos(d);
+  const damp = Math.min(1, distToNearestCorner(d) / CORNER_BLEND);
+  return pathPosOffset(d, lateral * damp);
+}
+
+export interface PathProjection {
+  /** 최근접 경로 진행도 */
+  readonly distance: number;
+  /** 보행 폭으로 제한된 횡오프셋 (좌측 법선 기준 부호) */
+  readonly lateral: number;
+  /** 실제(보정된) 목적지 좌표 — 목적지 마커는 여기에 찍는다 */
+  readonly x: number;
+  readonly y: number;
+}
+
+/**
+ * 클릭 좌표를 (진행도, 횡오프셋)으로 분해한다 — 구간별 수선의 발(해석적).
+ * 보행 영역 밖 클릭은 최근접 유효 지점으로 보정된다.
+ */
+export function projectToPath(
+  x: number,
+  y: number,
+  maxLateral: number = WALKABLE_HALF_WIDTH,
+): PathProjection {
   let bestGap = Infinity;
-  for (let i = 0; i <= STEPS; i++) {
-    const d = (i / STEPS) * PATH_LENGTH;
-    const [px, py] = pathPos(d);
-    const gap = Math.hypot(px - x, py - y);
+  let bestD = 0;
+  let bestLat = 0;
+  for (let i = 0; i < SEGMENTS.length; i++) {
+    const len = SEGMENTS[i];
+    if (len === 0) continue;
+    const a = WAYPOINTS[i];
+    const b = WAYPOINTS[i + 1];
+    const ux = (b[0] - a[0]) / len; // 진행 방향 단위벡터
+    const uy = (b[1] - a[1]) / len;
+    const t = Math.max(0, Math.min(len, (x - a[0]) * ux + (y - a[1]) * uy));
+    const px = a[0] + ux * t;
+    const py = a[1] + uy * t;
+    const gap = Math.hypot(x - px, y - py);
     if (gap < bestGap) {
       bestGap = gap;
-      best = d;
+      bestD = CUM[i] + t;
+      // 좌측 법선(-uy, ux) 기준 부호 있는 횡오프셋
+      bestLat = (x - px) * -uy + (y - py) * ux;
     }
   }
-  return best;
+  const lateral = Math.max(-maxLateral, Math.min(maxLateral, bestLat));
+  const [rx, ry] = pathPosLateral(bestD, lateral);
+  return { distance: bestD, lateral, x: rx, y: ry };
+}
+
+/**
+ * 임의의 점에서 가장 가까운 경로 위 지점의 거리.
+ * (2026-07-16: 600스텝 샘플링 → 해석적 투영. 결과 의미는 동일하되 더 정확하다.)
+ */
+export function nearestPathDistance(x: number, y: number): number {
+  return projectToPath(x, y, 0).distance;
 }
 
 /** 제단(십자 중앙)에서 가장 가까운 경로 지점 — 영웅이 부활하는 자리 */
