@@ -310,18 +310,39 @@ function refreshHero(el: Elements, game: Game): void {
   }
 }
 
+// F1 (unity-hud-playtest-v0.1) — 증강 오클릭 방지: 새 선택 화면마다 1초 입력 잠금.
+// XP 연타 중 카드가 포인터 밑에 나타나 같은 클릭 흐름에 눌리는 사고를 막는다.
+// 리롤(rerollsUsed 증가)로 바뀐 선택지는 의도된 클릭이라 잠그지 않는다.
+const AUGMENT_LOCK_MS = 1000;
+let augLockUntil = 0;
+let lastAugChoices: unknown = null;
+let lastRerollsUsed = 0;
+
+/** 잠금 중인가 — 카드·리롤 클릭 핸들러가 재검사한다 */
+export function augmentInputLocked(): boolean {
+  return performance.now() < augLockUntil;
+}
+
 function refreshAugmentOverlay(el: Elements, game: Game): void {
   if (game.augmentChoices.length === 0) {
     el.augOverlay.style.display = 'none';
     return;
   }
+  if (game.augmentChoices !== lastAugChoices) {
+    const byReroll = game.rerollsUsed > lastRerollsUsed;
+    if (!byReroll) augLockUntil = performance.now() + AUGMENT_LOCK_MS;
+    lastAugChoices = game.augmentChoices;
+  }
+  lastRerollsUsed = game.rerollsUsed;
+  const locked = augmentInputLocked();
+
   el.augOverlay.style.display = 'flex';
   el.augSub.textContent =
     `영웅 Lv${game.hero.level} — 하나를 고르세요`;
   const left = HD.AUGMENT_REROLL_MAX - game.rerollsUsed;
   el.reroll.textContent =
     left > 0 ? `리롤 ${game.rerollCost}마정석 · ${left}회 남음 (보유 ${Math.floor(game.gas)})` : '리롤 소진';
-  el.reroll.disabled = !game.canReroll;
+  el.reroll.disabled = !game.canReroll || locked;
   el.augCards.innerHTML = game.augmentChoices
     .map((card, i) => {
       const kindColor = HD.AUGMENT_KIND_COLOR[card.augment.kind];
@@ -332,7 +353,8 @@ function refreshAugmentOverlay(el: Elements, game: Game): void {
       // 설명 수치는 실버 기준이다 — 등급이 효과를 키우는 걸 배지로 알린다
       // (플레이테스트 2026-07-17: "실버·골드 속사의 공속 증가가 같아 보인다")
       const power = rarity.power > 1 ? ` <b>효과 ×${rarity.power}</b>` : '';
-      return `<button class="augcard" data-index="${i}" style="border-color:${rarity.color}">
+      const lockStyle = locked ? ';opacity:.45;pointer-events:none' : '';
+      return `<button class="augcard" data-index="${i}" style="border-color:${rarity.color}${lockStyle}">
         <div class="k">
           <span style="color:${kindColor}">${kindLabel}</span>
           ${risk}

@@ -1,5 +1,15 @@
 // ───────── 캔버스 렌더 ─────────
-import { pathPosOffset, CROSS_BARS, DOOR_IN, DOOR_OUT, NEXUS, TILE, WAYPOINTS, pathPos } from '../core/map';
+import {
+  pathPosOffset,
+  pathPosLateral,
+  CROSS_BARS,
+  DOOR_IN,
+  DOOR_OUT,
+  NEXUS,
+  TILE,
+  WAYPOINTS,
+  pathPos,
+} from '../core/map';
 import { BOSS_COOLDOWN_SECONDS, MOB_LANE_OFFSET } from '../data/balance';
 import { HERO_RADIUS } from '../data/hero';
 import { GOD_TIER, RACE_COLOR } from '../data/units';
@@ -150,9 +160,9 @@ function drawHero(ctx: CanvasRenderingContext2D, game: Game): void {
 
   const stats = hero.stats;
 
-  // 목적지 표시 (경로 위)
-  if (Math.abs(hero.targetDistance - hero.distance) > 3) {
-    const [tx, ty] = pathPos(hero.targetDistance);
+  // 목적지 표시 — 횡오프셋 포함 실제 목적지에 찍는다 (hero-point-movement)
+  if (Math.hypot(hero.targetDistance - hero.distance, hero.targetLateral - hero.lateral) > 3) {
+    const [tx, ty] = pathPosLateral(hero.targetDistance, hero.targetLateral);
     ctx.beginPath();
     ctx.arc(tx, ty, 4, 0, Math.PI * 2);
     ctx.strokeStyle = 'rgba(203,210,221,.5)';
