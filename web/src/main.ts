@@ -61,7 +61,10 @@ el.reroll.addEventListener('click', () => {
 el.gasSkillDmg.addEventListener('click', () => game.buyGasSkill('damage'));
 el.gasSkillCdr.addEventListener('click', () => game.buyGasSkill('cdr'));
 // 보스 소환은 1-depth — 버튼을 누르면 소환 가능한 최고 레벨을 바로 부른다(레벨 선택 없음)
-el.bossOpen.addEventListener('click', () => game.summonBoss());
+el.bossGrid.addEventListener('click', (event) => {
+  const btn = (event.target as HTMLElement).closest<HTMLElement>('.bossbtn');
+  if (btn?.dataset.level) game.summonBoss(Number(btn.dataset.level));
+});
 el.upgrades.forEach((button, i) => button.addEventListener('click', () => game.upgrade(i as Race)));
 el.augCards.addEventListener('click', (event) => {
   if (augmentInputLocked()) return; // F1 — pointer-events만 믿지 않고 재검사
@@ -84,11 +87,24 @@ window.addEventListener('keydown', (event) => {
   KEYS[event.key.toLowerCase()]?.();
 });
 
+// ── 게임 시작 게이트 — 첫 클릭 전에는 시간이 흐르지 않는다 (보드는 미리 보여준다) ──
+let started = false;
+const startOverlay = document.getElementById('startOverlay') as HTMLElement;
+document.getElementById('startBtn')!.addEventListener('click', () => {
+  started = true;
+  startOverlay.style.display = 'none';
+  last = performance.now(); // 게이트에 머문 시간이 첫 프레임 dt로 새지 않게
+});
+// 다시 시작 — 전체 리로드가 가장 확실한 리셋이다 (게임오버 '다시 도전'과 동일 경로)
+document.getElementById('restart')!.addEventListener('click', () => {
+  if (window.confirm('처음부터 다시 시작할까요?')) location.reload();
+});
+
 let last = performance.now();
 function frame(now: number): void {
   const dt = Math.min((now - last) / 1000, 0.05);
   last = now;
-  game.update(dt);
+  if (started) game.update(dt);
   render(ctx!, game);
   refresh(el, game);
   requestAnimationFrame(frame);

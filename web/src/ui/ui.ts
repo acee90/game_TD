@@ -44,8 +44,8 @@ export interface Elements {
   readonly augOverlay: HTMLElement;
   readonly augSub: HTMLElement;
   readonly augCards: HTMLElement;
-  readonly bossOpen: HTMLButtonElement;
-  readonly bossOpenSub: HTMLElement;
+  readonly bossGrid: HTMLElement;
+  readonly bossState: HTMLElement;
   readonly probe: HTMLButtonElement;
   readonly reroll: HTMLButtonElement;
   readonly gasSkillRow: HTMLElement;
@@ -98,8 +98,8 @@ export function bindElements(): Elements {
     augOverlay: $('augOverlay'),
     augSub: $('augSub'),
     augCards: $('augCards'),
-    bossOpen: $<HTMLButtonElement>('bossOpen'),
-    bossOpenSub: $('bossOpen').querySelector('.sub') as HTMLElement,
+    bossGrid: $('bossGrid'),
+    bossState: $('bossState'),
     probe: $<HTMLButtonElement>('probe'),
     reroll: $<HTMLButtonElement>('reroll'),
     gasSkillRow: $('gasSkillRow'),
@@ -266,7 +266,7 @@ function refreshHero(el: Elements, game: Game): void {
     button.textContent = `${HD.STAT_LABEL[stat]} ${attributes[stat].toFixed(1)}`;
     button.disabled = true;
   }
-  el.buyXp.textContent = `XP +${HD.XP_BUY_AMOUNT} (${HD.XP_BUY_GOLD})`;
+  el.buyXp.textContent = `[E] XP +${HD.XP_BUY_AMOUNT} (${HD.XP_BUY_GOLD}금화)`;
   el.buyXp.disabled = !game.canBuyXp;
 
   el.heroAugs.innerHTML = hero.augments
@@ -343,7 +343,8 @@ function refreshAugmentOverlay(el: Elements, game: Game): void {
   el.reroll.textContent =
     left > 0 ? `리롤 ${game.rerollCost}마정석 · ${left}회 남음 (보유 ${Math.floor(game.gas)})` : '리롤 소진';
   el.reroll.disabled = !game.canReroll || locked;
-  el.augCards.innerHTML = game.augmentChoices
+  // 매 프레임 innerHTML 금지 — 노드 교체가 클릭을 유실시킨다 (보스 소환대와 같은 함정)
+  const augHtml = game.augmentChoices
     .map((card, i) => {
       const kindColor = HD.AUGMENT_KIND_COLOR[card.augment.kind];
       const kindLabel = HD.AUGMENT_KIND_LABEL[card.augment.kind];
@@ -365,6 +366,10 @@ function refreshAugmentOverlay(el: Elements, game: Game): void {
       </button>`;
     })
     .join('');
+  if (el.augCards.dataset.html !== augHtml) {
+    el.augCards.innerHTML = augHtml;
+    el.augCards.dataset.html = augHtml;
+  }
 }
 
 export function refresh(el: Elements, game: Game): void {
@@ -375,17 +380,39 @@ export function refresh(el: Elements, game: Game): void {
   el.lives.textContent = String(game.lives);
   el.kills.textContent = String(game.kills);
 
-  const bossLabel = bossStateLabel(game);
-  el.bossOpenSub.textContent = bossLabel;
-  el.bossOpen.classList.toggle('ready', game.bossCooldown <= 0);
-  el.bossOpen.disabled = !game.canSummonBossLevel(game.maxBossLevel);
+  // 보스 소환대 — 레벨별 버튼 (2026-07-17): 어느 단을 부를지가 리스크 선택이다.
+  // 낮은 레벨은 안전한 파밍, 높은 레벨은 실패 시 쿨타임 동안 보상 없음.
+  //
+  // 주의: innerHTML을 매 프레임 갈면 press→release 사이에 버튼 노드가 교체되어
+  // 클릭이 유실된다 (플레이테스트 "눌러도 소환 안 됨"의 원인). 내용이 바뀔 때만 간다.
+  el.bossState.textContent = bossStateLabel(game);
+  const cdText = game.bossCooldown > 0 ? `쿨 ${Math.ceil(game.bossCooldown)}s` : null;
+  const bossHtml = Array.from({ length: B.BOSS_MAX_LEVEL }, (_, i) => i + 1)
+    .map((level) => {
+      const open = level <= game.maxBossLevel;
+      const can = game.canSummonBossLevel(level);
+      const cls = `bossbtn${can ? ' ready' : ''}${open && level === game.maxBossLevel ? ' top' : ''}`;
+      const sub = !open ? '잠김' : cdText ?? `+${bossKillMineral(level)}`;
+      return `<button class="${cls}" data-level="${level}" ${can ? '' : 'disabled'}
+        title="${open ? `Lv${level} 적장 소환 · 처치 보상 +${bossKillMineral(level)} 금화` : `Lv${level - 1}을 처치하면 해금됩니다`}">Lv${level}\n${sub}</button>`;
+    })
+    .join('');
+  if (el.bossGrid.dataset.html !== bossHtml) {
+    el.bossGrid.innerHTML = bossHtml;
+    el.bossGrid.dataset.html = bossHtml;
+  }
 
-  el.probe.textContent = `광부 ${game.probeCost} (${game.probes}/${B.PROBE_MAX})`;
+  // 효과를 버튼에 직접 적는다 — "사면 뭐가 좋아지는가"가 가격 옆에 보여야 한다 (2026-07-17)
+  el.probe.textContent =
+    `[R] 광부 ${game.probeCost} — 초당 마정석 +${B.GAS_PER_PROBE_SECOND} (${game.probes}/${B.PROBE_MAX})`;
+  el.probe.title =
+    `광부 1기당 초당 마정석 +${B.GAS_PER_PROBE_SECOND}. 살수록 비싸진다 (현재 ${game.probes}기 = 초당 +${(game.probes * B.GAS_PER_PROBE_SECOND).toFixed(2)}).`;
   el.probe.disabled = game.probes >= B.PROBE_MAX || game.mineral < game.probeCost;
 
-  el.spawn.textContent = `유닛 생성 ${game.spawnCost}`;
+  el.spawn.textContent = `[P] 유닛 생성 ${game.spawnCost}`;
   el.spawn.disabled = game.mineral < game.spawnCost;
 
+  el.sell.textContent = '[X] 유닛 처분';
   el.sell.disabled = !game.selected?.tower;
 
   // 복제 장치 — 증강을 들었을 때만 보인다
@@ -405,7 +432,9 @@ export function refresh(el: Elements, game: Game): void {
   el.upgrades.forEach((button, i) => {
     const race = i as Race;
     const cost = game.upgradeCost(race);
-    button.textContent = `${RACES[race]} +${game.upgrades[race]} · ${cost}마정석`;
+    button.textContent = `[${race + 1}] ${RACES[race]} Lv${game.upgrades[race]} · ${cost}마정석`;
+    button.title =
+      `${RACES[race]} 계열 강화 Lv${game.upgrades[race] + 1} — 기본 공격력의 +${B.UPGRADE_DAMAGE_PER_LEVEL * 100}%p 가산.`;
     button.disabled = game.gas < cost;
   });
 

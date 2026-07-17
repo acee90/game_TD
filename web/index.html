@@ -57,31 +57,18 @@
   #up2{border-color:var(--toss)} #up3{border-color:var(--creature)}
   .note{font-size:11px;color:var(--dim);text-align:center;margin-top:10px;line-height:1.7}
 
-  /* ── 보스 소환 — 커맨드창이 아닌 독립 소환 버튼 + 오버레이 ── */
-  #bossOpen{width:100%;margin-top:8px;padding:13px 8px;font-family:var(--serif);
-            font-size:15px;letter-spacing:.05em;color:var(--gold);border:1px solid var(--gold);
-            background:linear-gradient(180deg,#3d2e12,#291f0e);
-            box-shadow:inset 0 1px 0 rgba(255,220,150,.14),0 2px 8px rgba(0,0,0,.45)}
-  #bossOpen .sub{display:block;font-family:-apple-system,'Noto Sans KR',sans-serif;
-                 font-size:11px;letter-spacing:0;color:var(--dim);margin-top:3px;font-weight:400}
-  #bossOpen.ready{box-shadow:inset 0 1px 0 rgba(255,220,150,.18),
-                  0 0 0 1px var(--gold),0 0 14px rgba(227,178,62,.35)}
-  #bossOverlay{position:fixed;inset:0;z-index:30;display:none;padding:20px;
-               align-items:center;justify-content:center;
-               background:radial-gradient(120% 100% at 50% 0%,rgba(40,28,14,.92),rgba(8,6,3,.95))}
-  #bossOverlay.open{display:flex}
-  #bossOverlay .modal{width:100%;max-width:380px;background:var(--panel);
-                      border:1px solid var(--line2);border-radius:12px;padding:18px 16px;
-                      display:flex;flex-direction:column;gap:12px;
-                      box-shadow:0 16px 48px rgba(0,0,0,.6),inset 0 1px 0 rgba(255,230,180,.09)}
-  #bossOverlay h2{font-family:var(--serif);font-size:21px;color:var(--gold);
-                  text-align:center;letter-spacing:.05em}
-  #bossOverlay .sub{color:var(--dim);font-size:12px;text-align:center}
-  .bossgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
-  .bossbtn{white-space:pre-line;font-size:11.5px;padding:12px 2px;font-variant-numeric:tabular-nums}
+  /* ── 보스 소환대 — 레벨별 버튼 (Unity 소환대와 등가, 2026-07-17) ── */
+  #bossPanel{margin-top:8px;padding:10px 8px 8px;border:1px solid var(--gold);border-radius:8px;
+             background:linear-gradient(180deg,#3d2e12,#291f0e);
+             box-shadow:inset 0 1px 0 rgba(255,220,150,.14),0 2px 8px rgba(0,0,0,.45)}
+  #bossTitle{font-family:var(--serif);font-size:14px;letter-spacing:.05em;color:var(--gold);
+             text-align:center;margin-bottom:8px}
+  #bossTitle .sub{display:block;font-family:-apple-system,'Noto Sans KR',sans-serif;
+                  font-size:11px;letter-spacing:0;color:var(--dim);margin-top:2px;font-weight:400}
+  .bossgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+  .bossbtn{white-space:pre-line;font-size:11.5px;padding:9px 2px;font-variant-numeric:tabular-nums}
   .bossbtn.ready{border-color:var(--gold);color:var(--gold)}
   .bossbtn.top{background:linear-gradient(180deg,#4a3818,#33260f);border-color:var(--gold)}
-  #bossOverlay .modalnote{font-size:11px;color:var(--dim);line-height:1.65;text-align:center}
   #bossClose{padding:10px;border-color:var(--line2);font-family:var(--serif);letter-spacing:.04em}
 
   #heroPanel{background:var(--panel);border:1px solid var(--line);border-radius:8px;
@@ -152,6 +139,19 @@
   #overlay h1{font-size:27px;font-family:var(--serif);color:var(--gold);letter-spacing:.04em}
   #overlay button{padding:12px 28px;font-size:15px;font-family:var(--serif)}
 
+  /* 시작 게이트 — 화면 전체가 아니라 가운데 보드만 덮는다 (좌우 패널은 미리 읽을 수 있게) */
+  .boardcol{position:relative}
+  #startOverlay{position:absolute;inset:0;z-index:20;display:flex;border-radius:12px;
+           flex-direction:column;align-items:center;justify-content:center;gap:14px;
+           text-align:center;padding:24px;
+           background:radial-gradient(120% 100% at 50% 0%,rgba(40,28,14,.93),rgba(8,6,3,.96))}
+  #startOverlay h1{font-size:24px;font-family:var(--serif);color:var(--gold);letter-spacing:.04em}
+  #startOverlay button{padding:12px 28px;font-size:15px;font-family:var(--serif);border-color:var(--gold);color:var(--gold)}
+  #startOverlay p{line-height:1.9}
+
+  /* 선택 정보 — 좌측 컬럼에서 넓게 (2026-07-17). 내용이 없어도 높이를 유지해 레이아웃이 안 튄다 */
+  .actions #info{min-height:170px;font-size:12.5px;line-height:1.8}
+
   /* ── 레이아웃 ──
      기본(모바일/좁은 화면): 기존 세로 단일 컬럼 그대로.
      데스크톱(≥880px): 보드를 가운데 두고 버튼·패널을 좌우 여백에 배치하는 3열 그리드. */
@@ -188,13 +188,27 @@
 
     <canvas id="canvas" width="420" height="470" aria-label="십자 일주 맵"></canvas>
 
-    <div id="info"></div>
     <p id="message"></p>
+
+    <!-- 시작 게이트 — 누르기 전에는 시간이 흐르지 않는다. 보드만 덮는다 (2026-07-17) -->
+    <div id="startOverlay">
+      <h1>갓 타워 디펜스</h1>
+      <p class="dim">웨이브를 막고, 봉인된 적장을 사냥하고, 영웅을 키우세요.<br>
+        좌클릭 = 선택/생성 · 빈 곳 클릭 = 영웅 이동 · 스킬은 마나가 차면 자동 시전</p>
+      <button id="startBtn">게임 시작</button>
+    </div>
   </div>
 
-  <!-- 왼쪽 여백: 액션 버튼 -->
+  <!-- 왼쪽 여백: 선택 정보 + 액션 버튼 -->
   <div class="actions">
-    <button id="bossOpen">⚔️ 보스 소환<span class="sub"></span></button>
+    <!-- 선택 정보 — 유닛/영웅/몹 스탯. 좌측에서 넓게 상시 표시 (2026-07-17) -->
+    <div id="info"></div>
+
+    <!-- 보스 소환대 — 레벨별 버튼 (사다리에서 어느 단을 부를지가 리스크 선택이다) -->
+    <div id="bossPanel">
+      <div id="bossTitle">⚔️ 보스 소환 <small class="dim">[B]=최고 레벨</small><span class="sub" id="bossState"></span></div>
+      <div class="bossgrid" id="bossGrid"></div>
+    </div>
 
     <div class="row c2">
       <button id="spawn">유닛 생성</button>
@@ -202,10 +216,11 @@
     </div>
     <div class="row c2">
       <button id="sell">유닛 처분</button>
-      <button id="copyTower" hidden>복제 예약</button>
+      <button id="restart">↻ 다시 시작</button>
     </div>
+    <button id="copyTower" hidden>복제 예약</button>
 
-    <p class="note">파일런 업그레이드 (마정석) — 병과별 공격력 +10% 복리</p>
+    <p class="note">파일런 업그레이드 (마정석) — 병과별 공격력 +40%/레벨 (기본공 가산)</p>
     <div class="row c4">
       <button id="up0">정규군</button><button id="up1">포병</button>
       <button id="up2">마법대</button><button id="up3">소환대</button>
