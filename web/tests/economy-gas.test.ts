@@ -76,11 +76,11 @@ describe('증강 리롤 — 가스, 선택당 최대 2회', () => {
 });
 
 describe('가스 스킬 개조 — 업그레이드와 같은 지갑', () => {
-  test('스킬이 없으면 살 수 없다', () => {
+  test('기본 스킬 덕에 시작부터 살 수 있다 (6차 — 죽은 버튼 해소)', () => {
     const game = new Game(() => 0.5);
     game.gas = 100;
-    expect(game.canBuyGasSkill('damage')).toBe(false);
-    expect(game.buyGasSkill('damage')).toBe(false);
+    expect(game.canBuyGasSkill('damage')).toBe(true);
+    expect(game.buyGasSkill('damage')).toBe(true);
   });
 
   test('피해 개조는 스킬 피해를 곱으로 키운다', () => {

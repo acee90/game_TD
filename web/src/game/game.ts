@@ -154,6 +154,9 @@ export class Game {
     const live = this.enemies.filter((e) => !e.dead);
 
     switch (skill.def.id) {
+      case 'smite':
+        // 기본 스킬 — 사거리 안에 하나라도 있으면 값어치가 있다
+        return live.filter((e) => Math.abs(e.distance - hero.distance) <= hero.stats.range).length;
       case 'whirlwind':
         return live.filter((e) => Math.abs(e.distance - hero.distance) <= skill.radius).length;
       case 'volley':
@@ -207,6 +210,9 @@ export class Game {
     if (!this.canUseSkill || !skill) return false;
 
     switch (skill.def.id) {
+      case 'smite':
+        this.castSmite(skill);
+        break;
       case 'whirlwind':
         this.castWhirlwind(skill);
         break;
@@ -328,6 +334,22 @@ export class Game {
       enemy.slowFactor = skill.mods.slowFactor;
       enemy.slowTimer = skill.mods.slowSeconds;
     }
+  }
+
+  /** 강타 (기본 스킬, 6차) — 사거리 안 최근접 적 주변 좁은 범위를 때린다 */
+  private castSmite(skill: K.ResolvedSkill): void {
+    const hero = this.hero;
+    const target = this.nearestEnemy(hero.x, hero.y, hero.stats.range);
+    if (!target) return;
+    for (const enemy of this.enemies) {
+      if (Math.abs(enemy.distance - target.distance) <= skill.radius) this.skillHit(enemy, skill);
+    }
+    const [tx, ty] = pathPos(target.distance);
+    this.float(tx, ty, '강타!', '#e3b23e');
+    this.shots.push({
+      x: hero.x, y: hero.y, tx, ty, life: 0.18,
+      color: '#e3b23e', splashRadius: skill.radius,
+    });
   }
 
   private castWhirlwind(skill: K.ResolvedSkill): void {
@@ -631,11 +653,20 @@ export class Game {
     return true;
   }
 
-  /** 라운드 종료 — 예약된 타워를 빈 타일에 복제한다 */
+  /** 라운드 종료 — 예약된 타워를 빈 타일에 복제한다. 예약이 없으면 자동으로 최고 티어. */
   private resolveCopy(): void {
-    const target = this.copyTarget;
+    let target = this.copyTarget;
     this.copyTarget = null;
-    if (!target?.tower || !this.canCopyTower) return;
+    if (!this.canCopyTower) return;
+    // 무조작 시 자동 선택 (2026-07-17 6차, 플레이테스트): 복제 가능한 것 중 최고 티어.
+    // 예약 UI를 몰라도 증강이 놀지 않고, 아는 플레이어는 예약으로 덮어쓴다.
+    if (!target?.tower) {
+      target = this.slots
+        .filter((s): s is Slot & { tower: NonNullable<Slot['tower']> } =>
+          s.tower !== null && s.tower.tier <= this.copyTierCap)
+        .sort((a, b) => b.tower.tier - a.tower.tier)[0] ?? null;
+    }
+    if (!target?.tower) return;
 
     const empty = this.slots.find((s) => !s.tower && s !== this.altarSlot);
     if (!empty) {
@@ -933,8 +964,16 @@ export class Game {
     if (this.spawnQueue.length) {
       this.spawnTimer -= dt;
       if (this.spawnTimer <= 0) {
-        this.spawn(this.spawnQueue.shift()!);
-        this.spawnTimer = B.SPAWN_INTERVAL;
+        // 동시 몹 상한 (2026-07-17 6차): 필드의 일반 몹이 상한이면 스폰을 미룬다 —
+        // 후반에 웨이브가 겹쳐 수십 기가 쌓이는 압사를 막는다 (총 체력은 그대로,
+        // 압력이 시간으로 펴진다). 보스는 상한과 무관.
+        const normals = this.enemies.filter((e) => e.kind !== 'boss' && !e.dead).length;
+        if (normals < B.MAX_ALIVE_MOBS) {
+          this.spawn(this.spawnQueue.shift()!);
+          this.spawnTimer = B.SPAWN_INTERVAL;
+        } else {
+          this.spawnTimer = B.SPAWN_INTERVAL; // 잠시 뒤 다시 시도
+        }
       }
     }
 

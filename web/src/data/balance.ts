@@ -144,9 +144,12 @@ export const GAS_PER_PROBE_SECOND = 0.4;
 // 타워증강 앵커(전쟁군주 2장 + 몰빵 L15 > 풀투자 영웅)도 이 값이어야 성립한다.
 export const UPGRADE_DAMAGE_PER_LEVEL = 0.45;
 // 기울기 4 → 6 (5차): "업그레이드로 너무 빠르게 강해져서 라운드가 재미없다" —
-// 레벨당 효과(0.45)는 유지하고 페이스만 늦춘다. 종반 몰빵 L15 누적 660가스는
-// 여전히 예산(광부 3기 ~1,600) 안 — 타워증강 앵커 불변.
-export const upgradeGasCost = (level: number): number => 2 + 6 * level;
+// 레벨당 효과(0.45)는 유지하고 페이스만 늦춘다.
+// 6차: 2+6L → 2+3L+0.2L² — "첫 업 2에서 8로 왜 점핑?"(플레이테스트). 등차 6은
+// 두 번째 업이 4배로 느껴진다. 진입을 2→5→9→13으로 완만하게, 꼬리는 이차항이
+// 조인다. L15 누적 640가스 ≈ 5차 660 — 총예산·타워증강 앵커 불변.
+export const upgradeGasCost = (level: number): number =>
+  Math.round(2 + 3 * level + 0.2 * level * level);
 
 // ───────── 보스 소환 ─────────
 // 소환은 라운드 진행과 무관한 상시 액션이고 쿨타임만 있다. 비용 없음.
@@ -176,7 +179,7 @@ export const BOSS_COOLDOWN_SECONDS = 45; // [프로토]
 // 2026-07-17 (4차): 성장 3.0 → 3.4 — GOD 다수 체제(가스 0.4/s·생성비 완화)에서
 // "GOD 1기 + 3~4업이면 R20에 Lv6"이 또 뚫렸다. base 700 → 550은 기본공 4→3 동행
 // (Lv1 앵커 = 시작 자원으로 처치 — boss-balance.test.ts). Lv6 = 250k (종반 보드 몫).
-export const bossHP = (level: number): number => 550 * Math.pow(3.4, level - 1);
+export const bossHP = (level: number): number => 800 * Math.pow(3.4, level - 1); // 550→800 (6차: 기본 스킬 강타가 초반 영웅 화력을 올려 재앵커)
 export const bossArmor = (level: number): number => 1.1 * level; // 기본공 3 동행
 export const BOSS_SPEED = 26;
 /**
@@ -259,7 +262,9 @@ export const expectedBoardDps = (round: number): number => {
  *   목표: R60 도달 ≤10%, R60 통과(클리어) ≤5% — 상수는 시드 시뮬로 보정
  *   (1차 시도 RAMP_END 52·0.18은 통과율 31%로 물렀다).
  */
-export const WAVE_RAMP_START = 30;
+// 30 → 26 (6차): "중반 R30~40을 조금 더 높이자" — 가속이 4라운드 일찍 시작된다
+// (R30 성장률 1.4% → 4.9%, R35 5.5% → 9.2%).
+export const WAVE_RAMP_START = 26;
 // 48 → 52 (2026-07-17 4차): "R40부터 급격히 어려워진다" — 램프를 늘려 R40 시점
 // 성장률을 12.9% → 10.4%로 눌러 절벽 체감을 완화한다 (보드 후반 성장 8.8%와의 간극 축소).
 export const WAVE_RAMP_END = 52;
@@ -306,6 +311,12 @@ export const enemyCount = (round: number): number =>
 
 /** 웨이브 내 스폰 간격(초). 36기 × 0.18 = 6.5초 스폰 창 [프로토] */
 export const SPAWN_INTERVAL = 0.18;
+/**
+ * 동시 일반 몹 상한 (2026-07-17 6차). 후반에 웨이브가 겹쳐 수십 기가 쌓이면
+ * 압사·가독성 붕괴가 온다 — 상한이면 스폰을 미룬다(총 체력 불변, 압력이 시간으로
+ * 펴진다). 한 웨이브 최대 36기 + 이전 웨이브 꼬리 여유분.
+ */
+export const MAX_ALIVE_MOBS = 45;
 // 52 → 42 (2026-07-14): 초반 체감 템포를 늦춘다. 경로 통과 시간이 24% 늘어 타워가 더 많이
 // 쏘고, 영웅이 몹 무리를 정리할 시간도 늘어난다. 난이도는 쉬워지는 방향이다. [프로토]
 export const ENEMY_SPEED = 42;

@@ -26,11 +26,11 @@ const mob = (distance: number, hp = 1e9, speed = 40): Enemy => ({
 });
 
 describe('스킬 획득 — 하나만 든다', () => {
-  test('처음에는 스킬이 없다', () => {
+  test('처음부터 기본 스킬 강타를 든다 (6차) — 가스 스킬 강화가 시작부터 유효하다', () => {
     const hero = new Hero();
-    expect(hero.skillId).toBeNull();
-    expect(hero.skill).toBeNull();
-    expect(hero.skillReady).toBe(false);
+    expect(hero.skillId).toBe('smite');
+    expect(hero.skill?.def.name).toBe('강타');
+    expect(hero.skillReady).toBe(false); // 마나 0에서 시작
   });
 
   test('스킬 증강을 고르면 스킬이 생긴다', () => {
@@ -83,10 +83,16 @@ describe('스킬 획득 — 하나만 든다', () => {
       return seed / 4294967296;
     };
 
-    // 스킬이 없는 동안에는 개조 증강이 한 번도 안 나온다
+    // 기본 스킬(강타)만 든 동안 — 공용('any') 개조는 나올 수 있지만
+    // 특정 스킬 전용 개조는 한 번도 안 나온다 (6차: 기본 스킬 도입으로 완화)
     for (let i = 0; i < 200; i++) {
       for (const c of rollAugmentChoices(hero, rand)) {
-        expect(c.augment.skillMod).toBeUndefined();
+        if (c.augment.skillMod) {
+          expect(
+            c.augment.requiresSkill === 'any' || c.augment.requiresZone === true,
+          ).toBe(true);
+          expect(c.augment.requiresZone ?? false).toBe(false); // 강타는 장판이 없다
+        }
       }
     }
 
@@ -181,10 +187,10 @@ describe('스킬 개조 — 수치가 아니라 관계다', () => {
 });
 
 describe('스킬 시전', () => {
-  test('스킬이 없으면 못 쓴다', () => {
+  test('기본 스킬은 마나가 차기 전엔 못 쓴다 — 차면 적이 없어도 시전은 성립한다', () => {
     const game = new Game();
-    expect(game.canUseSkill).toBe(false);
-    expect(castNow(game)).toBe(false);
+    expect(game.canUseSkill).toBe(false); // 마나 0
+    expect(castNow(game)).toBe(true); // 6차: 기본 스킬 강타 보유 — 마나만 차면 쓸 수 있다
   });
 
   test('쓰면 마나가 비고, 평타로 다시 찬다 (TFT식)', () => {

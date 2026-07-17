@@ -114,7 +114,9 @@ namespace GodTD.Core
         /// 첫 업 2 = 시작 가스 6으로 3개 병과 1업. ← web/src/data/balance.ts
         /// </summary>
         public const float UPGRADE_DAMAGE_PER_LEVEL = 0.45f; // 0.4 → 0.45 (4차) ← web
-        public static int UpgradeGasCost(int level) => 2 + 6 * level; // 기울기 4 → 6 (5차: 업그레이드 페이스 완화) ← web
+        // 5차 2+6L → 6차 2+3L+0.2L²: 첫 스텝 2→8 점핑 해소 (2→5→9→13), 총예산 보존. ← web
+        public static int UpgradeGasCost(int level) =>
+            (int)MathF.Round(2f + 3f * level + 0.2f * level * level);
 
         // ───────── 보스 소환 ─────────
         // 소환은 라운드 진행과 무관한 상시 액션이고 쿨타임만 있다. 비용 없음.
@@ -136,7 +138,7 @@ namespace GodTD.Core
         // 2026-07-17: 성장 2.5 → 3.0 — 사다리 소진 R22가 너무 빨랐다 (Lv4 R15·Lv6 R22).
         // Lv1~2 앵커 유지, 상위만 가팔라진다: Lv6 = 170k (GOD 1기 시대 종료). ← web
         // 4차: base 550(기본공 3 동행)·성장 3.4 — GOD 다수 체제에서 사다리 재조정. ← web
-        public static float BossHP(int level) => 550f * MathF.Pow(3.4f, level - 1);
+        public static float BossHP(int level) => 800f * MathF.Pow(3.4f, level - 1); // 550→800 (6차: 기본 스킬 재앵커) ← web
         public static float BossArmor(int level) => 1.1f * level;
         public const float BOSS_SPEED = 26f;
 
@@ -174,10 +176,10 @@ namespace GodTD.Core
         // 6차 (2026-07-16): 킥 있는 벽 폐지 → 성장률 연속 램프 (R30~48에 1.4%→20% 선형,
         // 이후 유지). 최종 보스 없음 — R60도 그냥 강한 웨이브라 "갑자기 벽"이 없어야 한다.
         // 목표: R60 도달 ≤10% · 클리어 ≤5%. ← web/src/data/balance.ts
-        public const int WAVE_RAMP_START = 30;
+        public const int WAVE_RAMP_START = 26; // 30 → 26 (6차: 중반 R30~40 강화) ← web
         public const int WAVE_RAMP_END = 52; // 48 → 52 (4차: R40 절벽 완화) ← web
         public const float WAVE_BASE_RATE = 0.014f;
-        public const float WAVE_MAX_RATE = 0.27f; // 0.25 → 0.27 (5차: 조기 증강 재보정 — 도달 8.9%·클리어 3.6%) ← web
+        public const float WAVE_MAX_RATE = 0.24f; // 0.27 → 0.24 (6차: 후반 완화 + 동시 몹 상한 세트) ← web
         public static float TargetClearSeconds(int round)
         {
             if (round <= WAVE_RAMP_START) return 18f + 0.45f * (round - 1);
@@ -212,6 +214,8 @@ namespace GodTD.Core
 
         /// <summary>웨이브 내 스폰 간격(초) [프로토]</summary>
         public const float SPAWN_INTERVAL = 0.18f;
+        /// <summary>동시 일반 몹 상한 (6차) — 상한이면 스폰을 미룬다 (총 체력 불변). ← web</summary>
+        public const int MAX_ALIVE_MOBS = 45;
 
         /// <summary>몹 2열 레인 — 경로 중심선에서 좌우로 비끼는 표시 오프셋(px). 판정은 1D. [프로토]</summary>
         public const float MOB_LANE_OFFSET = 8f;

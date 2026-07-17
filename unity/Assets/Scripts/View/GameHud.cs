@@ -870,8 +870,9 @@ namespace GodTD.View
                 var stats = hero.Stats;
                 SetInfoAccent(UiTheme.HeroCol, "영웅");
                 selTitle.text = $"영웅 <color=#B08CFF>Lv{hero.Level}</color>";
+                // 다음 증강 예고 (6차 편의성) — 몇 레벨에 다음 선택이 오는지 항상 보인다
                 selMeta.text = hero.Alive
-                    ? $"<color=#8A93AD>HP {Mathf.CeilToInt(hero.Hp)}/{stats.MaxHp:0} · XP {Mathf.FloorToInt(hero.Xp)}/{hero.XpNeeded}</color>"
+                    ? $"<color=#8A93AD>HP {Mathf.CeilToInt(hero.Hp)}/{stats.MaxHp:0} · XP {Mathf.FloorToInt(hero.Xp)}/{hero.XpNeeded} · 증강 Lv{HeroData.NextAugmentLevel(hero.Level)}</color>"
                     : $"<color=#FF5A3C>부활 {Mathf.CeilToInt(hero.RespawnTimer)}s</color>";
                 hpVisible = xpVisible = true;
                 UiKit.SetBar(selHpBar.fill, hero.Alive ? hero.Hp / stats.MaxHp : 0f);

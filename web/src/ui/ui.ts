@@ -245,7 +245,9 @@ function refreshHero(el: Elements, game: Game): void {
     : `부활 ${Math.ceil(hero.respawnTimer)}s`;
 
   el.heroXpBar.style.width = `${(hero.xp / hero.xpNeeded) * 100}%`;
-  el.heroXp.textContent = `${Math.floor(hero.xp)}/${hero.xpNeeded}`;
+  // 다음 증강 예고 (6차 편의성) — 몇 레벨에 다음 선택이 오는지 항상 보인다
+  el.heroXp.textContent =
+    `${Math.floor(hero.xp)}/${hero.xpNeeded} · 다음 증강 Lv${HD.nextAugmentLevel(hero.level)}`;
 
   const dps = (stats.damage / stats.attackInterval).toFixed(0);
   const parts = [
@@ -274,8 +276,10 @@ function refreshHero(el: Elements, game: Game): void {
   el.heroAugs.innerHTML = hero.augments
     .map((card) => {
       const color = HD.AUGMENT_KIND_COLOR[card.augment.kind];
-      const border = HD.RARITIES[card.rarity].color;
-      return `<span class="aug" style="background:${color};box-shadow:0 0 0 1.5px ${border}">${card.augment.name}</span>`;
+      const rarity = HD.RARITIES[card.rarity];
+      // 다시보기 (6차 편의성) — 호버하면 등급·설명이 뜬다
+      const tip = `${rarity.label}${rarity.power > 1 ? ` ×${rarity.power}` : ''} — ${card.augment.description}`;
+      return `<span class="aug" title="${tip.replace(/"/g, '&quot;')}" style="background:${color};box-shadow:0 0 0 1.5px ${rarity.color}">${card.augment.name}</span>`;
     })
     .join('');
 

@@ -114,7 +114,7 @@ namespace GodTD.Core
             {
                 foreach (var c in AugmentCards)
                     if (c.Augment.GrantsSkill.HasValue) return c.Augment.GrantsSkill;
-                return null;
+                return Skills.DEFAULT_SKILL; // 기본 스킬 강타 (6차) — 스킬 증강이 교체한다 ← web
             }
         }
 

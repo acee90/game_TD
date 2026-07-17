@@ -1,4 +1,4 @@
-import { SKILLS, type SkillId, type SkillModPatch } from './skills';
+import { DEFAULT_SKILL, SKILLS, type SkillId, type SkillModPatch } from './skills';
 
 // ───────── 영웅 · 제단 · 증강 ─────────
 // 원본 갓타디에는 없는 신규 설계다. 근거 표기 대상이 아니다.
@@ -207,6 +207,14 @@ export function grantsAugment(level: number): boolean {
   if (AUGMENT_LEVELS.includes(level)) return true;
   const last = AUGMENT_LEVELS[AUGMENT_LEVELS.length - 1];
   return level > last && (level - last) % AUGMENT_TAIL_EVERY === 0;
+}
+
+/** 다음 증강을 받는 레벨 — UI 예고용 ("다음 증강 Lv24") */
+export function nextAugmentLevel(level: number): number {
+  for (let l = level + 1; l <= level + AUGMENT_TAIL_EVERY + 1; l++) {
+    if (grantsAugment(l)) return l;
+  }
+  return level + 1; // 도달 불가 — grantsAugment가 tail을 보장하므로 실제로는 안 온다
 }
 
 /** `level`까지 올렸을 때 받은 증강 개수 */
@@ -888,7 +896,9 @@ export const requiresSplash = (augment: Augment): boolean => augment.id === 'nov
  *   이게 수치가 아니라 **관계**로 맺어지는 시너지다.
  */
 export function skillGateAllows(augment: Augment, currentSkill: SkillId | null): boolean {
-  if (augment.grantsSkill) return currentSkill === null;
+  // 스킬 획득 증강은 기본 스킬(강타)을 들고 있을 때만 뜬다 — 교체 제안이다.
+  // 증강으로 얻은 진짜 스킬이 있으면 더 안 나온다 (영웅은 스킬 하나).
+  if (augment.grantsSkill) return currentSkill === null || currentSkill === DEFAULT_SKILL;
   // 장판 개조는 장판을 까는 스킬을 든 뒤에만 — 즉발 스킬엔 붙일 데가 없다
   if (augment.requiresZone) {
     return currentSkill !== null && (SKILLS[currentSkill].zoneSeconds ?? 0) > 0;

@@ -11,6 +11,7 @@
 // 대신 스킬마다 "언제 쓰는 게 맞는지"가 다르므로 발동 조건을 데이터로 둔다.
 
 export type SkillId =
+  | 'smite'      // 기본 — 좁은 범위 강타 (시작 스킬, 스킬 증강이 교체한다)
   | 'whirlwind'  // 근접 — 광역
   | 'volley'     // 원거리 — 다중 사격
   | 'meteor'     // 마법 — 밀집 광역
@@ -20,6 +21,13 @@ export type SkillId =
   | 'icearrow'   // 원거리 — 지형에 빙판(감속 장판)
   | 'execution'  // 근접 — 마무리 일격 (처치 시 쿨 초기화)
   | 'chain';     // 원거리 — 튕기는 사격 (튕길수록 강해진다)
+
+/**
+ * 시작 스킬 (2026-07-17 6차). 그전에는 스킬이 증강 전용이라 **가스 스킬 강화
+ * (피해/필요 마나)가 스킬을 뽑기 전엔 죽은 버튼**이었다(플레이테스트). 기본 스킬이
+ * 있으면 가스 트랙이 처음부터 유효하고, 스킬 증강은 이 스킬을 **교체**한다.
+ */
+export const DEFAULT_SKILL: SkillId = 'smite';
 
 /**
  * 시전 방식 — **쿨감의 값어치가 여기서 갈린다.**
@@ -97,6 +105,17 @@ export interface SkillDef {
 }
 
 export const SKILLS: Record<SkillId, SkillDef> = {
+  smite: {
+    id: 'smite',
+    castType: 'burst',
+    name: '강타',
+    description: '가장 가까운 적 주변 좁은 범위에 공격력 3배 피해',
+    manaMax: 100,
+    damageMult: 3,
+    radius: 40, // 소용돌이(70)보다 좁다 — 시작 스킬은 씨앗이다
+    targets: 0,
+    autoCastMinTargets: 1,
+  },
   whirlwind: {
     id: 'whirlwind',
     castType: 'burst',

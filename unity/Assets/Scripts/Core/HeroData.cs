@@ -172,6 +172,14 @@ namespace GodTD.Core
             return level > last && (level - last) % AUGMENT_TAIL_EVERY == 0;
         }
 
+        /// <summary>다음 증강을 받는 레벨 — UI 예고용 ← web</summary>
+        public static int NextAugmentLevel(int level)
+        {
+            for (int l = level + 1; l <= level + AUGMENT_TAIL_EVERY + 1; l++)
+                if (GrantsAugment(l)) return l;
+            return level + 1;
+        }
+
         /// <summary>`level`까지 올렸을 때 받은 증강 개수</summary>
         public static int AugmentsByLevel(int level)
         {

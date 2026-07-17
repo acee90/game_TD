@@ -16,7 +16,7 @@ using System.Collections.Generic;
 
 namespace GodTD.Core
 {
-    public enum SkillId { Whirlwind, Volley, Meteor, Decoy }
+    public enum SkillId { Smite, Whirlwind, Volley, Meteor, Decoy }
 
     /// <summary>가스 스킬 개조 트랙 — 웹의 'damage' | 'cdr'</summary>
     public enum GasSkillTrack { Damage, Cdr }
@@ -131,8 +131,16 @@ namespace GodTD.Core
 
     public static class Skills
     {
+        /// <summary>시작 스킬 (6차) — 스킬 증강이 이걸 교체한다. 가스 스킬 강화가 시작부터 유효. ← web</summary>
+        public const SkillId DEFAULT_SKILL = SkillId.Smite;
+
         public static readonly Dictionary<SkillId, SkillDef> SKILLS = new Dictionary<SkillId, SkillDef>
         {
+            [SkillId.Smite] = new SkillDef(SkillId.Smite, "강타",
+                "가장 가까운 적 주변 좁은 범위에 공격력 3배 피해",
+                manaMax: 100f, damageMult: 3f, radius: 40f, targets: 0,
+                autoCastMinTargets: 1), // 시작 스킬은 씨앗 — 소용돌이(70)보다 좁다
+
             [SkillId.Whirlwind] = new SkillDef(SkillId.Whirlwind, "소용돌이",
                 "주변의 적 전체에 공격력 3배 피해",
                 manaMax: 100f, damageMult: 3f, radius: 70f, targets: 0,
@@ -153,7 +161,7 @@ namespace GodTD.Core
         };
 
         public static readonly SkillId[] SKILL_IDS =
-            { SkillId.Whirlwind, SkillId.Volley, SkillId.Meteor, SkillId.Decoy };
+            { SkillId.Smite, SkillId.Whirlwind, SkillId.Volley, SkillId.Meteor, SkillId.Decoy };
 
         // ── 허수아비 ──
         /// <summary>영웅 앞쪽 이 거리에 세운다</summary>

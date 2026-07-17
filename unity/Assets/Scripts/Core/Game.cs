@@ -508,7 +508,10 @@ namespace GodTD.Core
                 spawnTimer -= dt;
                 if (spawnTimer <= 0f)
                 {
-                    Spawn(spawnQueue.Dequeue());
+                    // 동시 몹 상한 (6차) — 상한이면 스폰을 미룬다 (총 체력 불변) ← web
+                    int normals = 0;
+                    foreach (var e in Enemies) if (e.Kind != EnemyKind.Boss && !e.Dead) normals++;
+                    if (normals < Balance.MAX_ALIVE_MOBS) Spawn(spawnQueue.Dequeue());
                     spawnTimer = Balance.SPAWN_INTERVAL;
                 }
             }

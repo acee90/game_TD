@@ -397,7 +397,9 @@ export class Hero {
 
   /** 들고 있는 액티브 스킬. 스킬 증강을 안 골랐으면 null. */
   get skillId(): SkillId | null {
-    return this.augments.find((c) => c.augment.grantsSkill)?.augment.grantsSkill ?? null;
+    // 기본 스킬 '강타' (6차) — 스킬 증강을 뽑으면 그쪽이 교체한다.
+    // 가스 스킬 강화가 게임 시작부터 유효해진다.
+    return this.augments.find((c) => c.augment.grantsSkill)?.augment.grantsSkill ?? K.DEFAULT_SKILL;
   }
 
   /** 개조가 반영된 스킬 수치 — 증강 개조와 가스 개조가 함께 접힌다 */

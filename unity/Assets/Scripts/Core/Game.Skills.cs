@@ -32,6 +32,14 @@ namespace GodTD.Core
             var hero = Hero;
             switch (skill.Def.Id)
             {
+                case SkillId.Smite:
+                {
+                    // 기본 스킬 — 사거리 안에 하나라도 있으면 값어치가 있다
+                    int count = 0;
+                    foreach (var e in Enemies)
+                        if (!e.Dead && MathF.Abs(e.Distance - hero.Distance) <= hero.Stats.Range) count++;
+                    return count;
+                }
                 case SkillId.Whirlwind:
                 {
                     int count = 0;
@@ -86,6 +94,7 @@ namespace GodTD.Core
 
             switch (skill.Def.Id)
             {
+                case SkillId.Smite: CastSmite(skill); break;
                 case SkillId.Whirlwind: CastWhirlwind(skill); break;
                 case SkillId.Volley: CastVolley(skill); break;
                 case SkillId.Meteor: CastMeteor(skill); break;
@@ -108,6 +117,23 @@ namespace GodTD.Core
                 enemy.SlowFactor = skill.Mods.SlowFactor;
                 enemy.SlowTimer = skill.Mods.SlowSeconds;
             }
+        }
+
+        /// <summary>강타 (기본 스킬, 6차) — 사거리 안 최근접 적 주변 좁은 범위를 때린다 ← web</summary>
+        void CastSmite(ResolvedSkill skill)
+        {
+            var hero = Hero;
+            var target = NearestEnemy(hero.X, hero.Y, hero.Stats.Range);
+            if (target == null) return;
+            foreach (var enemy in Enemies)
+                if (MathF.Abs(enemy.Distance - target.Distance) <= skill.Radius) SkillHit(enemy, skill);
+            var t = MapData.PathPos(target.Distance);
+            Float(t.X, t.Y, "강타!", "#e3b23e");
+            Shots.Add(new Shot
+            {
+                X = hero.X, Y = hero.Y, Tx = t.X, Ty = t.Y, Life = 0.18f,
+                Color = "#e3b23e", SplashRadius = skill.Radius,
+            });
         }
 
         void CastWhirlwind(ResolvedSkill skill)
