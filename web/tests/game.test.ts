@@ -382,11 +382,12 @@ describe('보스 소환 — 상시 액션, 쿨타임만, 순차 해금', () => {
   });
 
   test('보스 처치 보상 — 리스크에 맞춰 상위 레벨이 가파르다 [프로토]', () => {
-    // 원본 표는 [5, 8, 13, 20, 29, 39] (trigger #601~#606). 보스 HP를 레벨당 ×2.5로
-    // 세우면서 보상도 리스크를 따라가게 대체했다 — 레벨당 증가율이 줄지 않아야 한다.
-    expect(B.BOSS_KILL_MINERAL).toEqual([5, 10, 18, 32, 55, 90]);
+    // 원본 표는 [5, 8, 13, 20, 29, 39] (trigger #601~#606, Lv6까지). 보스 HP를 지수로
+    // 세우면서 보상도 리스크를 따라가게 대체했고, Lv7은 5차에서 신설한 종반 적장이다.
+    // 레벨당 증가율이 줄지 않아야 한다.
+    expect(B.BOSS_KILL_MINERAL.length).toBe(B.BOSS_MAX_LEVEL);
     expect(bossKillMineral(1)).toBe(5);
-    for (let lv = 1; lv < 6; lv++) {
+    for (let lv = 1; lv < B.BOSS_MAX_LEVEL; lv++) {
       expect(bossKillMineral(lv + 1) / bossKillMineral(lv)).toBeGreaterThanOrEqual(1.6);
     }
   });

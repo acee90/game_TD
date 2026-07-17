@@ -146,7 +146,7 @@ namespace GodTD.Core
         /// <summary>보스는 같은 라운드 잡몹 여러 기 몫으로 때린다</summary>
         /// <summary>Lv3까지는 영웅·허수아비를 공격하지 않고 지나간다 — 위협은 누출 라이프뿐 ← web</summary>
         // 3 → 6 (2026-07-17 플레이테스트): 보스는 전 레벨 무해 — 위협은 누출 라이프뿐. ← web
-        public const int BOSS_HARMLESS_MAX_LEVEL = 6;
+        public const int BOSS_HARMLESS_MAX_LEVEL = 7; // Lv7(5차)도 무해 — 전 레벨 불변 ← web
         public static float BossDamage(int level, int round) =>
             level <= BOSS_HARMLESS_MAX_LEVEL ? 0f : EnemyDamage(round) * (1.5f + 0.5f * level);
 
@@ -160,7 +160,7 @@ namespace GodTD.Core
         /// **앞의 네 개는 80% 이상의 판이 받고**(핵심 빌드가 완성된다), 뒤의 두 개는 오래 버틴
         /// 판만 받는 보상이다. 소진 후에는 AUGMENT_TAIL_EVERY 레벨마다 계속 준다.
         /// </summary>
-        public static readonly int[] AUGMENT_LEVELS = { 9, 16, 24, 30, 35, 42 };
+        public static readonly int[] AUGMENT_LEVELS = { 5, 10, 24, 30, 35, 42 }; // 첫 둘 조기화 (5차: 증강 보고 빌드 결정) ← web
         public const int AUGMENT_TAIL_EVERY = 8;
         public const int AUGMENT_CHOICES = 3;
 

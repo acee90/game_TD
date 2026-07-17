@@ -42,7 +42,7 @@ namespace GodTD.Core
         /// <summary>보스 처치 보상 Lv1..Lv6 [프로토]</summary>
         // 원본은 { 5, 8, 13, 20, 29, 39 } (trigger #601~#606 [원본확정]).
         // 2026-07-11 [프로토] 대체 — 보스 HP ×2.5와 함께 리스크에 보상이 따라가게. ← web
-        public static readonly int[] BOSS_KILL_MINERAL = { 5, 10, 18, 32, 55, 90 };
+        public static readonly int[] BOSS_KILL_MINERAL = { 5, 10, 18, 32, 55, 90, 150 }; // Lv7 +150 (5차)
 
         /// <summary>킬 마일스톤 보상. trigger #546~#566. 200킬 간격 [원본확정] — (킬 수, 미네랄)</summary>
         public static readonly (int kills, int mineral)[] KILL_MILESTONES =
@@ -91,7 +91,7 @@ namespace GodTD.Core
         /// [프로토]
         /// </summary>
         public const int SPAWN_FREE_COUNT = 8;
-        public const float SPAWN_COST_GROWTH = 0.35f; // 0.45 → 0.35 (4차: R40 GOD ~4기 목표) ← web
+        public const float SPAWN_COST_GROWTH = 0.4f; // 0.35 → 0.4 (5차: GOD 페이스 -10~20%) ← web
         public static int SpawnUnitCost(int spawned) =>
             (int)System.Math.Round(
                 SPAWN_UNIT_MINERAL + SPAWN_COST_GROWTH * System.Math.Max(0, spawned - SPAWN_FREE_COUNT),
@@ -114,12 +114,12 @@ namespace GodTD.Core
         /// 첫 업 2 = 시작 가스 6으로 3개 병과 1업. ← web/src/data/balance.ts
         /// </summary>
         public const float UPGRADE_DAMAGE_PER_LEVEL = 0.45f; // 0.4 → 0.45 (4차) ← web
-        public static int UpgradeGasCost(int level) => 2 + 4 * level;
+        public static int UpgradeGasCost(int level) => 2 + 6 * level; // 기울기 4 → 6 (5차: 업그레이드 페이스 완화) ← web
 
         // ───────── 보스 소환 ─────────
         // 소환은 라운드 진행과 무관한 상시 액션이고 쿨타임만 있다. 비용 없음.
         // Lv N은 Lv N-1을 처치해야 열린다. (원본 감지 로직·쿨타임은 EUD로 미확인 — §11.1)
-        public const int BOSS_MAX_LEVEL = 6;
+        public const int BOSS_MAX_LEVEL = 7; // 6 → 7 (5차: 종반 적장 신설 — 원본은 Lv6까지) ← web
         public const float BOSS_COOLDOWN_SECONDS = 45f; // [프로토]
 
         /// <summary>
@@ -177,7 +177,7 @@ namespace GodTD.Core
         public const int WAVE_RAMP_START = 30;
         public const int WAVE_RAMP_END = 52; // 48 → 52 (4차: R40 절벽 완화) ← web
         public const float WAVE_BASE_RATE = 0.014f;
-        public const float WAVE_MAX_RATE = 0.25f; // 0.22 → 0.25 (4차: 부유한 경제 재보정 — 도달 7.1%·클리어 4.5%) ← web
+        public const float WAVE_MAX_RATE = 0.27f; // 0.25 → 0.27 (5차: 조기 증강 재보정 — 도달 8.9%·클리어 3.6%) ← web
         public static float TargetClearSeconds(int round)
         {
             if (round <= WAVE_RAMP_START) return 18f + 0.45f * (round - 1);

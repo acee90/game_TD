@@ -59,7 +59,7 @@ namespace GodTD.View
         // 게임 쿨타임처럼 버튼 위에서 읽힌다. 전부 raycastTarget=false — 클릭은 버튼이 받는다.
         readonly Image[] bossSeals = new Image[Balance.BOSS_MAX_LEVEL];
         readonly TextMeshProUGUI[] bossSealSecs = new TextMeshProUGUI[Balance.BOSS_MAX_LEVEL];
-        static readonly string[] ROMAN = { "I", "II", "III", "IV", "V", "VI" };
+        static readonly string[] ROMAN = { "I", "II", "III", "IV", "V", "VI", "VII" };
 
         // ── 공용 툴팁 (선택정보 위) ──
         RectTransform tooltipRoot;

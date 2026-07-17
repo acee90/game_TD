@@ -41,7 +41,9 @@ export const OPENING_SECONDS = 5;
  * 리스크에 보상이 따라가도록 상위 레벨을 가파르게 올렸다. 플레이테스트 근거:
  * "난이도 고민 없이 항상 최고 레벨만 부르면 된다 → 재미없다".
  */
-export const BOSS_KILL_MINERAL = [5, 10, 18, 32, 55, 90] as const;
+// Lv7 신설 (2026-07-17 5차 [프로토] — 원본은 Lv6까지): "R30 전에 Lv6을 잡으면
+// 성장의 흥미가 끝난다" — 사다리 꼭대기를 종반(R50+)으로 연장. 보상은 ×1.65 패턴.
+export const BOSS_KILL_MINERAL = [5, 10, 18, 32, 55, 90, 150] as const;
 
 /** 킬 마일스톤 보상. trigger #546~#566. 200킬 간격 [원본확정] */
 export const KILL_MILESTONES: readonly (readonly [kills: number, mineral: number])[] = [
@@ -96,8 +98,8 @@ export const SPAWN_UNIT_MINERAL = 12; // 소용돌이 클릭 → Lv1 생성 (str
  */
 export const SPAWN_FREE_COUNT = 8;
 // 0.45 → 0.35 (2026-07-17 4차): "타워 뽑는 골드가 너무 급격히 오른다"(플레이테스트).
-// 목표: 광부 2~3 + 타워만 운영 시 R40에 GOD ~4기.
-export const SPAWN_COST_GROWTH = 0.35;
+// 0.35 → 0.40 (5차): "GOD 페이스는 좋은데 여기서 10~20%만 줄이자" — 반걸음 되돌림.
+export const SPAWN_COST_GROWTH = 0.4;
 export const spawnUnitCost = (spawned: number): number =>
   Math.round(SPAWN_UNIT_MINERAL + SPAWN_COST_GROWTH * Math.max(0, spawned - SPAWN_FREE_COUNT));
 /**
@@ -141,12 +143,15 @@ export const GAS_PER_PROBE_SECOND = 0.4;
 // 0.4 → 0.45 (2026-07-17 4차): 기본공 3 체제에서 구매 파워의 몫을 더 키운다 —
 // 타워증강 앵커(전쟁군주 2장 + 몰빵 L15 > 풀투자 영웅)도 이 값이어야 성립한다.
 export const UPGRADE_DAMAGE_PER_LEVEL = 0.45;
-export const upgradeGasCost = (level: number): number => 2 + 4 * level;
+// 기울기 4 → 6 (5차): "업그레이드로 너무 빠르게 강해져서 라운드가 재미없다" —
+// 레벨당 효과(0.45)는 유지하고 페이스만 늦춘다. 종반 몰빵 L15 누적 660가스는
+// 여전히 예산(광부 3기 ~1,600) 안 — 타워증강 앵커 불변.
+export const upgradeGasCost = (level: number): number => 2 + 6 * level;
 
 // ───────── 보스 소환 ─────────
 // 소환은 라운드 진행과 무관한 상시 액션이고 쿨타임만 있다. 비용 없음.
 // Lv N은 Lv N-1을 처치해야 열린다. (원본 감지 로직·쿨타임은 EUD로 미확인 — §11.1)
-export const BOSS_MAX_LEVEL = 6;
+export const BOSS_MAX_LEVEL = 7; // 6 → 7 (5차) — Lv7 = 최후의 적장
 export const BOSS_COOLDOWN_SECONDS = 45; // [프로토]
 
 /**
@@ -259,7 +264,7 @@ export const WAVE_RAMP_START = 30;
 // 성장률을 12.9% → 10.4%로 눌러 절벽 체감을 완화한다 (보드 후반 성장 8.8%와의 간극 축소).
 export const WAVE_RAMP_END = 52;
 export const WAVE_BASE_RATE = 0.014; // R30 시점 선형 구간의 상대 성장률과 일치 (0.45/31.1)
-export const WAVE_MAX_RATE = 0.25; // ×e^0.25 ≈ ×1.284 — 4차 경제(보상 가속·가스 0.4)가 종반을 밀어올려 0.22로는 도달 16% (2026-07-17)
+export const WAVE_MAX_RATE = 0.27; // ×e^0.27 ≈ ×1.310 — 5차(조기 증강 2개)로 0.25가 물러져 재조임 (2026-07-17)
 const RATE_SLOPE = (WAVE_MAX_RATE - WAVE_BASE_RATE) / (WAVE_RAMP_END - WAVE_RAMP_START);
 const CLEAR_AT_RAMP_START = 18 + 0.45 * (WAVE_RAMP_START - 1);
 export const targetClearSeconds = (round: number): number => {

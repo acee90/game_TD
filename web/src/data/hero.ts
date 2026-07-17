@@ -182,7 +182,7 @@ export const enemyDamage = (round: number): number =>
  * 두 겹이 될 필요가 없었다 — 리스크는 누출 라이프 -1과 **기회비용**(못 잡으면 쿨타임
  * 동안 보상 없음)으로 충분하고, 영웅 위협은 사냥꾼 웨이브가 전담한다. 보스는 그냥 지나간다.
  */
-export const BOSS_HARMLESS_MAX_LEVEL = 6;
+export const BOSS_HARMLESS_MAX_LEVEL = 7; // Lv7 신설(5차)도 무해 — 전 레벨 불변
 export const bossDamage = (level: number, round: number): number =>
   level <= BOSS_HARMLESS_MAX_LEVEL ? 0 : enemyDamage(round) * (1.5 + 0.5 * level);
 
@@ -196,7 +196,9 @@ export const bossDamage = (level: number, round: number): number =>
  * **앞의 네 개는 80% 이상의 판이 받고**(핵심 빌드가 완성된다), 뒤의 두 개는 오래 버틴
  * 판만 받는 보상이다. 소진 후에는 AUGMENT_TAIL_EVERY 레벨마다 계속 준다.
  */
-export const AUGMENT_LEVELS: readonly number[] = [9, 16, 24, 30, 35, 42];
+// [9,16,...] → [5,10,...] (2026-07-17 5차): 첫 두 증강을 빠르게 — "증강을 보고
+// 빌드 방향을 정할 수 있도록"(사용자). 3번째부터는 그대로 — 중반 파워 스파이크 방지.
+export const AUGMENT_LEVELS: readonly number[] = [5, 10, 24, 30, 35, 42];
 export const AUGMENT_TAIL_EVERY = 8;
 export const AUGMENT_CHOICES = 3;
 

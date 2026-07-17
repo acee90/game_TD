@@ -462,10 +462,10 @@ describe('적이 영웅을 때린다', () => {
   test('보스 접촉 피해 — 전 레벨 무해하게 지나간다 (2026-07-17: 위협은 누출 라이프뿐)', () => {
     // 보스는 소득원이다. 리스크는 못 잡았을 때의 누출 라이프(2+L)가 전담한다.
     // 영웅 위협은 사냥꾼 웨이브의 몫 — 보스가 겹칠 필요가 없다.
-    for (let lv = 1; lv <= 6; lv++) {
+    for (let lv = 1; lv <= B.BOSS_MAX_LEVEL; lv++) {
       expect(H.bossDamage(lv, 10)).toBe(0);
     }
-    expect(H.BOSS_HARMLESS_MAX_LEVEL).toBe(6);
+    expect(H.BOSS_HARMLESS_MAX_LEVEL).toBeGreaterThanOrEqual(B.BOSS_MAX_LEVEL);
   });
 
   test('몹 공격력은 선형이다 — 영웅 체력도 선형이라 나란히 간다', () => {
