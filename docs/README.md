@@ -31,6 +31,7 @@ docs/
 | [ga-policy-validation-v0.1.md](reports/ga-policy-validation-v0.1.md) | 현행 | GA 운영정책 검증 v0.1/v0.2 |
 | [hero-tower-power-balance-v0.1.md](reports/hero-tower-power-balance-v0.1.md) | 현행 | 영웅/타워 딜 지분·구간별 커브 실측 |
 | [unity-hud-playtest-v0.1.md](reports/unity-hud-playtest-v0.1.md) | 현행 | Unity HUD 입력 안전·상태 가독성·영웅 이동 정성 관찰 6건 |
+| [unity-vfx-baseline-v0.1.md](reports/unity-vfx-baseline-v0.1.md) | 현행 | Unity 전투 VFX 2조건×6시나리오×3시점 자동 캡처 비교 |
 
 ## reference/ — 원본·외부 게임 분석
 

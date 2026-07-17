@@ -58,6 +58,8 @@ namespace GodTD.View
         string outputDirectory;
         int captureIndex;
         int totalCaptures;
+        bool previousRunInBackground;
+        bool runInBackgroundCaptured;
 
         public bool IsRunning => running != null;
         public string OutputDirectory => outputDirectory;
@@ -67,7 +69,7 @@ namespace GodTD.View
             if (!Application.isPlaying)
                 throw new InvalidOperationException("VFX review requires Play Mode.");
 
-            var gameView = FindObjectOfType<GameView>();
+            var gameView = FindAnyObjectByType<GameView>();
             if (gameView == null)
                 throw new InvalidOperationException("GameView is not ready. Wait for Bootstrap after entering Play Mode.");
 
@@ -89,6 +91,9 @@ namespace GodTD.View
                 Directory.GetParent(Application.dataPath).FullName,
                 "Captures", "VfxReview", safeId);
             Directory.CreateDirectory(harness.outputDirectory);
+            harness.previousRunInBackground = Application.runInBackground;
+            harness.runInBackgroundCaptured = true;
+            Application.runInBackground = true;
             harness.captureIndex = 0;
             harness.totalCaptures = BaselineModes.Length * BaselineScenarios.Length * 3;
             harness.running = harness.StartCoroutine(harness.RunBaselineBatch());
@@ -97,7 +102,7 @@ namespace GodTD.View
 
         public static string Status()
         {
-            var harness = FindObjectOfType<VfxReviewHarness>();
+            var harness = FindAnyObjectByType<VfxReviewHarness>();
             if (harness == null) return "not attached";
             return harness.IsRunning
                 ? $"running {harness.captureIndex}/{harness.totalCaptures}: {harness.label} -> {harness.outputDirectory}"
@@ -106,7 +111,7 @@ namespace GodTD.View
 
         public static void StopBatch()
         {
-            var harness = FindObjectOfType<VfxReviewHarness>();
+            var harness = FindAnyObjectByType<VfxReviewHarness>();
             if (harness == null || harness.running == null) return;
             harness.StopCoroutine(harness.running);
             harness.running = null;
@@ -343,6 +348,11 @@ namespace GodTD.View
         {
             Time.timeScale = 1f;
             if (view != null && view.Fx != null) view.Fx.ImportedFxEnabled = true;
+            if (runInBackgroundCaptured)
+            {
+                Application.runInBackground = previousRunInBackground;
+                runInBackgroundCaptured = false;
+            }
         }
 
         void OnDestroy()

@@ -249,6 +249,11 @@ Prefab / palette / scale / priority / camera response
 
 ### P0. 기준선 캡처·애셋 감사
 
+진행 기록: [Unity 전투 VFX 기준선 비교 v0.1](../reports/unity-vfx-baseline-v0.1.md)에서
+`코드 FX + Legacy`와 `코드 FX만`의 6개 결정적 시나리오, 3개 시점을 캡처했다.
+혼잡 구간의 Legacy 잔상이 가독성을 해치는 현상은 확인했지만 `VFX OFF`, 실제 후반 10초,
+성능·라이선스 감사까지 끝나지 않았으므로 P0 통과 전이다.
+
 - [ ] 같은 시드/카메라로 현행 전투 10초와 후반 혼잡 구간을 캡처
 - [ ] VFX OFF / 코드 FX만 / 코드+Legacy 세 조건 캡처
 - [ ] `EffectExamples`와 `Resources/Fx`의 출처·라이선스·공개 저장소 커밋 가능 여부 확인
@@ -322,4 +327,3 @@ Prefab / palette / scale / priority / camera response
 - Asset Store 팩 전체를 공개 저장소에 반입
 - 모든 효과를 VFX Graph로 재작성
 - 스타일 검증 전에 전체 이벤트를 한 번에 교체
-
