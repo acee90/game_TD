@@ -11,7 +11,7 @@ import type { AugmentCard } from '../data/hero';
 import { attackInterval, damage, isSplash, range, slowFactor, type UpgradeLevels } from './combat';
 import { bossKillMineral, killIncome } from './economy';
 import { Hero, rollAugmentChoices, type HeroStats } from './hero';
-import { findMerge, unitFor, type Rand } from './merge';
+import { findMerge, rerollUnit, unitFor, type Rand } from './merge';
 import type { Decoy, Enemy, EnemySpec, FloatText, Shot, Slot, Zone } from './types';
 
 export class Game {
@@ -336,20 +336,23 @@ export class Game {
     }
   }
 
-  /** 강타 (기본 스킬, 6차) — 사거리 안 최근접 적 주변 좁은 범위를 때린다 */
+  /**
+   * 강타 (기본 스킬) — 사거리 안 **가장 가까운 skill.targets명**을 각각 때린다.
+   * 7차: 반경형 → 대상 수 상한형. 밀집도가 올라도 세지지 않는 게 시작 스킬의 자리다.
+   */
   private castSmite(skill: K.ResolvedSkill): void {
     const hero = this.hero;
-    const target = this.nearestEnemy(hero.x, hero.y, hero.stats.range);
-    if (!target) return;
-    for (const enemy of this.enemies) {
-      if (Math.abs(enemy.distance - target.distance) <= skill.radius) this.skillHit(enemy, skill);
+    const inReach = this.enemies
+      .filter((e) => !e.dead && Math.abs(e.distance - hero.distance) <= hero.stats.range)
+      .sort((a, b) => Math.abs(a.distance - hero.distance) - Math.abs(b.distance - hero.distance))
+      .slice(0, skill.targets);
+    if (inReach.length === 0) return;
+    for (const target of inReach) {
+      this.skillHit(target, skill);
+      const [tx, ty] = pathPos(target.distance);
+      this.shots.push({ x: hero.x, y: hero.y, tx, ty, life: 0.16, color: '#e3b23e' });
     }
-    const [tx, ty] = pathPos(target.distance);
-    this.float(tx, ty, '강타!', '#e3b23e');
-    this.shots.push({
-      x: hero.x, y: hero.y, tx, ty, life: 0.18,
-      color: '#e3b23e', splashRadius: skill.radius,
-    });
+    this.float(hero.x, hero.y, `강타 x${inReach.length}`, '#e3b23e');
   }
 
   private castWhirlwind(skill: K.ResolvedSkill): void {
@@ -708,6 +711,50 @@ export class Game {
       );
       this.message = `${result.produced.name} 【 ${tagLabel(result.produced)} 】를 조합하였습니다.`;
     }
+  }
+
+  // ── GOD 리롤 (7차) — 조합의 끝을 운에만 맡기지 않는다 ──
+  /** 지금까지 GOD를 몇 번 다시 뽑았나 — 비용이 지수로 오른다 */
+  godRerolls = 0;
+
+  get godRerollCost(): number {
+    return B.godRerollCost(this.godRerolls);
+  }
+
+  /** 이 타워를 다시 뽑을 수 있는가 — GOD만, 금화가 있어야 */
+  canRerollGod(slot: Slot | null): boolean {
+    return (
+      !this.over &&
+      slot?.tower !== undefined &&
+      slot?.tower !== null &&
+      slot.tower.tier === GOD_TIER &&
+      this.mineral >= this.godRerollCost
+    );
+  }
+
+  /** 선택한 GOD 타워의 종류를 다시 뽑는다. 처치한 보스가 6기 이상이면 확장 풀에서 나온다. */
+  rerollGod(): boolean {
+    const slot = this.selected;
+    if (!slot?.tower) return false;
+    if (slot.tower.tier !== GOD_TIER) {
+      this.message = 'GOD 타워만 다시 뽑을 수 있습니다.';
+      return false;
+    }
+    const cost = this.godRerollCost;
+    if (this.mineral < cost) {
+      this.message = `금화 부족 — GOD 리롤 ${cost} 필요.`;
+      return false;
+    }
+    this.mineral -= cost;
+    this.godRerolls++;
+    const before = slot.tower.def;
+    const next = rerollUnit(GOD_TIER, before, this.rand, this.bossesKilled);
+    // GOD는 최고 티어라 이 교체가 조합을 부르지 않는다 (findMerge는 tier < GOD_TIER만 본다)
+    slot.tower = { def: next, tier: GOD_TIER, cooldown: 0 };
+    this.float(slot.x, slot.y, `★ ${next.name}`, '#ffd23f');
+    this.message =
+      `${before.name} → ${next.name} 【 ${tagLabel(next)} 】 · 다음 리롤 ${this.godRerollCost}.`;
+    return true;
   }
 
   sellSelected(): boolean {

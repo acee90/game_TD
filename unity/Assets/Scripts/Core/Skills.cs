@@ -137,9 +137,9 @@ namespace GodTD.Core
         public static readonly Dictionary<SkillId, SkillDef> SKILLS = new Dictionary<SkillId, SkillDef>
         {
             [SkillId.Smite] = new SkillDef(SkillId.Smite, "강타",
-                "가장 가까운 적 주변 좁은 범위에 공격력 3배 피해",
-                manaMax: 100f, damageMult: 3f, radius: 40f, targets: 0,
-                autoCastMinTargets: 1), // 시작 스킬은 씨앗 — 소용돌이(70)보다 좁다
+                "가장 가까운 적 3명에게 각각 공격력 3배 피해",
+                manaMax: 100f, damageMult: 3f, radius: 0f, targets: 3,
+                autoCastMinTargets: 1), // 7차: 대상 수 상한형 — 밀집도가 올라도 안 커진다 ← web
 
             [SkillId.Whirlwind] = new SkillDef(SkillId.Whirlwind, "소용돌이",
                 "주변의 적 전체에 공격력 3배 피해",

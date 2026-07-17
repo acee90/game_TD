@@ -99,7 +99,10 @@ export const SPAWN_UNIT_MINERAL = 12; // 소용돌이 클릭 → Lv1 생성 (str
 export const SPAWN_FREE_COUNT = 8;
 // 0.45 → 0.35 (2026-07-17 4차): "타워 뽑는 골드가 너무 급격히 오른다"(플레이테스트).
 // 0.35 → 0.40 (5차): "GOD 페이스는 좋은데 여기서 10~20%만 줄이자" — 반걸음 되돌림.
-export const SPAWN_COST_GROWTH = 0.4;
+// 0.40 → 0.30 (7차): "R30~40에 성장에 드는 골드가 너무 늘어 크는 재미가 없다".
+// 그 구간(누적 40~120기)의 총액이 3,305 → 2,726(-18%)이 된다. 웨이브는 **안 올린다** —
+// R50+ 벽이 이미 가파르다는 체감이라, 성장만 풀고 난이도는 다음 플레이테스트로 판정.
+export const SPAWN_COST_GROWTH = 0.3;
 export const spawnUnitCost = (spawned: number): number =>
   Math.round(SPAWN_UNIT_MINERAL + SPAWN_COST_GROWTH * Math.max(0, spawned - SPAWN_FREE_COUNT));
 /**
@@ -108,6 +111,18 @@ export const spawnUnitCost = (spawned: number): number =>
  * 아예 시동이 안 걸렸다. 지수 성장(×1.5)은 유지 — "몇 기까지"의 딜레마는 그대로다.
  */
 export const PROBE_MINERAL = 60;
+
+/**
+ * GOD 타워 타입 리롤 (2026-07-17 7차, 플레이테스트 요청).
+ *
+ * GOD는 조합의 끝인데 **어떤 GOD가 나오는지는 순수 운**이었다 — 병과가 어긋나면
+ * (가스 업그레이드는 병과별이다) 애써 만든 GOD가 반쪽이 된다. 금화로 다시 뽑게 해서
+ * 운을 **자원으로 교정**할 수 있게 한다. 지수 비용이라 무한 굴리기는 안 된다.
+ */
+export const GOD_REROLL_MINERAL = 150;
+export const GOD_REROLL_GROWTH = 1.5;
+export const godRerollCost = (rolled: number): number =>
+  Math.round(GOD_REROLL_MINERAL * Math.pow(GOD_REROLL_GROWTH, rolled));
 
 // ── 타워 복제 ('복제 장치' 증강) ──
 // 복제 가능 티어 상한은 라운드와 영웅 레벨 중 **더 빠른 쪽**을 따라 오른다.
@@ -177,9 +192,27 @@ export const BOSS_COOLDOWN_SECONDS = 45; // [프로토]
 // "R20~25에 Lv4·5, GOD 1기면 Lv6도" — GOD 1기 이후 타워 건설이 무의미해짐).
 // Lv1~2 앵커(base 700)는 유지 — 초반 리듬 불변, 상위 레벨만 가팔라진다.
 // 2026-07-17 (4차): 성장 3.0 → 3.4 — GOD 다수 체제(가스 0.4/s·생성비 완화)에서
-// "GOD 1기 + 3~4업이면 R20에 Lv6"이 또 뚫렸다. base 700 → 550은 기본공 4→3 동행
-// (Lv1 앵커 = 시작 자원으로 처치 — boss-balance.test.ts). Lv6 = 250k (종반 보드 몫).
-export const bossHP = (level: number): number => 800 * Math.pow(3.4, level - 1); // 550→800 (6차: 기본 스킬 강타가 초반 영웅 화력을 올려 재앵커)
+// "GOD 1기 + 3~4업이면 R20에 Lv6"이 또 뚫렸다. base는 기본공 4→3 동행 후
+// 6차 800 → 7차 700으로 재앵커 — 강타가 3명 상한으로 약해지고 평타 마나(10→6)도
+// 줄어 초반 영웅 화력이 내려갔다. 지금 앵커: 6기 0.95 · 4기 0.45(뽑기 운).
+// Lv1 앵커 = 시작 자원으로 처치 — boss-balance.test.ts가 지킨다.
+//
+// 7차 (2026-07-17): **꼭대기 두 단만 완만하게** — "보스 6·7 난이도를 조금 낮추자"
+// (플레이테스트). Lv5까지는 그대로 두고 Lv6+만 성장 2.6으로 꺾는다:
+// Lv6 363k → 278k(-24%) · Lv7 1.24M → 723k(-42%). 아래 단의 리듬은 건드리지 않고
+// 사다리 꼭대기만 손에 닿게 하는 국소 조정이다.
+export const BOSS_HP_BASE = 700;
+export const BOSS_HP_GROWTH = 3.4;
+/** 이 레벨을 넘으면 완만한 성장으로 갈아탄다 (사다리 꼭대기) */
+export const BOSS_HP_TOP_FROM = 5;
+export const BOSS_HP_TOP_GROWTH = 2.6;
+export const bossHP = (level: number): number => {
+  const capped = Math.min(level, BOSS_HP_TOP_FROM);
+  const base = BOSS_HP_BASE * Math.pow(BOSS_HP_GROWTH, capped - 1);
+  return level <= BOSS_HP_TOP_FROM
+    ? base
+    : base * Math.pow(BOSS_HP_TOP_GROWTH, level - BOSS_HP_TOP_FROM);
+};
 export const bossArmor = (level: number): number => 1.1 * level; // 기본공 3 동행
 export const BOSS_SPEED = 26;
 /**

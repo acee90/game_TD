@@ -80,6 +80,15 @@ namespace GodTD.Core
         public const int PROBE_MINERAL = 60;
 
         /// <summary>
+        /// GOD 타워 타입 리롤 (7차) — 어떤 GOD가 나오는지는 순수 운이었다. 병과가 어긋나면
+        /// (가스 업그레이드는 병과별) 반쪽이 된다. 금화로 운을 교정한다. 지수 비용. ← web
+        /// </summary>
+        public const int GOD_REROLL_MINERAL = 150;
+        public const float GOD_REROLL_GROWTH = 1.5f;
+        public static int GodRerollCost(int rolled) =>
+            (int)MathF.Round(GOD_REROLL_MINERAL * MathF.Pow(GOD_REROLL_GROWTH, rolled));
+
+        /// <summary>
         /// 유닛 생성 비용 — 누적 생성 횟수에 선형으로 오른다. ← web/src/data/balance.ts
         ///
         /// 고정 12일 때 중반 미네랄의 94%가 유닛 생성으로 흘러 GOD 타워가 R51에 20기(필드의 60%),
@@ -138,7 +147,19 @@ namespace GodTD.Core
         // 2026-07-17: 성장 2.5 → 3.0 — 사다리 소진 R22가 너무 빨랐다 (Lv4 R15·Lv6 R22).
         // Lv1~2 앵커 유지, 상위만 가팔라진다: Lv6 = 170k (GOD 1기 시대 종료). ← web
         // 4차: base 550(기본공 3 동행)·성장 3.4 — GOD 다수 체제에서 사다리 재조정. ← web
-        public static float BossHP(int level) => 800f * MathF.Pow(3.4f, level - 1); // 550→800 (6차: 기본 스킬 재앵커) ← web
+        // 7차: 꼭대기 두 단만 완만하게 (Lv6 -24% · Lv7 -42%) — 아래 단 리듬은 불변. ← web
+        public const float BOSS_HP_BASE = 800f;
+        public const float BOSS_HP_GROWTH = 3.4f;
+        public const int BOSS_HP_TOP_FROM = 5;
+        public const float BOSS_HP_TOP_GROWTH = 2.6f;
+        public static float BossHP(int level)
+        {
+            int capped = Math.Min(level, BOSS_HP_TOP_FROM);
+            float b = BOSS_HP_BASE * MathF.Pow(BOSS_HP_GROWTH, capped - 1);
+            return level <= BOSS_HP_TOP_FROM
+                ? b
+                : b * MathF.Pow(BOSS_HP_TOP_GROWTH, level - BOSS_HP_TOP_FROM);
+        }
         public static float BossArmor(int level) => 1.1f * level;
         public const float BOSS_SPEED = 26f;
 

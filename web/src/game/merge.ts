@@ -24,6 +24,22 @@ export function unitFor(tier: number, rand: Rand, bossesKilled: number): UnitDef
   return pool[Math.min(pool.length - 1, Math.floor(rand() * pool.length))];
 }
 
+/**
+ * 같은 티어 풀에서 **지금과 다른** 유닛을 뽑는다 (GOD 리롤용).
+ * 현재 것을 빼고 뽑으므로 리롤은 반드시 무언가를 바꾼다 — 돈만 날리는 결과가 없다.
+ * 풀에 대안이 없으면(이론상 1종) 그대로 돌려준다.
+ */
+export function rerollUnit(
+  tier: number,
+  current: UnitDef,
+  rand: Rand,
+  bossesKilled: number,
+): UnitDef {
+  const others = poolFor(tier, bossesKilled).filter((d) => d.name !== current.name);
+  if (others.length === 0) return current;
+  return others[Math.min(others.length - 1, Math.floor(rand() * others.length))];
+}
+
 export interface MergeResult {
   readonly slot: Slot;
   readonly produced: UnitDef;

@@ -53,6 +53,7 @@
   button:active{transform:translateY(1px);box-shadow:inset 0 1px 3px rgba(0,0,0,.4)}
   button:disabled{opacity:.35;cursor:default;box-shadow:none}
   #spawn{border-color:var(--gold)}
+  #rerollGod{border-color:var(--gold);color:var(--gold);margin-top:6px;width:100%}
   #up0{border-color:var(--terran)} #up1{border-color:var(--zerg)}
   #up2{border-color:var(--toss)} #up3{border-color:var(--creature)}
   .note{font-size:11px;color:var(--dim);text-align:center;margin-top:10px;line-height:1.7}
@@ -110,6 +111,25 @@
        background:#3a2f14;color:var(--gold);border:1px solid var(--line2)}
   .augcard .n{font-size:15px;font-weight:700;margin:3px 0 2px;font-family:var(--serif)}
   .augcard .d{font-size:12px;color:var(--dim)}
+
+  /* 증강 기록 — 읽기 전용 목록. 배경만 덮고 게임은 계속 돈다 */
+  #logOverlay{position:fixed;inset:0;z-index:29;display:none;padding:20px;
+              align-items:center;justify-content:center;
+              background:radial-gradient(120% 100% at 50% 0%,rgba(40,28,14,.9),rgba(8,6,3,.95))}
+  #logOverlay.open{display:flex}
+  #logOverlay .modal{width:100%;max-width:420px;max-height:80vh;background:var(--panel);
+                     border:1px solid var(--line2);border-radius:12px;padding:16px;
+                     display:flex;flex-direction:column;gap:10px;
+                     box-shadow:0 16px 48px rgba(0,0,0,.6)}
+  #logOverlay h2{font-family:var(--serif);font-size:19px;color:var(--gold);text-align:center}
+  #logBody{overflow-y:auto;display:flex;flex-direction:column;gap:8px;font-size:12px;line-height:1.65}
+  .logsyn{display:flex;flex-wrap:wrap;gap:4px;justify-content:center;margin-bottom:2px}
+  .logrow{border-left:3px solid var(--line2);padding:5px 0 5px 9px;background:rgba(0,0,0,.18);
+          border-radius:0 6px 6px 0}
+  .logname{font-size:13px;display:flex;align-items:center;gap:5px;flex-wrap:wrap}
+  .logname .rar{margin-left:auto;font-size:10.5px;font-weight:700}
+  #logClose{padding:9px;font-family:var(--serif);border-color:var(--line2)}
+  #augLog{margin-top:6px;width:100%;border-color:var(--toss)}
 
   #scorebar{display:flex;align-items:baseline;gap:8px;justify-content:center;
             padding:6px 0 2px;font-size:12px;font-variant-numeric:tabular-nums}
@@ -218,6 +238,8 @@
       <button id="sell">유닛 처분</button>
       <button id="restart">↻ 다시 시작</button>
     </div>
+    <button id="augLog">증강 기록</button>
+    <button id="rerollGod" hidden>★ GOD 다시 뽑기</button>
     <button id="copyTower" hidden>복제 예약</button>
 
     <p class="note">파일런 업그레이드 (마정석) — 병과별 공격력 +45%/레벨 (기본공 가산)</p>
@@ -287,6 +309,15 @@
   <p class="sub" id="augSub"></p>
   <div class="augcards" id="augCards"></div>
   <button id="reroll">리롤</button>
+</div>
+
+<!-- 증강 기록 (7차) — 고른 증강을 언제든 다시 본다. 게임을 멈추지 않는다. -->
+<div id="logOverlay">
+  <div class="modal">
+    <h2>증강 기록</h2>
+    <div id="logBody"></div>
+    <button id="logClose">닫기 (Esc)</button>
+  </div>
 </div>
 
 <div id="overlay">

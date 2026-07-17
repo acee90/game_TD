@@ -12,7 +12,7 @@ levelStatPoints(1),1,"레벨업당 세 스탯 총 포인트 (2+floor(L/10), 3등
 HERO_ATTACK_INTERVAL,0.8,초
 HERO_BASE_RANGE,130,
 XP_BASE_COST,14,
-XP_COST_GROWTH,1.1,지수 — 고레벨을 봉인한다
+XP_COST_GROWTH,1.08,지수 — 고레벨을 봉인한다
 XP_PER_MOB,0.3,
 HERO_LASTHIT_XP_MULT,2,영웅 막타 보너스
 SYNERGY_THRESHOLD,3,같은 계열 N개 → 특화

@@ -109,11 +109,14 @@ export const SKILLS: Record<SkillId, SkillDef> = {
     id: 'smite',
     castType: 'burst',
     name: '강타',
-    description: '가장 가까운 적 주변 좁은 범위에 공격력 3배 피해',
+    description: '가장 가까운 적 3명에게 각각 공격력 3배 피해',
     manaMax: 100,
     damageMult: 3,
-    radius: 40, // 소용돌이(70)보다 좁다 — 시작 스킬은 씨앗이다
-    targets: 0,
+    radius: 0, // 영웅 사거리를 쓴다
+    // 대상 수 상한이 곧 약함이다 (2026-07-17 7차): 반경형이던 시절엔 뭉친 줄을
+    // 통째로 쓸어 시작 스킬이 너무 셌다. 3명 고정이면 밀집도가 올라도 안 커진다 —
+    // 광역의 값어치는 소용돌이·유성이 가져간다.
+    targets: 3,
     autoCastMinTargets: 1,
   },
   whirlwind: {
@@ -282,9 +285,14 @@ export const DECOY_AUTOCAST_RANGE = 170;
 
 // ───────── 마나 ─────────
 /** 평타 한 방이 채우는 마나 */
-export const MANA_PER_ATTACK = 10;
+// 10 → 6 (2026-07-17 7차): 평타 몫을 줄인다. 평타 회복이 크면 공속 스탯 하나가
+// 스킬 회전을 독점해 "때리면 알아서 도는" 수동적 순환이 된다.
+export const MANA_PER_ATTACK = 6;
 /** 맞을 때 차는 마나 — 탱커도 스킬을 쓴다 (TFT식) */
-export const MANA_ON_DAMAGED = 8;
+// 8 → 14 (2026-07-17 7차): 피격 몫을 키운다. 마나의 주 연료가 **어그로**가 되면서
+// "몹을 어디서 얼마나 받아내는가"라는 위치 선택이 스킬 회전을 좌우한다 —
+// 이동이 유일한 직접 조작인 게임에서 그게 곧 플레이어의 실력이다. 탱커 빌드의 축이기도 하다.
+export const MANA_ON_DAMAGED = 14;
 /**
  * 최대 마나 감소의 하한. 0.25 → 0.4 (측정 후 하향).
  * 0.25면 마나 증강을 모은 '난사' 빌드가 같은 장수의 강화 빌드를 10~40배로 압도했다.

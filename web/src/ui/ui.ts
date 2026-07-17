@@ -1,6 +1,6 @@
 // ───────── HUD / 패널 바인딩 ─────────
 import * as B from '../data/balance';
-import { RACES, RACE_COLOR, TIER_LABEL, tagLabel, type Race } from '../data/units';
+import { GOD_TIER, RACES, RACE_COLOR, TIER_LABEL, tagLabel, type Race } from '../data/units';
 import { attackInterval, damage, range } from '../game/combat';
 import { bossKillMineral, nextMilestone } from '../game/economy';
 import * as HD from '../data/hero';
@@ -42,6 +42,10 @@ export interface Elements {
   readonly skillCd: HTMLElement;
   readonly skillText: HTMLElement;
   readonly augOverlay: HTMLElement;
+  readonly augLog: HTMLButtonElement;
+  readonly logOverlay: HTMLElement;
+  readonly logBody: HTMLElement;
+  readonly logClose: HTMLButtonElement;
   readonly augSub: HTMLElement;
   readonly augCards: HTMLElement;
   readonly bossGrid: HTMLElement;
@@ -53,6 +57,7 @@ export interface Elements {
   readonly gasSkillCdr: HTMLButtonElement;
   readonly spawn: HTMLButtonElement;
   readonly sell: HTMLButtonElement;
+  readonly rerollGod: HTMLButtonElement;
   readonly copyTower: HTMLButtonElement;
   readonly upgrades: readonly HTMLButtonElement[];
   readonly overlay: HTMLElement;
@@ -96,6 +101,10 @@ export function bindElements(): Elements {
     skillCd: $('skillCd'),
     skillText: $('skillText'),
     augOverlay: $('augOverlay'),
+    augLog: $<HTMLButtonElement>('augLog'),
+    logOverlay: $('logOverlay'),
+    logBody: $('logBody'),
+    logClose: $<HTMLButtonElement>('logClose'),
     augSub: $('augSub'),
     augCards: $('augCards'),
     bossGrid: $('bossGrid'),
@@ -107,6 +116,7 @@ export function bindElements(): Elements {
     gasSkillCdr: $<HTMLButtonElement>('gasSkillCdr'),
     spawn: $<HTMLButtonElement>('spawn'),
     sell: $<HTMLButtonElement>('sell'),
+    rerollGod: $<HTMLButtonElement>('rerollGod'),
     copyTower: $<HTMLButtonElement>('copyTower'),
     upgrades: [0, 1, 2, 3].map((i) => $<HTMLButtonElement>(`up${i}`)),
     overlay: $('overlay'),
@@ -329,6 +339,55 @@ export function augmentInputLocked(): boolean {
   return performance.now() < augLockUntil;
 }
 
+/**
+ * 증강 기록 (2026-07-17 7차) — 고른 증강을 언제든 다시 본다.
+ * 등급이 반영된 **실제 수치**를 함께 적어 "실버 기준 설명"의 혼란을 없앤다.
+ * 게임을 멈추지 않는다 — 읽는 동안에도 웨이브는 흐른다.
+ */
+export function renderAugmentLog(el: Elements, game: Game): void {
+  const hero = game.hero;
+  if (hero.augments.length === 0) {
+    el.logBody.innerHTML = '<p class="dim">아직 획득한 증강이 없습니다.</p>';
+    return;
+  }
+  // 같은 (증강, 등급)은 ×N으로 접는다 — 획득 순서는 첫 등장 기준
+  const groups: { card: HD.AugmentCard; count: number }[] = [];
+  for (const card of hero.augments) {
+    const at = groups.findIndex(
+      (g) => g.card.augment.id === card.augment.id && g.card.rarity === card.rarity,
+    );
+    if (at >= 0) groups[at].count++;
+    else groups.push({ card, count: 1 });
+  }
+
+  const synergies = HD.activeSynergies(hero.augments);
+  const synLine = synergies.length
+    ? `<div class="logsyn">${synergies
+        .map((sy) => `<span class="syn" title="${sy.description}">★ ${sy.name}</span>`)
+        .join(' ')}</div>`
+    : '<p class="dim">활성 시너지 없음 — 같은 계열 3장이면 특화가 켜집니다.</p>';
+
+  el.logBody.innerHTML =
+    synLine +
+    groups
+      .map(({ card, count }) => {
+        const rarity = HD.RARITIES[card.rarity];
+        const kindColor = HD.AUGMENT_KIND_COLOR[card.augment.kind];
+        const actual = HD.effectSummary(card.effect);
+        return `<div class="logrow" style="border-left-color:${rarity.color}">
+          <div class="logname">
+            <span style="color:${kindColor}">${HD.AUGMENT_KIND_LABEL[card.augment.kind]}</span>
+            <b>${card.augment.name}</b>
+            ${count > 1 ? `<span class="chip">×${count}</span>` : ''}
+            <span class="rar" style="color:${rarity.color}">${rarity.label}</span>
+          </div>
+          <div class="dim">${card.augment.description}</div>
+          ${actual ? `<div style="color:${rarity.color}">→ 실제: ${actual}${count > 1 ? ` (×${count}장 가산)` : ''}</div>` : ''}
+        </div>`;
+      })
+      .join('');
+}
+
 function refreshAugmentOverlay(el: Elements, game: Game): void {
   if (game.augmentChoices.length === 0) {
     el.augOverlay.style.display = 'none';
@@ -359,7 +418,14 @@ function refreshAugmentOverlay(el: Elements, game: Game): void {
       const risk = HD.isRisky(card.augment) ? `<span class="risk">⚠ 대가</span>` : '';
       // 설명 수치는 실버 기준이다 — 등급이 효과를 키우는 걸 배지로 알린다
       // (플레이테스트 2026-07-17: "실버·골드 속사의 공속 증가가 같아 보인다")
-      const power = rarity.power > 1 ? ` <b>효과 ×${rarity.power}</b>` : '';
+      // 등급 배지는 **실제로 커지는 증강에만** 붙인다 — 스킬 개조는 등급을 안 탄다
+      const scales = HD.rarityScales(card.augment);
+      const power = scales && rarity.power > 1 ? ` <b>효과 ×${rarity.power}</b>` : '';
+      // 설명은 실버 기준 문장이라 골드·플래티넘에서 어긋난다 → 실제 수치를 따로 보여준다
+      const actual = scales && rarity.power > 1 ? HD.effectSummary(card.effect) : '';
+      const actualLine = actual
+        ? `<div class="d" style="color:${rarity.color}">→ 실제: ${actual}</div>`
+        : '';
       const lockStyle = locked ? ';opacity:.45;pointer-events:none' : '';
       return `<button class="augcard" data-index="${i}" style="border-color:${rarity.color}${lockStyle}">
         <div class="k">
@@ -369,6 +435,7 @@ function refreshAugmentOverlay(el: Elements, game: Game): void {
         </div>
         <div class="n">${card.augment.name}</div>
         <div class="d">${card.augment.description}</div>
+        ${actualLine}
       </button>`;
     })
     .join('');
@@ -421,6 +488,16 @@ export function refresh(el: Elements, game: Game): void {
   el.sell.textContent = '[X] 유닛 처분';
   el.sell.disabled = !game.selected?.tower;
 
+  // GOD 리롤 (7차) — GOD 타워를 골랐을 때만 보인다. 병과가 어긋난 GOD를 금화로 교정한다.
+  const godSelected = game.selected?.tower?.tier === GOD_TIER;
+  el.rerollGod.hidden = !godSelected;
+  if (godSelected) {
+    el.rerollGod.textContent = `★ GOD 다시 뽑기 — ${game.godRerollCost}금화`;
+    el.rerollGod.title =
+      '이 GOD 타워의 종류를 다시 뽑습니다 (지금과 다른 것으로). 보스를 6기 이상 잡았으면 확장 풀에서 나옵니다.';
+    el.rerollGod.disabled = !game.canRerollGod(game.selected);
+  }
+
   // 복제 장치 — 증강을 들었을 때만 보인다
   el.copyTower.hidden = !game.canCopyTower;
   if (game.canCopyTower) {
@@ -443,6 +520,9 @@ export function refresh(el: Elements, game: Game): void {
       `${RACES[race]} 계열 강화 Lv${game.upgrades[race] + 1} — 기본 공격력의 +${B.UPGRADE_DAMAGE_PER_LEVEL * 100}%p 가산.`;
     button.disabled = game.gas < cost;
   });
+
+  // 증강 기록 버튼 — 몇 장 들었는지 항상 보인다
+  el.augLog.textContent = `증강 기록 (${game.hero.augments.length})`;
 
   refreshHero(el, game);
   refreshAugmentOverlay(el, game);

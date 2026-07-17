@@ -292,6 +292,44 @@ namespace GodTD.Core
             }
         }
 
+        // ── GOD 리롤 (7차) — 조합의 끝을 운에만 맡기지 않는다 ← web ──
+        /// <summary>지금까지 GOD를 몇 번 다시 뽑았나 — 비용이 지수로 오른다</summary>
+        public int GodRerolls;
+
+        public int GodRerollCost => Balance.GodRerollCost(GodRerolls);
+
+        /// <summary>이 타워를 다시 뽑을 수 있는가 — GOD만, 금화가 있어야</summary>
+        public bool CanRerollGod(Slot slot) =>
+            !Over && slot?.Tower != null && slot.Tower.Tier == Units.GOD_TIER &&
+            Mineral >= GodRerollCost;
+
+        /// <summary>선택한 GOD 타워의 종류를 다시 뽑는다. 보스 6기 이상이면 확장 풀에서 나온다.</summary>
+        public bool RerollGod()
+        {
+            var slot = Selected;
+            if (slot?.Tower == null) return false;
+            if (slot.Tower.Tier != Units.GOD_TIER)
+            {
+                Message = "GOD 타워만 다시 뽑을 수 있습니다.";
+                return false;
+            }
+            int cost = GodRerollCost;
+            if (Mineral < cost)
+            {
+                Message = $"금화 부족 — GOD 리롤 {cost} 필요.";
+                return false;
+            }
+            Mineral -= cost;
+            GodRerolls++;
+            var before = slot.Tower.Def;
+            var next = Merge.RerollUnit(Units.GOD_TIER, before, rand, BossesKilled);
+            // GOD는 최고 티어라 이 교체가 조합을 부르지 않는다
+            slot.Tower = new Tower(next, Units.GOD_TIER);
+            Float(slot.X, slot.Y, $"★ {next.Name}", "#ffd23f");
+            Message = $"{before.Name} → {next.Name} 【 {Units.TagLabel(next)} 】 · 다음 리롤 {GodRerollCost}.";
+            return true;
+        }
+
         public bool SellSelected()
         {
             var slot = Selected;

@@ -3,7 +3,7 @@ import { TILE } from './core/map';
 import type { Race } from './data/units';
 import { Game } from './game/game';
 import { render } from './render/render';
-import { augmentInputLocked, bindElements, refresh } from './ui/ui';
+import { augmentInputLocked, bindElements, refresh, renderAugmentLog } from './ui/ui';
 
 const canvas = document.getElementById('canvas') as HTMLCanvasElement;
 const ctx = canvas.getContext('2d');
@@ -48,6 +48,21 @@ canvas.addEventListener('pointerdown', (event) => {
 el.spawn.addEventListener('click', () => game.spawnUnitAnywhere());
 el.probe.addEventListener('click', () => game.buyProbe());
 el.sell.addEventListener('click', () => game.sellSelected());
+el.rerollGod.addEventListener('click', () => game.rerollGod());
+// 증강 기록 — 열 때 한 번 그린다 (매 프레임 그리면 스크롤이 튄다)
+const openLog = (): void => {
+  renderAugmentLog(el, game);
+  el.logOverlay.classList.add('open');
+};
+const closeLog = (): void => el.logOverlay.classList.remove('open');
+el.augLog.addEventListener('click', openLog);
+el.logClose.addEventListener('click', closeLog);
+el.logOverlay.addEventListener('click', (event) => {
+  if (event.target === el.logOverlay) closeLog(); // 바깥을 누르면 닫힌다
+});
+window.addEventListener('keydown', (event) => {
+  if (event.key === 'Escape') closeLog();
+});
 el.copyTower.addEventListener('click', () => {
   // 예약돼 있으면 취소, 아니면 선택한 타워를 예약한다
   const target = game.copyTarget ?? game.selected;

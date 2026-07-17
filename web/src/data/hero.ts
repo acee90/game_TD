@@ -136,10 +136,13 @@ export const XP_BUY_AMOUNT = 20;
  * 1.12 → 1.10 (2026-07-17 4차): 과했다 — 플레이테스트 "Lv32에 4천 골드를 넣어도
  * 타워가 월등". Lv32 누적이 4,256골드로 게임 수입의 대부분이었다. 1.10이면 2,750.
  * 후반 가치는 levelStatPoints 상향(1+L/7 → 1+L/6)과 세트로 회복한다.
- * 새 창: 수입 20%로 R45에 Lv ~24, 실질 상한 ~Lv43. tests/hero-curve.test.ts가 지킨다.
+ *
+ * 1.10 → 1.08 (7차): "R30~40에 크는 재미가 없다" — Lv30 누적이 2,289골드로 그 시점
+ * 총수입(~1,800)을 넘어 **레벨이 사실상 봉인**돼 있었다. 1.08이면 1,571 — 무겁지만
+ * 손에 닿는다(수입의 87%). 성장 곡선을 푸는 대신 웨이브는 그대로 둔다(7차 판정 대기).
  */
 export const XP_BASE_COST = 14;
-export const XP_COST_GROWTH = 1.1;
+export const XP_COST_GROWTH = 1.08;
 export const xpToNext = (level: number): number =>
   Math.round(XP_BASE_COST * Math.pow(XP_COST_GROWTH, level));
 
@@ -551,6 +554,79 @@ export function scaleEffect(effect: AugmentEffect, power: number): AugmentEffect
     waveStackHp: add(effect.waveStackHp),
   };
 }
+
+// ───────── 효과 요약 — 등급이 반영된 **실제 수치**를 글로 만든다 (2026-07-17 7차) ─────────
+// 카드 설명(description)은 손으로 쓴 **실버 기준** 문장이라 골드·플래티넘에서 실제 수치와
+// 어긋난다("+60%인데 실제론 +120%") — 플레이테스트에서 혼란으로 확인됐다.
+// 여기서 효과 객체를 그대로 읽어 문장을 만들면 설명이 데이터와 절대 어긋나지 않는다.
+
+/** 1을 기준으로 하는 배수형 — 1.6 → "+60%", 0.85 → "-15%" */
+const MULT_LABELS: readonly (readonly [keyof AugmentEffect, string])[] = [
+  ['damageMult', '공격력'], ['hpMult', '최대 체력'], ['rangeMult', '사거리'],
+  ['attackSpeedMult', '공격 속도'], ['moveSpeedMult', '이동 속도'],
+  ['towerDamageMult', '타워 공격력'], ['towerRangeMult', '타워 사거리'],
+  ['xpMult', '경험치'], ['aggroRangeMult', '어그로 범위'],
+  ['lowHpDamageMult', '위기 시 공격력'], ['growthMult', '성장 누적'],
+  ['skillDamageMult', '스킬 피해'], ['manaMaxMult', '필요 마나'],
+  ['manaGainMult', '마나 획득'], ['waveRewardMult', '라운드 보상'],
+  ['fireDamageMult', '화염 피해'],
+];
+
+/** 0~1 비율 가산형 — 0.2 → "20%" */
+const RATIO_LABELS: readonly (readonly [keyof AugmentEffect, string])[] = [
+  ['damageReduction', '받는 피해 감소'], ['lifesteal', '흡혈'], ['critChance', '치명타 확률'],
+  ['executeBelow', '처형 임계'], ['slowOnHit', '공격 감속'], ['burnAmp', '화상 대상 피해'],
+];
+
+/** 값 자체가 오르는 가산형 — 6 → "6" */
+const FLAT_LABELS: readonly (readonly [keyof AugmentEffect, string, string])[] = [
+  ['regen', '초당 회복', ''], ['splashRadius', '광역 반경', ''],
+  ['critMultAdd', '치명타 피해', '배'], ['burnDamage', '화상 겹당 피해', '/초'],
+  ['burnSecondsAdd', '화상 지속', '초'], ['armorShred', '방어력 감소', ''],
+  ['thorns', '가시 반사', '배'], ['deathBlast', '폭사 피해', '배'],
+  ['deathBlastRadius', '폭사 반경', ''], ['mineralPerKill', '처치당 금화', ''],
+  ['mineralPerWave', '라운드마다 금화', ''], ['gasPerWave', '라운드마다 마정석', ''],
+  ['respawnCut', '부활 대기 감소', '초'], ['killStackDamage', '막타당 공격력', ''],
+  ['killStackCap', '누적 상한', ''], ['waveStackDamage', '라운드마다 공격력', ''],
+  ['waveStackHp', '라운드마다 체력', ''], ['manaOnDamaged', '피격 마나', ''],
+  ['startingMana', '시전 후 남는 마나', ''], ['deathNova', '사망 폭발', '배'],
+  ['reviveNova', '부활 폭발', '배'], ['novaHpMult', '폭발 체력 계수', '배'],
+  ['novaRadius', '폭발 반경', ''], ['towerCopyTier', '복제 티어 상한', ''],
+];
+
+const pct = (v: number): string => `${v > 0 ? '+' : ''}${Math.round(v * 100)}%`;
+const num = (v: number): string => (Number.isInteger(v) ? String(v) : v.toFixed(1));
+
+/**
+ * 등급이 반영된 실제 수치를 사람이 읽는 문장으로. 카드·증강 기록이 함께 쓴다.
+ * 값이 없으면 빈 문자열 — 스킬 개조 전용 증강(effect가 비어 있다)이 그렇다.
+ */
+export function effectSummary(effect: AugmentEffect): string {
+  const parts: string[] = [];
+  for (const [key, label] of MULT_LABELS) {
+    const v = effect[key] as number | undefined;
+    if (v !== undefined) parts.push(`${label} ${pct(v - 1)}`);
+  }
+  for (const [key, label] of RATIO_LABELS) {
+    const v = effect[key] as number | undefined;
+    if (v !== undefined) parts.push(`${label} ${Math.round(v * 100)}%`);
+  }
+  for (const [key, label, unit] of FLAT_LABELS) {
+    const v = effect[key] as number | undefined;
+    if (v !== undefined) parts.push(`${label} ${num(v)}${unit}`);
+  }
+  return parts.join(' · ');
+}
+
+/**
+ * 이 증강이 등급의 영향을 받는가.
+ *
+ * **스킬 개조(skillMod)는 등급으로 커지지 않는다** — makeCard가 effect만 스케일한다.
+ * 그래서 '증폭'·'집중 수련' 같은 개조 전용 증강에 "×2" 배지를 붙이면 거짓말이 된다.
+ * (플레이테스트 2026-07-17에서 지적된 혼란.) UI는 이 함수로 배지를 가른다.
+ */
+export const rarityScales = (augment: Augment): boolean =>
+  Object.keys(augment.effect).length > 0;
 
 /** 등급이 매겨진 증강 카드 */
 export interface AugmentCard {
