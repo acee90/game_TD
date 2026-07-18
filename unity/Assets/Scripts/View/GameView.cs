@@ -58,6 +58,7 @@ namespace GodTD.View
         public CardPage Page { get; private set; } = CardPage.Root;
 
         Camera cam;
+        UnityRunFileStore runStore;
         Transform staticRoot;
         Transform dynamicRoot;
         Vector3 boardCenter;
@@ -154,7 +155,7 @@ namespace GodTD.View
             flashMat.EnableKeyword("_EMISSION");
             flashMat.SetColor("_EmissionColor", Color.white * 2.2f);
 
-            Game = new Game();
+            Game = UnityRunSession.Create(out runStore);
             boardCenter = W(MapData.CENTER.X, MapData.CENTER.Y);
             camFocus = boardCenter;
 
@@ -172,7 +173,8 @@ namespace GodTD.View
         /// <summary>게임오버 후 재시작 — 동적 오브젝트를 모두 버리고 새 판을 만든다</summary>
         public void Restart()
         {
-            Game = new Game();
+            FinishAndDisposeRun(FinishReasons.Restart);
+            Game = UnityRunSession.Create(out runStore);
             Selection = Selection.None;
             Page = CardPage.Root;
             foreach (var pair in enemyBodies) Destroy(pair.Value.Go);
@@ -189,6 +191,17 @@ namespace GodTD.View
             lastHeroLevel = 1;
             heroWasAlive = true;
             Fx.OnRestart();
+        }
+
+        void OnApplicationQuit() => FinishAndDisposeRun(FinishReasons.Quit);
+
+        void OnDestroy() => FinishAndDisposeRun(FinishReasons.Quit);
+
+        void FinishAndDisposeRun(string reason)
+        {
+            Game?.FinishRun(reason);
+            runStore?.Dispose();
+            runStore = null;
         }
 
         void Update()

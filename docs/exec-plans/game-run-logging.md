@@ -9,9 +9,13 @@
 > 범위: 한 판의 빌드·점수·주요 의사결정을 코어 상태 변경 지점에서 JSONL로 기록하고,
 > Web/Unity 로그를 같은 계약으로 검증·분석한다. 게임 규칙과 밸런스 수치는 바꾸지 않는다.
 
-> 진행 기록 (2026-07-18): **P0 계약과 P1 Web 기준 구현 완료.** 공통 JSON Schema,
+> 진행 기록 (2026-07-18): **P0 계약과 P1 Web 기준 구현 완료, P2 Unity 구현·EditMode 검증 진행 중.** 공통 JSON Schema,
 > `mulberry32-v1`, Core 이벤트 sink, IndexedDB 저장·재로드, 게임오버 JSONL/summary 다운로드와
-> 관련 테스트 6개를 추가했다. Unity(P2), viewer·분석(P3), Cloudflare(P4)는 미착수다.
+> 관련 Web 테스트 6개를 추가했다. Unity에는 같은 RNG·이벤트 DTO·Core sink와
+> `persistentDataPath` JSONL/summary writer를 연결했고 EditMode 테스트 3개를 통과했다.
+> 실제 Editor Play에서 `quit` 런의 JSONL/summary 생성과 Ajv 공통 schema 통과까지 확인했다.
+> standalone·재시작 수명주기와 고정 seed 전체 시나리오는 P2 잔여 작업이며,
+> viewer·분석(P3), Cloudflare(P4)는 미착수다.
 
 ---
 
@@ -329,7 +333,7 @@ npm run build
 예상 파일:
 
 - `unity/Assets/Scripts/View/UnityRunFileStore.cs` — JSONL writer와 summary 저장.
-- `unity/Assets/Scripts/View/UnityBuildInfo.cs` — Application/build/git 메타 구성.
+- `unity/Assets/Scripts/View/UnityRunSession.cs` — Application/build/git 메타와 seed/run context 구성.
 - `unity/Assets/Scripts/View/GameView.cs` — 새 run 생성·재시작·종료 수명주기.
 - `unity/Packages/manifest.json` — 필요 시 Unity 공식 Newtonsoft JSON 패키지 명시.
 
@@ -343,18 +347,18 @@ npm run build
 
 작업:
 
-- [ ] Web과 같은 seed/PRNG 버전, envelope, payload 키를 구현.
-- [ ] 한 이벤트를 완성된 한 줄로 append하고 주기적 flush; 종료 이벤트는 즉시 flush.
-- [ ] 디렉터리 생성·쓰기 실패가 게임을 중단하지 않게 로깅 비활성화와 오류 메시지를 분리.
+- [x] Web과 같은 seed/PRNG 버전, envelope, payload 키를 구현.
+- [x] 한 이벤트를 완성된 한 줄로 append하고 매 이벤트 flush; 종료 시 summary도 즉시 저장.
+- [x] 디렉터리 생성·쓰기 실패가 게임을 중단하지 않게 로깅 비활성화와 오류 메시지를 분리.
 - [ ] Editor Play, standalone build, 재시작, 정상 종료 수명주기에서 writer를 한 번만 dispose.
-- [ ] build info의 값을 얻지 못하면 키를 생략하지 않고 `unknown`과 `dirty` 상태를 명시.
+- [x] build info의 값을 얻지 못하면 키를 생략하지 않고 `unknown`과 `dirty` 상태를 명시.
 - [ ] 개발용 토글로 저장을 끌 수 있게 하되 기본 플레이테스트 빌드는 켠다.
 
 ### 6.3 Unity 테스트·검수
 
-- [ ] EditMode에서 memory sink로 Web과 같은 이벤트 시나리오 검증.
-- [ ] JSON 직렬화 결과를 공통 schema validator에 입력.
-- [ ] Play Mode 한 판에서 실제 두 파일 생성 확인.
+- [x] EditMode에서 Web 기준 Mulberry32 수열, memory sink 이벤트 순서·단일 종료를 검증.
+- [x] Editor Play 실제 JSONL의 `run_started → run_finished`를 공통 Ajv schema로 검증.
+- [x] Play Mode 한 판에서 `persistentDataPath`의 JSONL·summary 두 파일 생성 확인.
 - [ ] Unity MCP로 고정 seed의 생성/조합/보스/증강/XP 시나리오를 실행하고 로그 경로와
   Console 컴파일 오류 0을 캡처.
 - [ ] Web과 Unity의 대표 sample을 P3 fixture로 승격.
