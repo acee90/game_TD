@@ -1,9 +1,12 @@
 <script lang="ts">
   import type { Game } from '../game/game';
   import * as HD from '../data/hero';
-  import { augmentCardsHtml } from './view';
+  import { augmentCardsHtml, heroAugsHtml } from './view';
 
   let { game, tick }: { game: Game; tick: number } = $props();
+
+  // 보유 증강 접기/펼치기 (2026-07-18, 사용자 지시) — 선택 화면에서도 지금까지 고른 증강을 볼 수 있게.
+  let showCurrent = $state(false);
 
   // F1 — 증강 오클릭 방지: 새 선택 화면마다 1초 입력 잠금.
   // XP 연타 중 카드가 포인터 밑에 나타나 같은 클릭 흐름에 눌리는 사고를 막는다.
@@ -37,6 +40,8 @@
       cards: open ? augmentCardsHtml(game, locked) : '',
       rerollText: left > 0 ? `무료 리롤 · ${left}회 남음` : '리롤 소진',
       rerollDisabled: !game.canReroll || locked,
+      augCount: game.hero.augments.length,
+      currentAugs: heroAugsHtml(game),
     };
   });
 
@@ -56,6 +61,14 @@
   <div id="augOverlay">
     <h2>증강 선택</h2>
     <p class="sub" id="augSub">{v.sub}</p>
+    {#if v.augCount > 0}
+      <button class="augCurrentToggle" onclick={() => (showCurrent = !showCurrent)}>
+        {showCurrent ? '▾' : '▸'} 보유 증강 ({v.augCount})
+      </button>
+      {#if showCurrent}
+        <div class="haugs augCurrentList">{@html v.currentAugs}</div>
+      {/if}
+    {/if}
     <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_noninteractive_element_interactions -->
     <div class="augcards" id="augCards" role="group" onclick={onCardsClick}>{@html v.cards}</div>
     <button id="reroll" disabled={v.rerollDisabled} onclick={onReroll}>{v.rerollText}</button>
