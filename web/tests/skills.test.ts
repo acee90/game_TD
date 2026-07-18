@@ -57,17 +57,17 @@ describe('스킬 획득 — 하나만 든다', () => {
   });
 
   test('스킬이 없으면 개조 증강은 안 나온다', () => {
-    const explosive = augment('explosive_arrow');
+    const multi = augment('multishot'); // volley 전용
     const cdr = augment('skill_cdr');
 
-    expect(H.skillGateAllows(explosive, null)).toBe(false);
+    expect(H.skillGateAllows(multi, null)).toBe(false);
     expect(H.skillGateAllows(cdr, null)).toBe(false);
   });
 
   test("개조 증강은 그 스킬을 들어야만 나온다", () => {
-    const explosive = augment('explosive_arrow'); // volley 전용
-    expect(H.skillGateAllows(explosive, 'volley')).toBe(true);
-    expect(H.skillGateAllows(explosive, 'meteor')).toBe(false);
+    const multi = augment('multishot'); // volley 전용
+    expect(H.skillGateAllows(multi, 'volley')).toBe(true);
+    expect(H.skillGateAllows(multi, 'meteor')).toBe(false);
   });
 
   test("'any' 개조는 아무 스킬이나 있으면 나온다", () => {
@@ -144,24 +144,24 @@ describe('스킬 개조 — 수치가 아니라 관계다', () => {
     expect(hero.skill!.targets).toBe(K.SKILLS.volley.targets + 2);
   });
 
-  test('폭발 화살은 화살마다 반경을 준다', () => {
+  // 폭발 화살 → 폭발 (2026-07-18, 사용자 지시) — 스킬 전용 skillMod가 아니라
+  // 스킬 유무와 무관한 HeroStats 필드(explosionRadius)로 옮겨갔다. 평타에도 걸린다.
+  test('폭발은 스킬 없이도 붙고, 스킬 피해에 -30% 대가가 있다', () => {
     const hero = new Hero();
-    hero.addAugment(card('skill_volley'));
-    expect(hero.skill!.mods.explosiveRadius).toBe(0);
+    expect(hero.stats.explosionRadius).toBe(0);
 
-    hero.addAugment(card('explosive_arrow'));
-    expect(hero.skill!.mods.explosiveRadius).toBeGreaterThan(0);
+    hero.addAugment(card('explosion'));
+    expect(hero.stats.explosionRadius).toBeGreaterThan(0);
+    expect(hero.stats.skillDamageMult).toBeCloseTo(0.7, 5);
   });
 
-  test('연사 + 폭발 화살 — 화살이 늘고 각자 터진다', () => {
+  test('일제 사격은 레벨을 타고 대상이 늘어난다 (Lv1 기준치, targetsLevelStep마다 +1)', () => {
     const hero = new Hero();
     hero.addAugment(card('skill_volley'));
-    hero.addAugment(card('multishot'));
-    hero.addAugment(card('explosive_arrow'));
+    expect(hero.skill!.targets).toBe(K.SKILLS.volley.targets);
 
-    const skill = hero.skill!;
-    expect(skill.targets).toBe(6);
-    expect(skill.mods.explosiveRadius).toBe(32);
+    hero.level = 1 + K.SKILLS.volley.targetsLevelStep!;
+    expect(hero.skill!.targets).toBe(K.SKILLS.volley.targets + 1);
   });
 
   test('회오리는 소용돌이에 반경과 감속을 붙인다', () => {
@@ -259,12 +259,12 @@ describe('스킬 시전', () => {
     expect(hit).toBe(game.hero.skill!.targets);
   });
 
-  test('폭발 화살은 맞은 적 주변까지 번진다', () => {
+  test('폭발은 맞은 적 주변까지 번진다 (스킬 전용이 아니다)', () => {
     const plain = new Game();
     plain.hero.addAugment(card('skill_volley'));
     const explosive = new Game();
     explosive.hero.addAugment(card('skill_volley'));
-    explosive.hero.addAugment(card('explosive_arrow'));
+    explosive.hero.addAugment(card('explosion'));
 
     for (const game of [plain, explosive]) {
       const d = game.hero.distance;

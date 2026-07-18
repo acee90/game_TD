@@ -1,0 +1,411 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://game-td.local/schemas/game-run-log/v1.schema.json",
+  "title": "Game TD run log event v1",
+  "description": "JSONL 한 줄을 검증하는 Web/Unity 공통 게임 런 이벤트 계약",
+  "oneOf": [
+    { "$ref": "#/$defs/runStartedEvent" },
+    { "$ref": "#/$defs/roundStartedEvent" },
+    { "$ref": "#/$defs/roundClearedEvent" },
+    { "$ref": "#/$defs/towerSpawnedEvent" },
+    { "$ref": "#/$defs/towerMergedEvent" },
+    { "$ref": "#/$defs/towerSoldEvent" },
+    { "$ref": "#/$defs/bossSummonedEvent" },
+    { "$ref": "#/$defs/bossKilledEvent" },
+    { "$ref": "#/$defs/augmentOfferedEvent" },
+    { "$ref": "#/$defs/augmentRerolledEvent" },
+    { "$ref": "#/$defs/augmentChosenEvent" },
+    { "$ref": "#/$defs/heroXpBoughtEvent" },
+    { "$ref": "#/$defs/heroLeveledEvent" },
+    { "$ref": "#/$defs/probeBoughtEvent" },
+    { "$ref": "#/$defs/raceUpgradedEvent" },
+    { "$ref": "#/$defs/godRerolledEvent" },
+    { "$ref": "#/$defs/gasSkillUpgradedEvent" },
+    { "$ref": "#/$defs/towerCopyMarkedEvent" },
+    { "$ref": "#/$defs/gameOverEvent" },
+    { "$ref": "#/$defs/runFinishedEvent" }
+  ],
+  "$defs": {
+    "eventBase": {
+      "type": "object",
+      "required": ["v", "runId", "seq", "elapsedSeconds", "round", "roundTime", "score", "type", "data"],
+      "properties": {
+        "v": { "const": 1 },
+        "runId": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "seq": { "type": "integer", "minimum": 1 },
+        "elapsedSeconds": { "type": "number", "minimum": 0 },
+        "round": { "type": "integer", "minimum": 0 },
+        "roundTime": { "type": "number", "minimum": 0 },
+        "score": { "type": "integer", "minimum": 0 },
+        "type": {
+          "enum": [
+            "run_started", "round_started", "round_cleared", "tower_spawned", "tower_merged",
+            "tower_sold", "boss_summoned", "boss_killed", "augment_offered", "augment_rerolled",
+            "augment_chosen", "hero_xp_bought", "hero_leveled", "probe_bought", "race_upgraded",
+            "god_rerolled", "gas_skill_upgraded", "tower_copy_marked", "game_over", "run_finished"
+          ]
+        },
+        "data": { "type": "object" }
+      },
+      "additionalProperties": false
+    },
+    "buildInfo": {
+      "type": "object",
+      "required": ["gitSha", "branch", "builtAt", "target", "appVersion", "engineVersion", "dirty"],
+      "properties": {
+        "gitSha": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "branch": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "builtAt": { "type": "string", "minLength": 1, "maxLength": 64 },
+        "target": { "enum": ["web", "unity"] },
+        "appVersion": { "type": "string", "minLength": 1, "maxLength": 64 },
+        "engineVersion": { "type": "string", "minLength": 1, "maxLength": 64 },
+        "dirty": { "type": "boolean" }
+      },
+      "additionalProperties": false
+    },
+    "towerRef": {
+      "type": "object",
+      "required": ["name", "tier", "race", "raceName"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "tier": { "type": "integer", "minimum": 0, "maximum": 4 },
+        "race": { "type": "integer", "minimum": 0, "maximum": 3 },
+        "raceName": { "type": "string", "minLength": 1, "maxLength": 32 }
+      },
+      "additionalProperties": false
+    },
+    "augmentRef": {
+      "type": "object",
+      "required": ["id", "name", "rarity"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "name": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "rarity": { "enum": ["silver", "gold", "platinum"] }
+      },
+      "additionalProperties": false
+    },
+    "towerCount": {
+      "type": "object",
+      "required": ["tower", "count"],
+      "properties": {
+        "tower": { "$ref": "#/$defs/towerRef" },
+        "count": { "type": "integer", "minimum": 1 }
+      },
+      "additionalProperties": false
+    },
+    "chosenAugment": {
+      "type": "object",
+      "required": ["augment", "elapsedSeconds", "round", "roundTime"],
+      "properties": {
+        "augment": { "$ref": "#/$defs/augmentRef" },
+        "elapsedSeconds": { "type": "number", "minimum": 0 },
+        "round": { "type": "integer", "minimum": 0 },
+        "roundTime": { "type": "number", "minimum": 0 }
+      },
+      "additionalProperties": false
+    },
+    "runSummary": {
+      "type": "object",
+      "required": [
+        "v", "runId", "startedAt", "complete", "finishReason", "build", "seed", "rngAlgorithm", "score", "round",
+        "elapsedSeconds", "kills", "bossCleared", "bossesKilled", "heroLevel", "heroXpPurchases",
+        "heroXpSpent", "mineral", "gas", "probes", "upgrades", "towers", "augments", "unitsSpawned",
+        "merges", "towersSold", "godRerolls", "firstSeq", "lastSeq"
+      ],
+      "properties": {
+        "v": { "const": 1 },
+        "runId": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "startedAt": { "type": "string", "minLength": 1, "maxLength": 64 },
+        "complete": { "type": "boolean" },
+        "finishReason": { "$ref": "#/$defs/finishReason" },
+        "build": { "$ref": "#/$defs/buildInfo" },
+        "seed": { "type": "integer", "minimum": 0, "maximum": 4294967295 },
+        "rngAlgorithm": { "const": "mulberry32-v1" },
+        "score": { "type": "integer", "minimum": 0 },
+        "round": { "type": "integer", "minimum": 0 },
+        "elapsedSeconds": { "type": "number", "minimum": 0 },
+        "kills": { "type": "integer", "minimum": 0 },
+        "bossCleared": { "type": "integer", "minimum": 0 },
+        "bossesKilled": { "type": "integer", "minimum": 0 },
+        "heroLevel": { "type": "integer", "minimum": 1 },
+        "heroXpPurchases": { "type": "integer", "minimum": 0 },
+        "heroXpSpent": { "type": "integer", "minimum": 0 },
+        "mineral": { "type": "integer" },
+        "gas": { "type": "integer" },
+        "probes": { "type": "integer", "minimum": 0 },
+        "upgrades": {
+          "type": "array",
+          "minItems": 4,
+          "maxItems": 4,
+          "items": { "type": "integer", "minimum": 0 }
+        },
+        "towers": { "type": "array", "items": { "$ref": "#/$defs/towerCount" } },
+        "augments": { "type": "array", "items": { "$ref": "#/$defs/chosenAugment" } },
+        "unitsSpawned": { "type": "integer", "minimum": 0 },
+        "merges": { "type": "integer", "minimum": 0 },
+        "towersSold": { "type": "integer", "minimum": 0 },
+        "godRerolls": { "type": "integer", "minimum": 0 },
+        "firstSeq": { "const": 1 },
+        "lastSeq": { "type": "integer", "minimum": 1 }
+      },
+      "additionalProperties": false
+    },
+    "finishReason": {
+      "enum": ["game_over", "restart", "quit", "abandoned", "test"]
+    },
+    "runStartedData": {
+      "type": "object",
+      "required": ["startedAt", "build", "seed", "rngAlgorithm", "initial"],
+      "properties": {
+        "startedAt": { "type": "string", "minLength": 1, "maxLength": 64 },
+        "build": { "$ref": "#/$defs/buildInfo" },
+        "seed": { "type": "integer", "minimum": 0, "maximum": 4294967295 },
+        "rngAlgorithm": { "const": "mulberry32-v1" },
+        "initial": {
+          "type": "object",
+          "required": ["mineral", "gas", "lives"],
+          "properties": {
+            "mineral": { "type": "integer" },
+            "gas": { "type": "integer" },
+            "lives": { "type": "integer", "minimum": 0 }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "roundStartedData": {
+      "type": "object",
+      "required": ["round", "enemyCount", "waveType"],
+      "properties": {
+        "round": { "type": "integer", "minimum": 1 },
+        "enemyCount": { "type": "integer", "minimum": 0 },
+        "waveType": { "type": "string", "minLength": 1, "maxLength": 64 }
+      },
+      "additionalProperties": false
+    },
+    "roundClearedData": {
+      "type": "object",
+      "required": ["round", "mineralReward", "gasReward", "semantic"],
+      "properties": {
+        "round": { "type": "integer", "minimum": 1 },
+        "mineralReward": { "type": "integer" },
+        "gasReward": { "type": "integer" },
+        "semantic": { "const": "timer_elapsed" }
+      },
+      "additionalProperties": false
+    },
+    "towerSpawnedData": {
+      "type": "object",
+      "required": ["source", "slotIndex", "tower", "cost"],
+      "properties": {
+        "source": { "enum": ["purchase", "copy"] },
+        "slotIndex": { "type": "integer", "minimum": 0 },
+        "tower": { "$ref": "#/$defs/towerRef" },
+        "cost": { "type": "integer", "minimum": 0 }
+      },
+      "additionalProperties": false
+    },
+    "towerMergedData": {
+      "type": "object",
+      "required": ["consumed", "consumedCount", "produced", "slotIndex", "isGod"],
+      "properties": {
+        "consumed": { "$ref": "#/$defs/towerRef" },
+        "consumedCount": { "type": "integer", "minimum": 2 },
+        "produced": { "$ref": "#/$defs/towerRef" },
+        "slotIndex": { "type": "integer", "minimum": 0 },
+        "isGod": { "type": "boolean" }
+      },
+      "additionalProperties": false
+    },
+    "towerSoldData": {
+      "type": "object",
+      "required": ["slotIndex", "tower"],
+      "properties": {
+        "slotIndex": { "type": "integer", "minimum": 0 },
+        "tower": { "$ref": "#/$defs/towerRef" }
+      },
+      "additionalProperties": false
+    },
+    "bossSummonedData": {
+      "type": "object",
+      "required": ["level", "cooldown"],
+      "properties": {
+        "level": { "type": "integer", "minimum": 1 },
+        "cooldown": { "type": "number", "minimum": 0 }
+      },
+      "additionalProperties": false
+    },
+    "bossKilledData": {
+      "type": "object",
+      "required": ["level", "reward", "unlocked", "maxBossLevel"],
+      "properties": {
+        "level": { "type": "integer", "minimum": 1 },
+        "reward": { "type": "integer", "minimum": 0 },
+        "unlocked": { "type": "boolean" },
+        "maxBossLevel": { "type": "integer", "minimum": 1 }
+      },
+      "additionalProperties": false
+    },
+    "augmentOfferedData": {
+      "type": "object",
+      "required": ["offerId", "heroLevel", "choices"],
+      "properties": {
+        "offerId": { "type": "integer", "minimum": 1 },
+        "heroLevel": { "type": "integer", "minimum": 1 },
+        "choices": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/augmentRef" } }
+      },
+      "additionalProperties": false
+    },
+    "augmentRerolledData": {
+      "type": "object",
+      "required": ["offerId", "rerollCount", "cost", "choices"],
+      "properties": {
+        "offerId": { "type": "integer", "minimum": 1 },
+        "rerollCount": { "type": "integer", "minimum": 1 },
+        "cost": { "type": "integer", "minimum": 0 },
+        "choices": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/augmentRef" } }
+      },
+      "additionalProperties": false
+    },
+    "augmentChosenData": {
+      "type": "object",
+      "required": ["offerId", "choiceIndex", "augment"],
+      "properties": {
+        "offerId": { "type": "integer", "minimum": 1 },
+        "choiceIndex": { "type": "integer", "minimum": 0 },
+        "augment": { "$ref": "#/$defs/augmentRef" }
+      },
+      "additionalProperties": false
+    },
+    "heroXpBoughtData": {
+      "type": "object",
+      "required": ["cost", "xp", "levelBefore", "levelAfter", "xpBefore", "xpAfter"],
+      "properties": {
+        "cost": { "type": "integer", "minimum": 0 },
+        "xp": { "type": "number", "exclusiveMinimum": 0 },
+        "levelBefore": { "type": "integer", "minimum": 1 },
+        "levelAfter": { "type": "integer", "minimum": 1 },
+        "xpBefore": { "type": "number", "minimum": 0 },
+        "xpAfter": { "type": "number", "minimum": 0 }
+      },
+      "additionalProperties": false
+    },
+    "heroLeveledData": {
+      "type": "object",
+      "required": ["fromLevel", "toLevel", "xp", "source"],
+      "properties": {
+        "fromLevel": { "type": "integer", "minimum": 1 },
+        "toLevel": { "type": "integer", "minimum": 2 },
+        "xp": { "type": "number", "exclusiveMinimum": 0 },
+        "source": { "enum": ["purchase", "mob_kill", "boss_kill"] }
+      },
+      "additionalProperties": false
+    },
+    "probeBoughtData": {
+      "type": "object",
+      "required": ["cost", "count"],
+      "properties": {
+        "cost": { "type": "integer", "minimum": 0 },
+        "count": { "type": "integer", "minimum": 1 }
+      },
+      "additionalProperties": false
+    },
+    "raceUpgradedData": {
+      "type": "object",
+      "required": ["race", "raceName", "fromLevel", "toLevel", "cost"],
+      "properties": {
+        "race": { "type": "integer", "minimum": 0, "maximum": 3 },
+        "raceName": { "type": "string", "minLength": 1, "maxLength": 32 },
+        "fromLevel": { "type": "integer", "minimum": 0 },
+        "toLevel": { "type": "integer", "minimum": 1 },
+        "cost": { "type": "integer", "minimum": 0 }
+      },
+      "additionalProperties": false
+    },
+    "godRerolledData": {
+      "type": "object",
+      "required": ["slotIndex", "cost", "before", "after", "rerollCount"],
+      "properties": {
+        "slotIndex": { "type": "integer", "minimum": 0 },
+        "cost": { "type": "integer", "minimum": 0 },
+        "before": { "$ref": "#/$defs/towerRef" },
+        "after": { "$ref": "#/$defs/towerRef" },
+        "rerollCount": { "type": "integer", "minimum": 1 }
+      },
+      "additionalProperties": false
+    },
+    "gasSkillUpgradedData": {
+      "type": "object",
+      "required": ["track", "fromLevel", "toLevel", "cost"],
+      "properties": {
+        "track": { "enum": ["damage", "cdr"] },
+        "fromLevel": { "type": "integer", "minimum": 0 },
+        "toLevel": { "type": "integer", "minimum": 1 },
+        "cost": { "type": "integer", "minimum": 0 }
+      },
+      "additionalProperties": false
+    },
+    "towerCopyMarkedData": {
+      "type": "object",
+      "required": ["action"],
+      "properties": {
+        "action": { "enum": ["marked", "cancelled"] },
+        "slotIndex": { "type": "integer", "minimum": 0 },
+        "tower": { "$ref": "#/$defs/towerRef" }
+      },
+      "allOf": [
+        {
+          "if": { "type": "object", "properties": { "action": { "const": "marked" } }, "required": ["action"] },
+          "then": {
+            "type": "object",
+            "required": ["slotIndex", "tower"],
+            "properties": { "slotIndex": true, "tower": true }
+          }
+        }
+      ],
+      "additionalProperties": false
+    },
+    "gameOverData": {
+      "type": "object",
+      "required": ["cause", "enemyKind", "lives"],
+      "properties": {
+        "cause": { "const": "leak" },
+        "enemyKind": { "enum": ["mob", "boss"] },
+        "bossLevel": { "type": "integer", "minimum": 1 },
+        "lives": { "const": 0 }
+      },
+      "additionalProperties": false
+    },
+    "runFinishedData": {
+      "type": "object",
+      "required": ["reason", "complete", "summary"],
+      "properties": {
+        "reason": { "$ref": "#/$defs/finishReason" },
+        "complete": { "type": "boolean" },
+        "summary": { "$ref": "#/$defs/runSummary" }
+      },
+      "additionalProperties": false
+    },
+    "runStartedEvent": { "allOf": [{ "$ref": "#/$defs/eventBase" }, { "type": "object", "properties": { "type": { "const": "run_started" }, "data": { "$ref": "#/$defs/runStartedData" } } }] },
+    "roundStartedEvent": { "allOf": [{ "$ref": "#/$defs/eventBase" }, { "type": "object", "properties": { "type": { "const": "round_started" }, "data": { "$ref": "#/$defs/roundStartedData" } } }] },
+    "roundClearedEvent": { "allOf": [{ "$ref": "#/$defs/eventBase" }, { "type": "object", "properties": { "type": { "const": "round_cleared" }, "data": { "$ref": "#/$defs/roundClearedData" } } }] },
+    "towerSpawnedEvent": { "allOf": [{ "$ref": "#/$defs/eventBase" }, { "type": "object", "properties": { "type": { "const": "tower_spawned" }, "data": { "$ref": "#/$defs/towerSpawnedData" } } }] },
+    "towerMergedEvent": { "allOf": [{ "$ref": "#/$defs/eventBase" }, { "type": "object", "properties": { "type": { "const": "tower_merged" }, "data": { "$ref": "#/$defs/towerMergedData" } } }] },
+    "towerSoldEvent": { "allOf": [{ "$ref": "#/$defs/eventBase" }, { "type": "object", "properties": { "type": { "const": "tower_sold" }, "data": { "$ref": "#/$defs/towerSoldData" } } }] },
+    "bossSummonedEvent": { "allOf": [{ "$ref": "#/$defs/eventBase" }, { "type": "object", "properties": { "type": { "const": "boss_summoned" }, "data": { "$ref": "#/$defs/bossSummonedData" } } }] },
+    "bossKilledEvent": { "allOf": [{ "$ref": "#/$defs/eventBase" }, { "type": "object", "properties": { "type": { "const": "boss_killed" }, "data": { "$ref": "#/$defs/bossKilledData" } } }] },
+    "augmentOfferedEvent": { "allOf": [{ "$ref": "#/$defs/eventBase" }, { "type": "object", "properties": { "type": { "const": "augment_offered" }, "data": { "$ref": "#/$defs/augmentOfferedData" } } }] },
+    "augmentRerolledEvent": { "allOf": [{ "$ref": "#/$defs/eventBase" }, { "type": "object", "properties": { "type": { "const": "augment_rerolled" }, "data": { "$ref": "#/$defs/augmentRerolledData" } } }] },
+    "augmentChosenEvent": { "allOf": [{ "$ref": "#/$defs/eventBase" }, { "type": "object", "properties": { "type": { "const": "augment_chosen" }, "data": { "$ref": "#/$defs/augmentChosenData" } } }] },
+    "heroXpBoughtEvent": { "allOf": [{ "$ref": "#/$defs/eventBase" }, { "type": "object", "properties": { "type": { "const": "hero_xp_bought" }, "data": { "$ref": "#/$defs/heroXpBoughtData" } } }] },
+    "heroLeveledEvent": { "allOf": [{ "$ref": "#/$defs/eventBase" }, { "type": "object", "properties": { "type": { "const": "hero_leveled" }, "data": { "$ref": "#/$defs/heroLeveledData" } } }] },
+    "probeBoughtEvent": { "allOf": [{ "$ref": "#/$defs/eventBase" }, { "type": "object", "properties": { "type": { "const": "probe_bought" }, "data": { "$ref": "#/$defs/probeBoughtData" } } }] },
+    "raceUpgradedEvent": { "allOf": [{ "$ref": "#/$defs/eventBase" }, { "type": "object", "properties": { "type": { "const": "race_upgraded" }, "data": { "$ref": "#/$defs/raceUpgradedData" } } }] },
+    "godRerolledEvent": { "allOf": [{ "$ref": "#/$defs/eventBase" }, { "type": "object", "properties": { "type": { "const": "god_rerolled" }, "data": { "$ref": "#/$defs/godRerolledData" } } }] },
+    "gasSkillUpgradedEvent": { "allOf": [{ "$ref": "#/$defs/eventBase" }, { "type": "object", "properties": { "type": { "const": "gas_skill_upgraded" }, "data": { "$ref": "#/$defs/gasSkillUpgradedData" } } }] },
+    "towerCopyMarkedEvent": { "allOf": [{ "$ref": "#/$defs/eventBase" }, { "type": "object", "properties": { "type": { "const": "tower_copy_marked" }, "data": { "$ref": "#/$defs/towerCopyMarkedData" } } }] },
+    "gameOverEvent": { "allOf": [{ "$ref": "#/$defs/eventBase" }, { "type": "object", "properties": { "type": { "const": "game_over" }, "data": { "$ref": "#/$defs/gameOverData" } } }] },
+    "runFinishedEvent": { "allOf": [{ "$ref": "#/$defs/eventBase" }, { "type": "object", "properties": { "type": { "const": "run_finished" }, "data": { "$ref": "#/$defs/runFinishedData" } } }] }
+  }
+}

@@ -1,5 +1,6 @@
 .DS_Store
 .playwright-mcp/
+.firecrawl/
 
 # Unity 에디터 생성물
 unity/Library/

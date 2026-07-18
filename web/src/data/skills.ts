@@ -61,6 +61,11 @@ export interface SkillDef {
   readonly radius: number;
   /** 몇 명을 때리는가 (volley 전용, 0이면 반경 안 전체) */
   readonly targets: number;
+  /**
+   * 레벨업마다 targets가 오른다 (volley 전용, 2026-07-18 사용자 지시: "레벨당
+   * 3/4/5/6발"). 이 레벨마다 +1. 없으면 레벨과 무관하게 고정.
+   */
+  readonly targetsLevelStep?: number;
   /** 자동 시전 조건: 유효 사거리 안에 적이 이만큼 있어야 쏜다 */
   readonly autoCastMinTargets: number;
   /** 단발인가 채널링인가 — 쿨감의 값어치가 갈린다 */
@@ -130,15 +135,19 @@ export const SKILLS: Record<SkillId, SkillDef> = {
     targets: 0,
     autoCastMinTargets: 2, // 하나 때리자고 쓰기엔 아깝다
   },
+  // 레벨 스케일링 (2026-07-18, 사용자 지시: "영웅 레벨당 3/4/5/6발"). Lv1 3발 →
+  // 8레벨마다 +1(Lv9 4발 · Lv17 5발 · Lv25 6발 ...). 실버 등급 스킬이라 초반엔
+  // 살짝 얌전하게 시작해 레벨을 타고 계속 자라는 빌드로 남는다.
   volley: {
     id: 'volley',
     castType: 'burst',
     name: '일제 사격',
-    description: '사거리 안 적 4명에게 각각 공격력 2배 피해',
+    description: '사거리 안 적에게 각각 공격력 2배 (레벨업마다 대상 +1, Lv1 3발)',
     manaMax: 90,
     damageMult: 2,
     radius: 0, // 영웅 사거리를 쓴다
-    targets: 4,
+    targets: 3,
+    targetsLevelStep: 8,
     autoCastMinTargets: 1, // 단일에도 값어치가 있다
   },
   meteor: {
@@ -228,13 +237,14 @@ export const SKILLS: Record<SkillId, SkillDef> = {
    * 처형자의 일격 — 근접의 마무리. 체력이 가장 낮은 적을 강타하고,
    * 그 일격으로 죽으면 **쿨타임이 즉시 초기화된다**. 잘 고르면 연쇄 처형이 된다.
    */
+  // 8배 → 6배, 필요 마나 110 → 140 (2026-07-18, 사용자 지시) — 너프.
   execution: {
     id: 'execution',
     castType: 'burst',
     name: '처형자의 일격',
-    description: '체력이 가장 낮은 적에게 공격력 8배 — 처치하면 쿨타임 초기화',
-    manaMax: 110,
-    damageMult: 8,
+    description: '체력이 가장 낮은 적에게 공격력 6배 — 처치하면 쿨타임 초기화',
+    manaMax: 140,
+    damageMult: 6,
     radius: 0,
     targets: 1,
     autoCastMinTargets: 1,
@@ -319,8 +329,11 @@ export interface SkillMods {
   readonly damageMult: number;
   readonly radiusAdd: number;
   readonly extraTargets: number;
-  /** 일제 사격의 화살 하나가 터지는 반경 (0이면 단일) */
-  readonly explosiveRadius: number;
+  /**
+   * 시전 시 이 확률로 마나를 소비하지 않는다 (2026-07-18, 오버클럭 리뉴얼).
+   * 0~1. 가산으로 쌓인다 — 카드 여러 장이면 그만큼 자주 공짜.
+   */
+  readonly freeCastChance: number;
   /** 스킬에 맞은 적의 이동속도 배수 (1이면 감속 없음). **모든 스킬**에 걸린다 */
   readonly slowFactor: number;
   readonly slowSeconds: number;
@@ -353,7 +366,7 @@ export const NO_MODS: SkillMods = {
   damageMult: 1,
   radiusAdd: 0,
   extraTargets: 0,
-  explosiveRadius: 0,
+  freeCastChance: 0,
   slowFactor: 1,
   slowSeconds: 0,
   decoyHpMult: 1,
@@ -386,7 +399,7 @@ export function foldMods(patches: readonly SkillModPatch[]): SkillMods {
     if (p.damageMult) damageBonus += p.damageMult - 1;
     if (p.radiusAdd) out.radiusAdd += p.radiusAdd;
     if (p.extraTargets) out.extraTargets += p.extraTargets;
-    if (p.explosiveRadius) out.explosiveRadius += p.explosiveRadius;
+    if (p.freeCastChance) out.freeCastChance += p.freeCastChance;
     if (p.slowFactor !== undefined) out.slowFactor = Math.min(out.slowFactor, p.slowFactor);
     if (p.slowSeconds) out.slowSeconds = Math.max(out.slowSeconds, p.slowSeconds);
     if (p.decoyHpMult) out.decoyHpMult *= p.decoyHpMult;
@@ -402,6 +415,8 @@ export function foldMods(patches: readonly SkillModPatch[]): SkillMods {
   out.damageMult = Math.max(0.1, 1 + damageBonus);
   // 최대 마나 하한 — 모으면 **스킬 난사**가 성립해야 한다 (난사는 화염 빌드의 연료다)
   out.manaMaxMult = Math.max(MANA_MAX_FLOOR, 1 + manaBonus);
+  // 무료 시전 확률 상한 — 완전 무료(마나 무의미화)는 막는다
+  out.freeCastChance = Math.min(0.85, out.freeCastChance);
   return out;
 }
 
@@ -440,8 +455,15 @@ export const MIN_TICK_INTERVAL = 0.1;
 /**
  * @param attackSpeedRatio 영웅 공격 속도 배수 (기본 1). 허수아비·처형처럼
  *   `cooldownScalesWithAttackSpeed`인 스킬은 손이 빠를수록 쿨이 짧아진다.
+ * @param heroLevel 영웅 레벨 (기본 1). targetsLevelStep이 있는 스킬(일제 사격)의
+ *   대상 수가 여기서 갈린다.
  */
-export function resolveSkill(id: SkillId, mods: SkillMods, attackSpeedRatio = 1): ResolvedSkill {
+export function resolveSkill(
+  id: SkillId,
+  mods: SkillMods,
+  attackSpeedRatio = 1,
+  heroLevel = 1,
+): ResolvedSkill {
   const def = SKILLS[id];
   const asCut = def.cooldownScalesWithAttackSpeed ? Math.max(0.3, 1 / Math.max(0.01, attackSpeedRatio)) : 1;
 
@@ -455,12 +477,17 @@ export function resolveSkill(id: SkillId, mods: SkillMods, attackSpeedRatio = 1)
    */
   const manaMax = Math.max(10, def.manaMax * mods.manaMaxMult * asCut);
 
+  // 레벨로 자라는 대상 수 (일제 사격) — Lv1 기준치에서 targetsLevelStep마다 +1
+  const levelTargets = def.targetsLevelStep
+    ? def.targets + Math.floor((heroLevel - 1) / def.targetsLevelStep)
+    : def.targets;
+
   return {
     def,
     manaMax,
     damageMult: def.damageMult * mods.damageMult,
     radius: def.radius + (def.radius > 0 ? mods.radiusAdd : 0),
-    targets: def.targets + (def.targets > 0 ? mods.extraTargets : 0),
+    targets: levelTargets + (levelTargets > 0 ? mods.extraTargets : 0),
     mods,
 
     beamSeconds: (def.beamSeconds ?? 0) + (def.beamSeconds ? mods.beamSecondsAdd : 0),

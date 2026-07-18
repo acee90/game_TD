@@ -4,7 +4,7 @@
 // [원본확정] 맵파일에서 직접 읽은 수치. 바꾸면 원작 재현이 깨진다.
 // [프로토]   원본이 EUD로 가려져 읽을 수 없어 플레이 가능하게 정한 수치.
 
-import type { Tag } from './units';
+import { GOD_TIER, type Tag } from './units';
 
 // ── 시작 자원 — trigger #349 SetResources(SetTo, 55, ore) / (SetTo, 6, gas) [원본확정]
 // 제단은 공짜로 주어지므로 원본 값을 그대로 쓴다.
@@ -43,7 +43,8 @@ export const OPENING_SECONDS = 5;
  */
 // Lv7 신설 (2026-07-17 5차 [프로토] — 원본은 Lv6까지): "R30 전에 Lv6을 잡으면
 // 성장의 흥미가 끝난다" — 사다리 꼭대기를 종반(R50+)으로 연장. 보상은 ×1.65 패턴.
-export const BOSS_KILL_MINERAL = [5, 10, 18, 32, 55, 90, 150] as const;
+// Lv8 추가 (2026-07-18, 사용자 지시) — 같은 ×1.65 패턴을 한 단 더 (150 × 1.65 ≈ 248).
+export const BOSS_KILL_MINERAL = [5, 10, 18, 32, 55, 90, 150, 248] as const;
 
 /** 킬 마일스톤 보상. trigger #546~#566. 200킬 간격 [원본확정] */
 export const KILL_MILESTONES: readonly (readonly [kills: number, mineral: number])[] = [
@@ -117,18 +118,30 @@ export const PROBE_MINERAL = 60;
  *
  * GOD는 조합의 끝인데 **어떤 GOD가 나오는지는 순수 운**이었다 — 병과가 어긋나면
  * (가스 업그레이드는 병과별이다) 애써 만든 GOD가 반쪽이 된다. 금화로 다시 뽑게 해서
- * 운을 **자원으로 교정**할 수 있게 한다. 지수 비용이라 무한 굴리기는 안 된다.
+ * 운을 **자원으로 교정**할 수 있게 한다.
+ *
+ * 지수(×1.5) → 고정 150 (2026-07-18, 사용자 지시). 반복 리롤일수록 비싸지는 구조가
+ * "운이 나쁠수록 교정이 더 비싸진다"는 역설을 만들었다 — 정작 교정이 필요한 상황에서
+ * 가장 비싸다. 고정가는 그 역설을 없애고, 몇 번을 굴리든 비용이 예측 가능하다.
  */
 export const GOD_REROLL_MINERAL = 150;
-export const GOD_REROLL_GROWTH = 1.5;
-export const godRerollCost = (rolled: number): number =>
-  Math.round(GOD_REROLL_MINERAL * Math.pow(GOD_REROLL_GROWTH, rolled));
+export const godRerollCost = (_rolled: number): number => GOD_REROLL_MINERAL;
 
 // ── 타워 복제 ('복제 장치' 증강) ──
 // 복제 가능 티어 상한은 라운드와 영웅 레벨 중 **더 빠른 쪽**을 따라 오른다.
 // 초반엔 싸구려만 복제되고, 후반에 GOD가 열린다 — 복제가 계속 살아 있는 카드가 된다.
-export const COPY_TIER_ROUNDS = 12;
-export const COPY_TIER_LEVELS = 9;
+//
+// 2026-07-18 (사용자 지시: "복제 장치가 사기다 — 저점 방어도 되면서 고점도 너무 높다") —
+// 측정: 등급이 towerCopyTier를 그대로 밀어올려서 플래티넘이 뜨면 R1에 즉시 T4가,
+// 실버도 R24~36이면 GOD까지 열렸다(원래 GOD 도달 페이스 R26~54보다 훨씬 빠름).
+// 복제는 unitsSpawned를 안 건드려 생성비도 절대 안 오르는데, 그 위에 등급운으로
+// 최상위 티어까지 조기 해금되니 저점(공짜 전력)과 고점(공짜 GOD 공장)을 동시에 잡는다.
+// 두 가지로 고친다: ① GOD은 복제 대상에서 아예 제외(COPY_TIER_MAX) ② 등급이 더 이상
+// 상한에 영향을 안 주게(game/hero.ts scaleEffect) ③ 램프를 늦춘다(12→20, 9→15).
+export const COPY_TIER_ROUNDS = 20;
+export const COPY_TIER_LEVELS = 15;
+/** 복제로 도달 가능한 최고 티어 — GOD(4)은 제외. 직접 만들거나 조합해야 한다. */
+export const COPY_TIER_MAX = GOD_TIER - 1;
 /**
  * [프로토] 프로브 비용은 지수로 오른다 — "지금 전력이냐 미래 경제냐"의 일꾼 딜레마.
  * 8기 고정 상한이던 시절에는 GA가 전 세대 7~8로 수렴하는 무뇌 투자였다.
@@ -157,19 +170,27 @@ export const GAS_PER_PROBE_SECOND = 0.4;
  */
 // 0.4 → 0.45 (2026-07-17 4차): 기본공 3 체제에서 구매 파워의 몫을 더 키운다 —
 // 타워증강 앵커(전쟁군주 2장 + 몰빵 L15 > 풀투자 영웅)도 이 값이어야 성립한다.
-export const UPGRADE_DAMAGE_PER_LEVEL = 0.45;
+// 0.45 → 0.5 (2026-07-18, 사용자 지시): 병과 업그레이드 버프. 가스비 이차항 제거(위
+// upgradeGasCost)로 몰빵이 가벼워진 것과 세트 — 사면 사는 만큼 세지는 쪽으로 더 민다.
+export const UPGRADE_DAMAGE_PER_LEVEL = 0.5;
 // 기울기 4 → 6 (5차): "업그레이드로 너무 빠르게 강해져서 라운드가 재미없다" —
 // 레벨당 효과(0.45)는 유지하고 페이스만 늦춘다.
 // 6차: 2+6L → 2+3L+0.2L² — "첫 업 2에서 8로 왜 점핑?"(플레이테스트). 등차 6은
 // 두 번째 업이 4배로 느껴진다. 진입을 2→5→9→13으로 완만하게, 꼬리는 이차항이
 // 조인다. L15 누적 640가스 ≈ 5차 660 — 총예산·타워증강 앵커 불변.
-export const upgradeGasCost = (level: number): number =>
-  Math.round(2 + 3 * level + 0.2 * level * level);
+// 2+3L+0.2L² → 2+3L (2026-07-18, 사용자 지시): 이차항 제거, 순수 등차 3.
+// L15 누적이 640 → 405로 가벼워진다 — 몰빵 페이스가 다시 빨라지므로 타워증강
+// 앵커(전쟁군주 2장 + 몰빵 L15 > 풀투자 영웅)는 재검증 대상.
+// 등차 3 → 2 (같은 날, 사용자 지시): 더 가볍게. L15 누적 405 → 300.
+// 2 → 3 (같은 날, 롤백): 사용자 지시로 원복. L15 누적 300 → 405.
+export const upgradeGasCost = (level: number): number => 2 + 3 * level;
 
 // ───────── 보스 소환 ─────────
 // 소환은 라운드 진행과 무관한 상시 액션이고 쿨타임만 있다. 비용 없음.
 // Lv N은 Lv N-1을 처치해야 열린다. (원본 감지 로직·쿨타임은 EUD로 미확인 — §11.1)
-export const BOSS_MAX_LEVEL = 7; // 6 → 7 (5차) — Lv7 = 최후의 적장
+// 6 → 7 (5차) — Lv7 = 최후의 적장. 7 → 8 (2026-07-18, 사용자 지시) — 꼭대기
+// 완만화(BOSS_HP_TOP_GROWTH 2.6) 구간에 한 단 추가, 사다리를 R60 이후로 더 늘린다.
+export const BOSS_MAX_LEVEL = 8;
 export const BOSS_COOLDOWN_SECONDS = 45; // [프로토]
 
 /**
@@ -297,20 +318,82 @@ export const expectedBoardDps = (round: number): number => {
  */
 // 30 → 26 (6차): "중반 R30~40을 조금 더 높이자" — 가속이 4라운드 일찍 시작된다
 // (R30 성장률 1.4% → 4.9%, R35 5.5% → 9.2%).
-export const WAVE_RAMP_START = 26;
+// 26 → 15 (2026-07-18, 사용자 지시: "R20~45는 너무 쉽고 R50~60은 너무 급격하다").
+// 측정(총 체력 증가율): 옛 곡선은 R14~26이 13.3~13.7%로 평평했다가(R6~13의 21~24%보다
+// 오히려 낮음) R51+에서 42.5%로 고정돼 R50→60에 체력이 34배가 됐다 — "쉬움 평지 → 갑자기 벽".
+// 램프를 R15부터 당기고(아래 BASE_RATE도 같이 올림) 끝을 R58로 늘리며 상한을 낮춰
+// (MAX_RATE 0.27→0.19) 중반을 끌어올리고 후반 벽을 편다. R60 누적 체력 2억 → 7,900만.
+export const WAVE_RAMP_START = 15;
 // 48 → 52 (2026-07-17 4차): "R40부터 급격히 어려워진다" — 램프를 늘려 R40 시점
 // 성장률을 12.9% → 10.4%로 눌러 절벽 체감을 완화한다 (보드 후반 성장 8.8%와의 간극 축소).
-export const WAVE_RAMP_END = 52;
-export const WAVE_BASE_RATE = 0.014; // R30 시점 선형 구간의 상대 성장률과 일치 (0.45/31.1)
-export const WAVE_MAX_RATE = 0.27; // ×e^0.27 ≈ ×1.310 — 5차(조기 증강 2개)로 0.25가 물러져 재조임 (2026-07-17)
+// 52 → 58 (2026-07-18, 사용자 지시): 위 항목과 세트 — 최대 성장률 도달을 더 늦춰
+// R50~60 구간을 완만하게 편다.
+export const WAVE_RAMP_END = 58;
+// 0.014 → 0.03 (2026-07-18, 사용자 지시): 램프 시작을 앞당긴 만큼 초입 기울기도 올려
+// R20~45 전 구간의 체감 난이도를 끌어올린다. (기존 유도식 0.45/31.1은 RAMP_START=30
+// 시절 기준이라 지금은 직접 지정한다.)
+export const WAVE_BASE_RATE = 0.03;
+// 0.27 → 0.19 (2026-07-18, 사용자 지시): 최종 상한을 낮춰 R51+ 고정 증가율을
+// 42.5%/라운드에서 31.6%/라운드로 낮춘다 — "R50~60이 너무 급격하다".
+export const WAVE_MAX_RATE = 0.19;
 const RATE_SLOPE = (WAVE_MAX_RATE - WAVE_BASE_RATE) / (WAVE_RAMP_END - WAVE_RAMP_START);
 const CLEAR_AT_RAMP_START = 18 + 0.45 * (WAVE_RAMP_START - 1);
-export const targetClearSeconds = (round: number): number => {
+/** 위 6차 램프 그대로 — R50 이후는 지금도 이 공식을 그대로 쓴다 (아래 SMOOTH 구간의 도착 앵커이기도 하다) */
+const legacyTargetClearSeconds = (round: number): number => {
   if (round <= WAVE_RAMP_START) return 18 + 0.45 * (round - 1);
   const t = Math.min(round, WAVE_RAMP_END) - WAVE_RAMP_START;
   const ramp = Math.exp(WAVE_BASE_RATE * t + (RATE_SLOPE * t * t) / 2);
   const tail = round > WAVE_RAMP_END ? Math.exp(WAVE_MAX_RATE * (round - WAVE_RAMP_END)) : 1;
   return CLEAR_AT_RAMP_START * ramp * tail;
+};
+
+/**
+ * R13~50 재설계 (2026-07-18, 사용자 지시: "R13~50을 더 가파르게, 매끄럽게, R50은 지금 그대로").
+ *
+ * 옛 곡선은 이 구간에 두 번의 이음매가 있었다 — expectedBoardDps가 R13/14와 R31/32에서
+ * 증가율 자체가 꺾이고(19.5%→11.6%→8.8%), 여기(clearSeconds)의 램프도 R15에서 3%로
+ * 리셋되면서 겹쳐 R14~15에 13%대로 파이는 골짜기가 생겼다.
+ *
+ * 총 예산(expectedBoardDps × clearSeconds)을 R13~50 구간에서 3차 로그커브로 다시 잇는다.
+ * 2차(선형 증가율)로 양끝 **값**만 고정했더니 R50 진입 증가율이 legacy와 안 맞아 R50→51
+ * 경계에서 오히려 더 큰 이음매(8.8%p 점프)가 생겼다 — 3차를 써서 양끝 **값과 증가율**을
+ * 모두 legacy와 맞춘다(R12→13, R50→51 실측 증가율을 그대로 경계 조건으로 문다).
+ * 양끝이 이미 legacy 대비 높은 증가율(~22%·~28%)이라 중간(R20~35)이 그만큼 부풀고
+ * (최대 R24 +38%), 어디서도 옛 값 밑으로 안 떨어진다 — R50은 정확히 legacy와 같다.
+ * (R35 방어 상한 — 17 GOD 타워 총합 — 대비 41% 여유 확인됨.)
+ */
+export const WAVE_SMOOTH_FROM = 13;
+export const WAVE_SMOOTH_TO = 50;
+const SMOOTH_FROM = WAVE_SMOOTH_FROM;
+const SMOOTH_TO = WAVE_SMOOTH_TO;
+const SMOOTH_SPAN = SMOOTH_TO - SMOOTH_FROM;
+const P_AT_SMOOTH_FROM = expectedBoardDps(SMOOTH_FROM) * legacyTargetClearSeconds(SMOOTH_FROM);
+const P_AT_SMOOTH_TO = expectedBoardDps(SMOOTH_TO) * legacyTargetClearSeconds(SMOOTH_TO);
+const SMOOTH_LN_RATIO = Math.log(P_AT_SMOOTH_TO / P_AT_SMOOTH_FROM);
+// 경계 증가율(로그) — legacy에서 그대로 읽는다. 진입: R12→13. 진출: R50→51.
+const SMOOTH_ENTRY_RATE = Math.log(
+  (expectedBoardDps(SMOOTH_FROM) * legacyTargetClearSeconds(SMOOTH_FROM)) /
+    (expectedBoardDps(SMOOTH_FROM - 1) * legacyTargetClearSeconds(SMOOTH_FROM - 1)),
+);
+const SMOOTH_EXIT_RATE = Math.log(
+  (expectedBoardDps(SMOOTH_TO + 1) * legacyTargetClearSeconds(SMOOTH_TO + 1)) /
+    (expectedBoardDps(SMOOTH_TO) * legacyTargetClearSeconds(SMOOTH_TO)),
+);
+// exponent(t) = c1·t + c2·t² + c3·t³ — rate(t)=exponent'(t)가 t=0에서 SMOOTH_ENTRY_RATE,
+// t=SPAN에서 SMOOTH_EXIT_RATE, exponent(SPAN)=SMOOTH_LN_RATIO를 동시에 만족하도록 푼다.
+const SMOOTH_C1 = SMOOTH_ENTRY_RATE;
+const SMOOTH_C3 =
+  (SMOOTH_C1 + SMOOTH_EXIT_RATE) / (SMOOTH_SPAN * SMOOTH_SPAN) -
+  (2 * SMOOTH_LN_RATIO) / (SMOOTH_SPAN * SMOOTH_SPAN * SMOOTH_SPAN);
+const SMOOTH_C2 =
+  (SMOOTH_EXIT_RATE - SMOOTH_C1 - 3 * SMOOTH_C3 * SMOOTH_SPAN * SMOOTH_SPAN) / (2 * SMOOTH_SPAN);
+
+export const targetClearSeconds = (round: number): number => {
+  if (round <= SMOOTH_FROM || round >= SMOOTH_TO) return legacyTargetClearSeconds(round);
+  const t = round - SMOOTH_FROM;
+  const exponent = SMOOTH_C1 * t + SMOOTH_C2 * t * t + SMOOTH_C3 * t * t * t;
+  const pTarget = P_AT_SMOOTH_FROM * Math.exp(exponent);
+  return pTarget / expectedBoardDps(round);
 };
 
 /** 웨이브 총 체력 → 몹 1기 체력. "새 몹이 사이클마다 굵어지는" 리듬은 count 리셋이 만든다 */
@@ -337,10 +420,15 @@ export const enemyArmor = (round: number): number =>
  * 총 체력은 enemyHP가 총량÷count로 역산하므로 count는 난이도가 아니라 **밀도**다.
  * 사이클이 넘어가면 count가 리셋되면서 개당 체력이 뛴다 — "새 몹은 적지만 굵다". [프로토]
  */
-export const ENEMY_BASE_COUNT = 20;
-export const ENEMY_COUNT_STEP = 4;
+// 20 → 16 · 4 → 3.2 (2026-07-18, 사용자 지시): 몹 수 -20% 전체. 초반에 뜨는 성장
+// 증강(막타 스택형)이 낮은 라운드에서부터 너무 많은 처치 기회를 얻어 고점이 치솟는
+// 문제 — 밀도를 낮춰 초반 막타 기회 자체를 줄인다. 총 체력(enemyHP가 총량÷count로
+// 역산)과 개체당 접촉 공격력(enemyDamage, count와 무관)은 그대로 — 개체가 굵어질 뿐
+// 라운드 난이도 곡선 자체는 안 바뀐다.
+export const ENEMY_BASE_COUNT = 16;
+export const ENEMY_COUNT_STEP = 3.2;
 export const enemyCount = (round: number): number =>
-  ENEMY_BASE_COUNT + ENEMY_COUNT_STEP * posInCycle(round);
+  Math.round(ENEMY_BASE_COUNT + ENEMY_COUNT_STEP * posInCycle(round));
 
 /** 웨이브 내 스폰 간격(초). 36기 × 0.18 = 6.5초 스폰 창 [프로토] */
 export const SPAWN_INTERVAL = 0.18;
@@ -432,6 +520,13 @@ export const TAG_EFFECT: Record<Tag, { damage: number; interval: number; range: 
   splash: { damage: 0.7, interval: 1.0, range: 1.0 },
   speed: { damage: 1.0, interval: 0.5, range: 0.9 },
 };
+
+/**
+ * 스플래시 타워 피해 감쇠 (2026-07-18, 사용자 지시) — 사거리 안 전원이 동일 피해를
+ * 받던 것을, 폭심(샷이 날아가는 지점)에서 멀수록 이 비율까지 선형으로 줄어들게 한다.
+ * 폭심 자체는 1(100%), 사거리 끝은 이 값(요청 범위 0.5~0.6의 중간).
+ */
+export const SPLASH_EDGE_FALLOFF = 0.55;
 
 /** 유효 피해 — 장갑을 뺀다. 최소 10%는 관통 */
 export const effectiveDamage = (raw: number, armor: number): number =>

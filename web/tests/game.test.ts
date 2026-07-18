@@ -144,11 +144,13 @@ describe('라운드 진행 — 고정 간격', () => {
   });
 
   test('사이클 안에서는 몹 수가 늘고, 사이클이 넘어가면 수가 리셋되며 개당 체력이 뛴다', () => {
+    // ENEMY_COUNT_STEP이 소수(반올림 적용)라 매 라운드 증가폭이 완전히 균일하진 않지만,
+    // 사이클 안에서는 단조 증가해야 한다.
     for (let r = 1; r <= 4; r++) {
-      expect(B.enemyCount(r + 1) - B.enemyCount(r)).toBe(B.ENEMY_COUNT_STEP);
+      expect(B.enemyCount(r + 1)).toBeGreaterThan(B.enemyCount(r));
     }
     expect(B.enemyCount(1)).toBe(B.ENEMY_BASE_COUNT);
-    expect(B.enemyCount(5)).toBe(B.ENEMY_BASE_COUNT + 4 * B.ENEMY_COUNT_STEP);
+    expect(B.enemyCount(5)).toBe(Math.round(B.ENEMY_BASE_COUNT + 4 * B.ENEMY_COUNT_STEP));
     // 사이클 경계: 수는 처음으로, 개당 체력은 크게 점프 — "새 몹은 적지만 굵다"
     expect(B.enemyCount(6)).toBe(B.ENEMY_BASE_COUNT);
     expect(B.enemyHP(6)).toBeGreaterThan(B.enemyHP(5) * 1.5);
@@ -180,13 +182,18 @@ describe('라운드 진행 — 고정 간격', () => {
     // 곡선을 따돌리고 영생한다 (거듭제곱 꼬리로 확인한 함정)
     const lateGrowth = B.targetClearSeconds(56) / B.targetClearSeconds(55);
     expect(lateGrowth).toBeGreaterThan(1.1);
-    // 킥 없음 — 성장률이 갑자기 점프하지 않는다 (라운드 간 성장률 증가폭 ≤ 2%p).
+    // 킥 없음 — 플레이어가 실제로 겪는 건 targetClearSeconds 자체가 아니라 그것과
+    // expectedBoardDps를 곱한 총 예산(웨이브 총 체력)이다. R13~50 구간(2026-07-18,
+    // 사용자 지시로 재설계)은 총 예산을 매끄럽게 잇기 위해 clearSeconds 쪽에서
+    // expectedBoardDps의 자체 이음매(R31/32)를 상쇄하므로, clearSeconds 단독의
+    // 증가율은 그 지점에서 오히려 꺾인다 — 검사 대상은 총 예산이어야 한다.
+    const totalBudget = (r: number) => B.expectedBoardDps(r) * B.targetClearSeconds(r);
     // 선형 오프닝(≤램프 시작)은 상대 성장률이 자연 감소하므로 단조 검사는 램프부터.
-    let prevRate = B.targetClearSeconds(2) / B.targetClearSeconds(1);
+    let prevRate = totalBudget(2) / totalBudget(1);
     for (let r = 2; r < 70; r++) {
-      const rate = B.targetClearSeconds(r + 1) / B.targetClearSeconds(r);
-      if (r >= B.WAVE_RAMP_START) {
-        expect(rate).toBeGreaterThanOrEqual(prevRate - 1e-9); // 램프 이후 완화 구간 없음
+      const rate = totalBudget(r + 1) / totalBudget(r);
+      if (r >= B.WAVE_SMOOTH_TO) {
+        expect(rate).toBeGreaterThanOrEqual(prevRate - 1e-9); // R50 이후는 옛 램프 그대로 — 완화 구간 없음
       }
       expect(rate - prevRate).toBeLessThan(0.02); // 벽 킥 금지
       prevRate = rate;

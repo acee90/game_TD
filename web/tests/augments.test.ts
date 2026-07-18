@@ -75,17 +75,19 @@ describe('대가 — 등급이 대가를 키우지 않는다', () => {
 });
 
 describe('성장 — 쌓을수록 세진다', () => {
-  test('막타를 쌓으면 공격력이 오르고, 상한에서 멈춘다', () => {
+  // %(상한 있음) → 고정치(상한 없음) (2026-07-18, 사용자 지시: "막타마다 성장하는거
+  // 전부 %대신 수치로"). waveStackDamage(라운드 누적)처럼 그대로 계속 쌓인다.
+  test('막타를 쌓으면 공격력이 고정치만큼, 상한 없이 계속 오른다', () => {
     const none = stats(['hunterinstinct'], 30, { killStacks: 0, waveStacks: 0 });
     const some = stats(['hunterinstinct'], 30, { killStacks: 50, waveStacks: 0 });
-    const capped = stats(['hunterinstinct'], 30, { killStacks: 10_000, waveStacks: 0 });
+    const more = stats(['hunterinstinct'], 30, { killStacks: 10_000, waveStacks: 0 });
 
     expect(some.damage).toBeGreaterThan(none.damage);
-    // 사냥 본능: 막타당 +0.8%, 최대 +100% (가산 50%는 완력 한 장보다 약했다 → 배수로 상향)
-    expect(capped.damage / none.damage).toBeCloseTo(2, 1);
-    // 상한을 넘겨도 더 오르지 않는다
-    const wayOver = stats(['hunterinstinct'], 30, { killStacks: 1e9, waveStacks: 0 });
-    expect(wayOver.damage).toBe(capped.damage);
+    // 사냥 본능: 막타당 +2 (고정, 실버 기준). 50킬이면 +100.
+    expect(some.damage - none.damage).toBe(100);
+    // 상한이 없다 — 많이 쌓을수록 계속 오른다
+    expect(more.damage).toBeGreaterThan(some.damage);
+    expect(more.damage - none.damage).toBe(20_000);
   });
 
   test('라운드를 넘길수록 커진다 — 상한 없이 누적', () => {
@@ -631,8 +633,10 @@ describe('채널링 vs 단발 — 쿨감의 값어치가 갈린다', () => {
     for (let i = 0; i < 20; i++) game.update(0.05);
     expect(game.hero.mana).toBe(manaWhileChanneling);
 
-    // 빔이 끝나면 그때부터 다시 찬다
-    for (let i = 0; i < 100; i++) game.update(0.05);
+    // 빔이 끝나면 그때부터 다시 찬다. earlyTempo(초반 슬로우모션, ~0.6배)가 걸려 있어
+    // 실제 필요한 시간은 channelSeconds/earlyTempo ≈ 5초 — 여유를 좀 더 줘서 빔이 끝난
+    // 뒤 최소 한 프레임은 평타가 마나를 채울 시간을 보장한다.
+    for (let i = 0; i < 140; i++) game.update(0.05);
     expect(game.beam).toBeNull();
     expect(game.hero.mana).toBeGreaterThan(manaWhileChanneling);
   });
