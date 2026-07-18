@@ -1,4 +1,4 @@
-import { SKILLS, type SkillId, type SkillModPatch } from './skills';
+import { DEFAULT_SKILL, SKILLS, type SkillId, type SkillModPatch } from './skills';
 
 // ───────── 영웅 · 제단 · 증강 ─────────
 // 원본 갓타디에는 없는 신규 설계다. 근거 표기 대상이 아니다.
@@ -36,8 +36,12 @@ export const HERO_BASE_STR = 2;
 export const HERO_BASE_AGI = 8;
 export const HERO_BASE_INT = 8;
 
-/** 힘 1당 공격력 — 레벨 배수 폐지의 보상으로 1 → 6 재척도 [프로토] */
-export const DMG_PER_STR = 6;
+// 6 → 5 (2026-07-18, 사용자 지시: "영웅 성장시 공격속도도 증가하도록 — 성장공격력
+// 낮춰서 dps는 유지"). 아래 LEVEL_ATTACK_SPEED_RATE가 새로 생긴 만큼 힘의 순수 피해
+// 성장을 낮춰 총 DPS 곡선을 원래에 가깝게 맞춘다 (game/hero.ts computeStats에서
+// 레벨 공속과 곱연산으로 함께 적용).
+/** 힘 1당 공격력 — 레벨 배수 폐지의 보상으로 1 → 6 재척도, 7차 6 → 5 [프로토] */
+export const DMG_PER_STR = 5;
 /** 힘 1당 최대 체력 — 같은 이유로 18 → 70 [프로토] */
 export const HP_PER_STR = 70;
 /**
@@ -70,6 +74,21 @@ export const HERO_OOC_REGEN_RATIO = 0.06;
 
 /** 민첩 1당 공격 속도 +4% */
 export const AS_PER_AGI = 0.04;
+/**
+ * 레벨업마다 오르는 **기본** 공격 속도 (2026-07-18, 사용자 지시) — 민첩 스탯과는
+ * 별개 축이다. "기본 공격속도"라 증강의 attackSpeedMult와는 가산이 아니라
+ * **곱연산**으로 붙는다 (사용자 지시: "증강이랑 곱연산") — game/hero.ts computeStats에서
+ * `attackSpeed *= (1+bonus.attackSpeed)` 뒤에 다시 곱한다. 그만큼 DMG_PER_STR을
+ * 낮춰 DPS 총량은 유지하고, 공격력 상승분 일부를 공속으로 옮긴다.
+ *
+ * **레벨에 선형**이다(지수 복리 아님) — 처음엔 복리로 짰다가 되돌렸다. 복리면
+ * Lv50에 공속만 +87%가 붙어 DMG_PER_STR을 아무리 낮춰도 고레벨 DPS가 옛 곡선보다
+ * +36% 부풀었다(공속에 상한이 없어서). 선형이면 Lv50에 +62%로 완만하고, 공격 간격
+ * 하한(MIN_ATTACK_INTERVAL)에 걸리는 지점도 늦춰져 DPS 비율이 옛 곡선의 0.83~1.07배
+ * 안에서 오간다 — 정확히 같지는 않지만(공속 하한이라는 비선형이 이미 있어 완전한
+ * 상쇄가 불가능하다) 훨씬 가깝다.
+ */
+export const LEVEL_ATTACK_SPEED_RATE = 0.0125;
 /** 공격 간격 하한 — 민첩을 아무리 골라도 이 밑으로는 안 내려간다 */
 export const MIN_ATTACK_INTERVAL = 0.25;
 /** 지능 1당 스킬 피해 +3.5% */
@@ -80,10 +99,23 @@ export const SKILL_PER_INT = 0.035;
  *
  * 2 + L/10 → 1 + L/7 (2026-07-16, economy-power-rebalance 2차): 영웅 파워커브를
  * **뒤로** 민다(사용자 지시: "영웅이 타워보다 강해지는 건 R45 이후"). 중반 레벨(15~25)의
- * 포인트를 깎고 후반 레벨을 굵게 — Lv20 스탯 -20%, Lv40 -2%로 총량은 거의 보존된다.
- * 늦게 피지만 늦게는 강하다 — 영웅 빌드의 고점(클리어력)은 살린다.
+ * 포인트를 깎고 후반 레벨을 굵게.
+ *
+ * 1 + L/7 → 1 + L/6 (2026-07-17 4차): 후반이 너무 얇았다 — 플레이테스트
+ * "Lv30 넘게 투자해도 골드 대비 파워가 약함". Lv30 이하는 거의 그대로 두고
+ * (Lv30 스탯 +3%), Lv35+가 굵어진다(Lv38 +14%) — XP 지수 완화(1.12→1.10)와 세트.
+ *
+ * Lv19+ 구간에 추가 항 도입 (2026-07-18, 사용자 지시: "영웅 후반부에 좀 더 가파르게
+ * 강해지도록"). Lv18까지는 이전 곡선과 완전히 같다 — 초·중반 밸런스는 건드리지 않고
+ * 후반만 접는다. Lv30 누적 스탯 +19%(94→112), 그 뒤로도 계속 가팔라져 Lv40 +44% ·
+ * Lv50 +64% — "후반부에 더" 라는 요청대로 한 지점만 튀지 않고 갈수록 벌어진다.
  */
-export const levelStatPoints = (level: number): number => 1 + Math.floor(level / 7);
+export const HERO_LATE_GAME_FROM = 19;
+export const HERO_LATE_GAME_DIVISOR = 3;
+export const levelStatPoints = (level: number): number =>
+  1 +
+  Math.floor(level / 6) +
+  Math.floor(Math.max(0, level - HERO_LATE_GAME_FROM) / HERO_LATE_GAME_DIVISOR);
 
 /** 해당 레벨까지 각 스탯이 공통으로 받은 자연 성장치. 총 예산을 3등분해 기존 파워 총량을 보존한다. */
 export function statBonusByLevel(level: number): number {
@@ -128,11 +160,18 @@ export const XP_BUY_AMOUNT = 20;
  *
  * 1.10 → 1.12 (같은 날 2차): 교차(영웅이 최강 타워를 3라운드 연속 넘는 시점) 중앙이
  * 여전히 R10대였다. 영웅 개화를 R45+로 미는 두 노브 중 하나 — 다른 하나는
- * levelStatPoints 백로딩. 새 창: 수입 20%로 R45에 Lv ~21, 실질 상한 ~Lv38.
- * tests/hero-curve.test.ts가 이 창을 지킨다.
+ * levelStatPoints 백로딩.
+ *
+ * 1.12 → 1.10 (2026-07-17 4차): 과했다 — 플레이테스트 "Lv32에 4천 골드를 넣어도
+ * 타워가 월등". Lv32 누적이 4,256골드로 게임 수입의 대부분이었다. 1.10이면 2,750.
+ * 후반 가치는 levelStatPoints 상향(1+L/7 → 1+L/6)과 세트로 회복한다.
+ *
+ * 1.10 → 1.08 (7차): "R30~40에 크는 재미가 없다" — Lv30 누적이 2,289골드로 그 시점
+ * 총수입(~1,800)을 넘어 **레벨이 사실상 봉인**돼 있었다. 1.08이면 1,571 — 무겁지만
+ * 손에 닿는다(수입의 87%). 성장 곡선을 푸는 대신 웨이브는 그대로 둔다(7차 판정 대기).
  */
 export const XP_BASE_COST = 14;
-export const XP_COST_GROWTH = 1.12;
+export const XP_COST_GROWTH = 1.08;
 export const xpToNext = (level: number): number =>
   Math.round(XP_BASE_COST * Math.pow(XP_COST_GROWTH, level));
 
@@ -175,7 +214,7 @@ export const enemyDamage = (round: number): number =>
  * 두 겹이 될 필요가 없었다 — 리스크는 누출 라이프 -1과 **기회비용**(못 잡으면 쿨타임
  * 동안 보상 없음)으로 충분하고, 영웅 위협은 사냥꾼 웨이브가 전담한다. 보스는 그냥 지나간다.
  */
-export const BOSS_HARMLESS_MAX_LEVEL = 6;
+export const BOSS_HARMLESS_MAX_LEVEL = 8; // Lv7 신설(5차)도 무해 — 전 레벨 불변. Lv8도 동행(2026-07-18)
 export const bossDamage = (level: number, round: number): number =>
   level <= BOSS_HARMLESS_MAX_LEVEL ? 0 : enemyDamage(round) * (1.5 + 0.5 * level);
 
@@ -189,7 +228,9 @@ export const bossDamage = (level: number, round: number): number =>
  * **앞의 네 개는 80% 이상의 판이 받고**(핵심 빌드가 완성된다), 뒤의 두 개는 오래 버틴
  * 판만 받는 보상이다. 소진 후에는 AUGMENT_TAIL_EVERY 레벨마다 계속 준다.
  */
-export const AUGMENT_LEVELS: readonly number[] = [9, 16, 24, 30, 35, 42];
+// [9,16,...] → [5,10,...] (2026-07-17 5차): 첫 두 증강을 빠르게 — "증강을 보고
+// 빌드 방향을 정할 수 있도록"(사용자). 3번째부터는 그대로 — 중반 파워 스파이크 방지.
+export const AUGMENT_LEVELS: readonly number[] = [5, 10, 24, 30, 35, 42];
 export const AUGMENT_TAIL_EVERY = 8;
 export const AUGMENT_CHOICES = 3;
 
@@ -198,6 +239,14 @@ export function grantsAugment(level: number): boolean {
   if (AUGMENT_LEVELS.includes(level)) return true;
   const last = AUGMENT_LEVELS[AUGMENT_LEVELS.length - 1];
   return level > last && (level - last) % AUGMENT_TAIL_EVERY === 0;
+}
+
+/** 다음 증강을 받는 레벨 — UI 예고용 ("다음 증강 Lv24") */
+export function nextAugmentLevel(level: number): number {
+  for (let l = level + 1; l <= level + AUGMENT_TAIL_EVERY + 1; l++) {
+    if (grantsAugment(l)) return l;
+  }
+  return level + 1; // 도달 불가 — grantsAugment가 tail을 보장하므로 실제로는 안 온다
 }
 
 /** `level`까지 올렸을 때 받은 증강 개수 */
@@ -230,6 +279,17 @@ export const AUGMENT_KIND_LABEL: Record<AugmentKind, string> = {
   econ: '경제',
   util: '유틸',
 };
+
+/** displayLabel이 붙은 카드(범용 "강화")의 칩 색 — kind는 그대로 skill이라 별도로 둔다 */
+export const ENHANCE_DISPLAY_COLOR = '#e0995a';
+
+/** 카드에 표시할 계열 라벨 — displayLabel이 있으면 그쪽, 없으면 kind 기본 라벨 */
+export const displayKindLabel = (augment: Augment): string =>
+  augment.displayLabel ?? AUGMENT_KIND_LABEL[augment.kind];
+
+/** 카드에 표시할 계열 색 — displayLabel이 있으면 전용 색, 없으면 kind 기본 색 */
+export const displayKindColor = (augment: Augment): string =>
+  augment.displayLabel ? ENHANCE_DISPLAY_COLOR : AUGMENT_KIND_COLOR[augment.kind];
 
 export const AUGMENT_KIND_COLOR: Record<AugmentKind, string> = {
   stat: '#ffd23f',
@@ -355,10 +415,12 @@ export interface AugmentEffect {
   readonly gasPerWave?: number;
   /** 부활 대기시간 감소(초). 음수면 늘어난다 */
   readonly respawnCut?: number;
-  /** 영웅이 막타를 칠 때마다 공격력 +이 값 (killStackCap까지) */
-  readonly killStackDamage?: number;
-  /** 처치 누적 공격력 상한 */
-  readonly killStackCap?: number;
+  /**
+   * 영웅이 막타를 칠 때마다 공격력 +이 값 (고정치, 상한 없음).
+   * waveStackDamage(라운드 누적)처럼 상한 없이 그대로 쌓인다. 예전엔 %(killStackDamage,
+   * 등급별 상한 포함)였으나 2026-07-18 사용자 지시로 전부 고정치로 옮겼다.
+   */
+  readonly killStackFlatDamage?: number;
   /** 라운드마다 공격력 +이 값 (영구 누적) */
   readonly waveStackDamage?: number;
   /** 라운드마다 최대 체력 +이 값 (영구 누적) */
@@ -385,6 +447,13 @@ export interface AugmentEffect {
    * 값은 **기본 티어 상한**이다 (1 = 티어 0까지). 실제 상한은 라운드·영웅 레벨이 더 밀어올린다.
    */
   readonly towerCopyTier?: number;
+
+  /**
+   * 폭발 반경 (2026-07-18, 사용자 지시: "폭발화살 -> 폭발") — 평타·스킬 가리지 않고
+   * 모든 명중마다 이 반경 안의 다른 적에게도 같은 피해를 준다. 대신 penalty로
+   * skillDamageMult를 깎는다(카드 정의 참고). 스킬 전용이던 옛 '폭발 화살'을 대체한다.
+   */
+  readonly explosionRadius?: number;
 }
 
 export interface Augment {
@@ -411,6 +480,20 @@ export interface Augment {
   readonly requiresSkill?: SkillId | 'any';
   /** 장판을 까는 스킬(불화살·얼음화살)을 든 영웅에게만 등장한다 */
   readonly requiresZone?: boolean;
+  /**
+   * 등급을 고정한다 (2026-07-18, 사용자 지시) — 스킬 획득 카드는 `effect`가 비어 있어
+   * 등급(실버/골드/플래티넘)으로 강화할 방법이 없다. 대신 **어떤 스킬이 뜨는지**를
+   * 등급으로 가른다 — 강한 스킬일수록 높은 등급에서만 나온다. 설정하면 rollRarity를
+   * 건너뛰고 항상 이 등급으로 나온다.
+   */
+  readonly fixedRarity?: Rarity;
+  /**
+   * 표시용 라벨 오버라이드 (2026-07-18, 사용자 지시: "kindLabel 스킬 세분화 ->
+   * 스킬/강화로 분리"). `kind`는 그대로 'skill'이라 가중치·시너지(3장/5장 임계)는
+   * 안 바뀐다 — 카드 위에 찍히는 글자만 "강화"로 보여서, 특정 스킬 전용이 아니라
+   * 전투 전반(평타 포함)에 걸리는 카드라는 걸 한눈에 구분한다.
+   */
+  readonly displayLabel?: string;
 }
 
 /** 대가가 달린 증강인가 — UI가 경고색으로 칠한다 */
@@ -519,21 +602,95 @@ export function scaleEffect(effect: AugmentEffect, power: number): AugmentEffect
     reviveNova: add(effect.reviveNova),
     novaHpMult: add(effect.novaHpMult),
     novaRadius: add(effect.novaRadius),
-    // 복제 티어 상한은 등급으로 커진다 — 플래티넘 복제 장치는 더 좋은 타워를 베낀다
-    towerCopyTier:
-      effect.towerCopyTier === undefined ? undefined : Math.round(add(effect.towerCopyTier)!),
+    // 등급으로 안 커진다 (2026-07-18, 롤백) — 티어는 백분율이 아니라 인덱스라
+    // 등급 배율(×2, ×3.5)이 그대로 "몇 티어를 더 여는가"가 돼버려 플래티넘 한 장이
+    // 즉시 GOD 근접 상한을 열었다. 복제 장치는 순수 뽑기 운의 영향을 안 받는다.
+    towerCopyTier: effect.towerCopyTier,
     mineralPerKill:
       effect.mineralPerKill === undefined ? undefined : Math.round(add(effect.mineralPerKill)!),
     mineralPerWave:
       effect.mineralPerWave === undefined ? undefined : Math.round(add(effect.mineralPerWave)!),
     gasPerWave: effect.gasPerWave === undefined ? undefined : Math.round(add(effect.gasPerWave)!),
     respawnCut: add(effect.respawnCut),
-    killStackDamage: add(effect.killStackDamage),
-    killStackCap: add(effect.killStackCap),
+    killStackFlatDamage: add(effect.killStackFlatDamage),
     waveStackDamage: add(effect.waveStackDamage),
     waveStackHp: add(effect.waveStackHp),
   };
 }
+
+// ───────── 효과 요약 — 등급이 반영된 **실제 수치**를 글로 만든다 (2026-07-17 7차) ─────────
+// 카드 설명(description)은 손으로 쓴 **실버 기준** 문장이라 골드·플래티넘에서 실제 수치와
+// 어긋난다("+60%인데 실제론 +120%") — 플레이테스트에서 혼란으로 확인됐다.
+// 여기서 효과 객체를 그대로 읽어 문장을 만들면 설명이 데이터와 절대 어긋나지 않는다.
+
+/** 1을 기준으로 하는 배수형 — 1.6 → "+60%", 0.85 → "-15%" */
+const MULT_LABELS: readonly (readonly [keyof AugmentEffect, string])[] = [
+  ['damageMult', '공격력'], ['hpMult', '최대 체력'], ['rangeMult', '사거리'],
+  ['attackSpeedMult', '공격 속도'], ['moveSpeedMult', '이동 속도'],
+  ['towerDamageMult', '타워 공격력'], ['towerRangeMult', '타워 사거리'],
+  ['xpMult', '경험치'], ['aggroRangeMult', '어그로 범위'],
+  ['lowHpDamageMult', '위기 시 공격력'], ['growthMult', '성장 누적'],
+  ['skillDamageMult', '스킬 피해'], ['manaMaxMult', '필요 마나'],
+  ['manaGainMult', '마나 획득'], ['waveRewardMult', '라운드 보상'],
+  ['fireDamageMult', '화염 피해'],
+];
+
+/** 0~1 비율 가산형 — 0.2 → "20%" */
+const RATIO_LABELS: readonly (readonly [keyof AugmentEffect, string])[] = [
+  ['damageReduction', '받는 피해 감소'], ['lifesteal', '흡혈'], ['critChance', '치명타 확률'],
+  ['executeBelow', '처형 임계'], ['slowOnHit', '공격 감속'], ['burnAmp', '화상 대상 피해'],
+];
+
+/** 값 자체가 오르는 가산형 — 6 → "6" */
+const FLAT_LABELS: readonly (readonly [keyof AugmentEffect, string, string])[] = [
+  ['regen', '초당 회복', ''], ['splashRadius', '광역 반경', ''],
+  ['critMultAdd', '치명타 피해', '배'], ['burnDamage', '화상 겹당 피해', '/초'],
+  ['burnSecondsAdd', '화상 지속', '초'], ['armorShred', '방어력 감소', ''],
+  ['thorns', '가시 반사', '배'], ['deathBlast', '폭사 피해', '배'],
+  ['deathBlastRadius', '폭사 반경', ''], ['mineralPerKill', '처치당 금화', ''],
+  ['mineralPerWave', '라운드마다 금화', ''], ['gasPerWave', '라운드마다 마정석', ''],
+  ['respawnCut', '부활 대기 감소', '초'], ['killStackFlatDamage', '막타당 공격력', ''],
+  ['waveStackDamage', '라운드마다 공격력', ''],
+  ['waveStackHp', '라운드마다 체력', ''], ['manaOnDamaged', '피격 마나', ''],
+  ['startingMana', '시전 후 남는 마나', ''], ['deathNova', '사망 폭발', '배'],
+  ['reviveNova', '부활 폭발', '배'], ['novaHpMult', '폭발 체력 계수', '배'],
+  ['novaRadius', '폭발 반경', ''], ['towerCopyTier', '복제 티어 상한', ''],
+  ['explosionRadius', '폭발 반경', ''],
+];
+
+const pct = (v: number): string => `${v > 0 ? '+' : ''}${Math.round(v * 100)}%`;
+const num = (v: number): string => (Number.isInteger(v) ? String(v) : v.toFixed(1));
+
+/**
+ * 등급이 반영된 실제 수치를 사람이 읽는 문장으로. 카드·증강 기록이 함께 쓴다.
+ * 값이 없으면 빈 문자열 — 스킬 개조 전용 증강(effect가 비어 있다)이 그렇다.
+ */
+export function effectSummary(effect: AugmentEffect): string {
+  const parts: string[] = [];
+  for (const [key, label] of MULT_LABELS) {
+    const v = effect[key] as number | undefined;
+    if (v !== undefined) parts.push(`${label} ${pct(v - 1)}`);
+  }
+  for (const [key, label] of RATIO_LABELS) {
+    const v = effect[key] as number | undefined;
+    if (v !== undefined) parts.push(`${label} ${Math.round(v * 100)}%`);
+  }
+  for (const [key, label, unit] of FLAT_LABELS) {
+    const v = effect[key] as number | undefined;
+    if (v !== undefined) parts.push(`${label} ${num(v)}${unit}`);
+  }
+  return parts.join(' · ');
+}
+
+/**
+ * 이 증강이 등급의 영향을 받는가.
+ *
+ * **스킬 개조(skillMod)는 등급으로 커지지 않는다** — makeCard가 effect만 스케일한다.
+ * 그래서 '증폭'·'집중 수련' 같은 개조 전용 증강에 "×2" 배지를 붙이면 거짓말이 된다.
+ * (플레이테스트 2026-07-17에서 지적된 혼란.) UI는 이 함수로 배지를 가른다.
+ */
+export const rarityScales = (augment: Augment): boolean =>
+  Object.keys(augment.effect).length > 0;
 
 /** 등급이 매겨진 증강 카드 */
 export interface AugmentCard {
@@ -656,8 +813,6 @@ export const AUGMENTS: readonly Augment[] = [
   // 아레나 '연쇄 폭발' — 죽은 적이 터진다
   { id: 'deathblast', kind: 'combat', name: '폭사', description: '처치한 적이 반경 50에 공격력 3배로 폭발',
     maxStacks: 2, effect: { deathBlast: 3, deathBlastRadius: 50 } },
-  { id: 'cleave', kind: 'combat', name: '참격', description: '공격력 +25%, 광역 반경 +25', maxStacks: 2,
-    effect: { damageMult: 1.25, splashRadius: 25 } },
   { id: 'berserk', kind: 'combat', name: '광폭화', description: '공격 속도 +30%, 가한 피해의 8% 회복',
     maxStacks: 2, effect: { attackSpeedMult: 1.3, lifesteal: 0.08 } },
   // 사망도 자원으로 쓴다 — 죽는 순간과 돌아오는 순간이 둘 다 폭발이다
@@ -667,46 +822,84 @@ export const AUGMENTS: readonly Augment[] = [
     effect: { deathNova: 2, reviveNova: 1.2, novaHpMult: 0.4, novaRadius: 90 } },
 
   // ══ 스킬 (skill) — 획득과 개조. 영웅은 스킬을 하나만 든다.
+  //
+  // 등급 고정 (2026-07-18, 사용자 지시) — 스킬 획득 카드는 effect가 비어 있어 등급으로
+  // 강화가 안 된다("같은 스킬을 골드·플래티넘으로 올려도 강화가 안 된다"). 대신
+  // **어떤 스킬이 뜨는가**를 등급으로 가른다: 쉽고 무난한 스킬은 실버, 상황을 타는
+  // 중간급은 골드, 판을 바꾸는 강한 스킬은 플래티넘.
   { id: 'skill_whirlwind', kind: 'skill', name: '소용돌이', maxStacks: 1,
-    description: '[스킬] 주변 적 전체에 공격력 3배 · 쿨 8초',
-    effect: {}, grantsSkill: 'whirlwind' },
+    description: '[스킬·실버] 주변 적 전체에 공격력 3배 · 쿨 8초',
+    effect: {}, grantsSkill: 'whirlwind', fixedRarity: 'silver' },
   { id: 'skill_volley', kind: 'skill', name: '일제 사격', maxStacks: 1,
-    description: '[스킬] 사거리 안 4명에게 각각 공격력 2배 · 쿨 7초',
-    effect: {}, grantsSkill: 'volley' },
-  { id: 'skill_meteor', kind: 'skill', name: '유성', maxStacks: 1,
-    description: '[스킬] 적이 가장 많은 곳에 공격력 6배 광역 · 쿨 13초',
-    effect: {}, grantsSkill: 'meteor' },
+    description: '[스킬·실버] 사거리 안 적에게 각각 공격력 2배 (레벨업마다 대상 +1, Lv1 3발) · 쿨 7초',
+    effect: {}, grantsSkill: 'volley', fixedRarity: 'silver' },
   { id: 'skill_decoy', kind: 'skill', name: '허수아비', maxStacks: 1,
-    description: '[스킬] 앞쪽에 미끼를 세워 몹을 붙잡는다 · 쿨 18초',
-    effect: {}, grantsSkill: 'decoy' },
-  { id: 'skill_cdr', kind: 'skill', name: '집중 수련', maxStacks: 3,
+    description: '[스킬·실버] 앞쪽에 미끼를 세워 몹을 붙잡는다 · 쿨 18초',
+    effect: {}, grantsSkill: 'decoy', fixedRarity: 'silver' },
+  { id: 'skill_meteor', kind: 'skill', name: '유성', maxStacks: 1,
+    description: '[스킬·골드] 적이 가장 많은 곳에 공격력 6배 광역 · 쿨 13초',
+    effect: {}, grantsSkill: 'meteor', fixedRarity: 'gold' },
+  { id: 'skill_firearrow', kind: 'skill', name: '불화살', maxStacks: 1,
+    description: '[스킬·골드] 바닥에 불바다를 깐다 — 초당 공격력 1.2배, 6초 · 쿨 12초',
+    effect: {}, grantsSkill: 'firearrow', fixedRarity: 'gold' },
+  { id: 'skill_icearrow', kind: 'skill', name: '얼음화살', maxStacks: 1,
+    description: '[스킬·골드] 바닥에 빙판을 깐다 — 55% 감속, 7초 · 쿨 14초',
+    effect: {}, grantsSkill: 'icearrow', fixedRarity: 'gold' },
+  { id: 'skill_chain', kind: 'skill', name: '튕기는 사격', maxStacks: 1,
+    description: '[스킬·골드] 적을 맞히고 튕겨 나간다 — 튕길 때마다 피해 ×1.45 (몹이 적으면 약하다) · 쿨 10초',
+    effect: {}, grantsSkill: 'chain', fixedRarity: 'gold' },
+  // 8배 → 6배, 필요 마나 110 → 140 (2026-07-18, 사용자 지시) — 너프.
+  { id: 'skill_execution', kind: 'skill', name: '처형자의 일격', maxStacks: 1,
+    description: '[스킬·플래티넘] 체력이 가장 낮은 적에게 공격력 6배 — 처치 시 쿨 초기화 · 쿨 9초',
+    effect: {}, grantsSkill: 'execution', fixedRarity: 'platinum' },
+  { id: 'skill_laser', kind: 'skill', name: '레이저', maxStacks: 1,
+    description: '[스킬·플래티넘] 몹이 더 많은 방향으로 관통해 0.5초마다 지속 피해 · 쿨 11초',
+    effect: {}, grantsSkill: 'laser', fixedRarity: 'platinum' },
+
+  // ── 범용 개조 (표시상 "강화") — 특정 스킬 전용이 아니라 전투 전반(평타 포함)에
+  // 걸리는 카드들. kind는 그대로 'skill'이라 각성(3)/초월 시전(5) 시너지 임계치
+  // 계산은 안 바뀐다 — displayLabel만 "강화"로 보여서 스킬 전용 카드와 구분된다
+  // (2026-07-18, 사용자 지시: "kindLabel 스킬 세분화 -> 스킬/강화로 분리").
+  { id: 'skill_cdr', kind: 'skill', displayLabel: '강화', name: '집중 수련', maxStacks: 3,
     description: '필요 마나 15% 감소',
     effect: {}, skillMod: { manaMaxMult: 0.85 }, requiresSkill: 'any' },
-  { id: 'skill_amp', kind: 'skill', name: '증폭', maxStacks: 3,
+  { id: 'skill_amp', kind: 'skill', displayLabel: '강화', name: '증폭', maxStacks: 3,
     description: '스킬 피해 +45%',
     effect: {}, skillMod: { damageMult: 1.45 }, requiresSkill: 'any' },
   // 대가형 개조 — 세게 때리는 대신 자주 못 쓴다
   // [곱연산] 스킬 피해에 통째로 곱해진다 — 대신 쿨이 길어진다
-  { id: 'skill_overload', kind: 'skill', name: '과부하', maxStacks: 1,
+  { id: 'skill_overload', kind: 'skill', displayLabel: '강화', name: '과부하', maxStacks: 1,
     description: '[곱] 스킬 피해 ×1.6 · 필요 마나 +25%',
     effect: { skillDamageMult: 1.6 }, skillMod: { manaMaxMult: 1.25 }, requiresSkill: 'any' },
   // ── 쿨감 트랙 — 모으면 **스킬 난사**가 된다. 난사는 화염(겹 쌓기)의 연료이기도 하다.
   // ── 마나 트랙 — 모으면 **스킬 난사**가 된다 (난사는 화염 겹 쌓기의 연료다)
-  { id: 'skill_haste', kind: 'skill', name: '마나 순환', maxStacks: 3,
+  { id: 'skill_haste', kind: 'skill', displayLabel: '강화', name: '마나 순환', maxStacks: 3,
     description: '마나 획득 +18% (평타·피격 모두)',
     effect: { manaGainMult: 1.18 }, requiresSkill: 'any' },
-  { id: 'skill_overclock', kind: 'skill', name: '오버클럭', maxStacks: 2,
-    description: '필요 마나 18% 감소 · 스킬 피해 -12%',
-    effect: { manaMaxMult: 0.82 }, penalty: { skillDamageMult: 0.88 }, requiresSkill: 'any' },
-  { id: 'skill_battery', kind: 'skill', name: '축전지', maxStacks: 3,
+  /**
+   * 오버클럭 리뉴얼 (2026-07-18, 사용자 지시) — "스킬 피해 -12%" 대가형에서
+   * "시전 시 30% 확률로 마나를 안 쓴다"로 갈아탄다. 마나 감소(쿨감의 자리)와
+   * 확률 무료 시전이 같은 방향(더 자주 쏜다)이라 카드 정체성이 또렷해진다.
+   * 2스택이면 60% — 평균적으로 시전 2.5회당 1회는 공짜.
+   */
+  { id: 'skill_overclock', kind: 'skill', displayLabel: '강화', name: '오버클럭', maxStacks: 2,
+    description: '필요 마나 18% 감소 · 시전 시 30% 확률로 마나 소비 없음',
+    effect: {}, skillMod: { manaMaxMult: 0.82, freeCastChance: 0.3 }, requiresSkill: 'any' },
+  { id: 'skill_battery', kind: 'skill', displayLabel: '강화', name: '축전지', maxStacks: 3,
     description: '시전 후 마나 25가 남는다 (다음 스킬이 그만큼 빨라진다)',
     effect: { startingMana: 25 }, requiresSkill: 'any' },
-  { id: 'skill_focus', kind: 'skill', name: '집중', maxStacks: 2,
+  { id: 'skill_focus', kind: 'skill', displayLabel: '강화', name: '집중', maxStacks: 2,
     description: '스킬 피해 +25%, 필요 마나 10% 감소',
     effect: { skillDamageMult: 1.25, manaMaxMult: 0.9 }, requiresSkill: 'any' },
-  { id: 'explosive_arrow', kind: 'skill', name: '폭발 화살', maxStacks: 2,
-    description: '일제 사격의 화살마다 반경 32의 폭발',
-    effect: {}, skillMod: { explosiveRadius: 32 }, requiresSkill: 'volley' },
+  /**
+   * 폭발 (2026-07-18, 사용자 지시 — 옛 '폭발 화살'을 대체) — 일제 사격 전용이던
+   * 폭발을 **모든 명중**(평타 포함)으로 넓힌다. 대신 스킬 피해 전체에 -30% 대가가
+   * 붙는다 — 광역화의 값을 스킬 쪽에서 치른다. '참격'(광역+공격력, combat)이
+   * 하던 역할을 사실상 흡수해 참격은 폐기했다. requiresSkill이 없다 — 스킬 없이도 뜬다.
+   */
+  { id: 'explosion', kind: 'skill', displayLabel: '강화', name: '폭발', maxStacks: 2,
+    description: '모든 공격(평타·스킬)이 명중 시 반경 30에 같은 피해로 폭발 · 스킬 피해 -30%',
+    effect: { explosionRadius: 30 }, penalty: { skillDamageMult: 0.7 } },
   { id: 'multishot', kind: 'skill', name: '연사', maxStacks: 3,
     description: '일제 사격의 화살 +2발',
     effect: {}, skillMod: { extraTargets: 2 }, requiresSkill: 'volley' },
@@ -738,30 +931,12 @@ export const AUGMENTS: readonly Augment[] = [
     description: '허수아비가 주변 몹을 강제로 끌어당기고 체력 2배',
     effect: {}, skillMod: { decoyHpMult: 2, decoyTaunts: true }, requiresSkill: 'decoy' },
 
-  // ── 스킬 획득 (원형별로 하나씩)
-  { id: 'skill_laser', kind: 'skill', name: '레이저', maxStacks: 1,
-    description: '[스킬] 앞쪽 직선을 관통해 0.5초마다 지속 피해 · 쿨 11초',
-    effect: {}, grantsSkill: 'laser' },
-  { id: 'skill_firearrow', kind: 'skill', name: '불화살', maxStacks: 1,
-    description: '[스킬] 바닥에 불바다를 깐다 — 초당 공격력 1.2배, 6초 · 쿨 12초',
-    effect: {}, grantsSkill: 'firearrow' },
-  { id: 'skill_icearrow', kind: 'skill', name: '얼음화살', maxStacks: 1,
-    description: '[스킬] 바닥에 빙판을 깐다 — 55% 감속, 7초 · 쿨 14초',
-    effect: {}, grantsSkill: 'icearrow' },
-  { id: 'skill_chain', kind: 'skill', name: '튕기는 사격', maxStacks: 1,
-    description: '[스킬] 적을 맞히고 튕겨 나간다 — 튕길 때마다 피해 ×1.45 (몹이 적으면 약하다) · 쿨 10초',
-    effect: {}, grantsSkill: 'chain' },
-  { id: 'skill_execution', kind: 'skill', name: '처형자의 일격', maxStacks: 1,
-    description: '[스킬] 체력이 가장 낮은 적에게 공격력 8배 — 처치 시 쿨 초기화 · 쿨 9초',
-    effect: {}, grantsSkill: 'execution' },
-
-  // ── 레이저 개조 — 두께 / 사거리 / 도트 간격
-  { id: 'laser_focus', kind: 'skill', name: '집속 렌즈', maxStacks: 2,
-    description: '레이저 두께 +18 (더 넓은 줄을 지진다)',
-    effect: {}, skillMod: { beamWidthAdd: 18 }, requiresSkill: 'laser' },
+  // ── 레이저 개조 — 사거리 / 도트 간격 (집속 렌즈는 폐기 — 2026-07-18, 사용자 지시)
+  // 증폭 코일이 고속 조사의 틱 간격 효과를 흡수한다 — 길이 늘리는 김에 화력 밀도도 올린다.
   { id: 'laser_range', kind: 'skill', name: '증폭 코일', maxStacks: 2,
-    description: '레이저 길이 +90, 지속 +1.5초',
-    effect: {}, skillMod: { beamLengthAdd: 90, beamSecondsAdd: 1.5 }, requiresSkill: 'laser' },
+    description: '레이저 길이 +90, 지속 +1.5초, 도트 간격 0.25초로 감소(피해 두 배)',
+    effect: {}, skillMod: { beamLengthAdd: 90, beamSecondsAdd: 1.5, tickIntervalMult: 0.5 },
+    requiresSkill: 'laser' },
   { id: 'laser_rapid', kind: 'skill', name: '고속 조사', maxStacks: 1,
     description: '레이저 도트 간격 절반 (0.5초 → 0.25초 = 피해 두 배)',
     effect: {}, skillMod: { tickIntervalMult: 0.5 }, requiresSkill: 'laser' },
@@ -774,26 +949,28 @@ export const AUGMENTS: readonly Augment[] = [
     description: '장판 초당 피해 +공격력 0.8배 (빙판도 태우기 시작한다)',
     effect: {}, skillMod: { zoneDpsAdd: 0.8 }, requiresZone: true },
 
-  // ── 모든 스킬 공용 개조
-  { id: 'skill_frostbite', kind: 'skill', name: '한파', maxStacks: 2,
+  // ── 모든 스킬 공용 개조 (표시상 "강화" — requiresSkill:'any')
+  { id: 'skill_frostbite', kind: 'skill', displayLabel: '강화', name: '한파', maxStacks: 2,
     description: '스킬에 맞은 적을 3초간 45% 감속 (모든 스킬)',
     effect: {}, skillMod: { slowFactor: 0.55, slowSeconds: 3 }, requiresSkill: 'any' },
-  { id: 'skill_barrage', kind: 'skill', name: '다중 투사', maxStacks: 2,
+  { id: 'skill_barrage', kind: 'skill', displayLabel: '강화', name: '다중 투사', maxStacks: 2,
     description: '스킬 대상 +2 (일제 사격·처형) · 튕김 +2회 (튕기는 사격)',
     effect: {}, skillMod: { extraTargets: 2 }, requiresSkill: 'any' },
   // 맞으면 마나가 찬다 — 탱커가 스킬을 난사하는 축
-  { id: 'skill_riposte', kind: 'skill', name: '반격 집중', maxStacks: 3,
+  { id: 'skill_riposte', kind: 'skill', displayLabel: '강화', name: '반격 집중', maxStacks: 3,
     description: '피격 시 마나 +12 (기본 8에 더해)',
     effect: { manaOnDamaged: 12 }, requiresSkill: 'any' },
 
   // ══ 성장 (growth) — 누적. 아레나 9% / TFT 5%였고 우리는 0%였다.
   // 처치 스택은 **영웅이 막타를 친 몹**만 센다 (타워 막타는 안 센다).
+  // %(killStackDamage) → 고정치(killStackFlatDamage) (2026-07-18, 사용자 지시: "막타마다
+  // 성장하는거 전부 %대신 수치로"). 상한도 함께 폐지 — waveStackDamage처럼 그대로 쌓인다.
   { id: 'hunterinstinct', kind: 'growth', name: '사냥 본능',
-    description: '막타마다 공격력 +0.8% (최대 +100%)', maxStacks: 2,
-    effect: { killStackDamage: 0.008, killStackCap: 1 } },
+    description: '막타마다 공격력 +2 (누적)', maxStacks: 2,
+    effect: { killStackFlatDamage: 2 } },
   { id: 'bloodthirst', kind: 'growth', name: '피의 갈증',
-    description: '막타마다 공격력 +0.6% (최대 +70%), 가한 피해의 5% 회복', maxStacks: 2,
-    effect: { killStackDamage: 0.006, killStackCap: 0.7, lifesteal: 0.05 } },
+    description: '막타마다 공격력 +1 (누적), 가한 피해의 5% 회복', maxStacks: 2,
+    effect: { killStackFlatDamage: 1, lifesteal: 0.05 } },
   { id: 'veteran', kind: 'growth', name: '역전의 용사', description: '라운드마다 공격력 +3% (영구 누적)',
     maxStacks: 3, effect: { waveStackDamage: 0.03 } },
   { id: 'ironblood', kind: 'growth', name: '강철 혈통', description: '라운드마다 최대 체력 +5% (영구 누적)',
@@ -805,12 +982,14 @@ export const AUGMENTS: readonly Augment[] = [
   // [곱연산] 성장 누적치에 통째로 곱해진다
   { id: 'evolution', kind: 'growth', name: '진화', description: '[곱] 성장 누적치 ×1.4',
     maxStacks: 1, effect: { growthMult: 1.4 } },
+  // %(killStackDamage) → 고정치(killStackFlatDamage) (2026-07-18, 사용자 지시).
+  // waveStackDamage(라운드 누적)처럼 상한 없이 그대로 쌓인다 — 같은 카드의 두 축을 통일.
   { id: 'adaptive', kind: 'growth', name: '적응',
-    description: '막타마다 공격력 +0.4% (최대 +40%), 라운드마다 공격력 +1.5%', maxStacks: 3,
-    effect: { killStackDamage: 0.004, killStackCap: 0.4, waveStackDamage: 0.015 } },
+    description: '막타마다 공격력 +1 (누적), 라운드마다 공격력 +1.5%', maxStacks: 3,
+    effect: { killStackFlatDamage: 1, waveStackDamage: 0.015 } },
   { id: 'relentless', kind: 'growth', name: '집념',
-    description: '막타마다 공격력 +1.2% (최대 +160%) · 최대 체력 -15%', maxStacks: 1,
-    effect: { killStackDamage: 0.012, killStackCap: 1.6 }, penalty: { hpMult: 0.85 } },
+    description: '막타마다 공격력 +3 (누적) · 최대 체력 -15%', maxStacks: 1,
+    effect: { killStackFlatDamage: 3 }, penalty: { hpMult: 0.85 } },
   { id: 'warmachine', kind: 'growth', name: '전쟁 기계',
     description: '라운드마다 공격력 +5% (영구 누적) · 이동 속도 -10%', maxStacks: 2,
     effect: { waveStackDamage: 0.05 }, penalty: { moveSpeedMult: 0.9 } },
@@ -879,7 +1058,9 @@ export const requiresSplash = (augment: Augment): boolean => augment.id === 'nov
  *   이게 수치가 아니라 **관계**로 맺어지는 시너지다.
  */
 export function skillGateAllows(augment: Augment, currentSkill: SkillId | null): boolean {
-  if (augment.grantsSkill) return currentSkill === null;
+  // 스킬 획득 증강은 기본 스킬(강타)을 들고 있을 때만 뜬다 — 교체 제안이다.
+  // 증강으로 얻은 진짜 스킬이 있으면 더 안 나온다 (영웅은 스킬 하나).
+  if (augment.grantsSkill) return currentSkill === null || currentSkill === DEFAULT_SKILL;
   // 장판 개조는 장판을 까는 스킬을 든 뒤에만 — 즉발 스킬엔 붙일 데가 없다
   if (augment.requiresZone) {
     return currentSkill !== null && (SKILLS[currentSkill].zoneSeconds ?? 0) > 0;
@@ -902,11 +1083,9 @@ export function skillGateAllows(augment: Augment, currentSkill: SkillId | null):
  */
 export const ADAPTIVE_KIND_WEIGHT = 0.9;
 
-// ───────── 증강 리롤 (마정석) ─────────
-export const AUGMENT_REROLL_MAX = 2;
-export const AUGMENT_REROLL_BASE_GAS = 12;
-/** n번째 리롤(0부터)의 마정석 값 — 같은 선택 안에서 두 번째가 더 비싸다 */
-export const augmentRerollCost = (used: number): number => AUGMENT_REROLL_BASE_GAS * (used + 1);
+// ───────── 증강 리롤 — 무료 (2026-07-18, 사용자 지시) ─────────
+// 마정석 소비 폐지, 선택 하나당 무료 리롤 1회로 축소 (기존: 마정석 소비 · 최대 2회).
+export const AUGMENT_REROLL_MAX = 1;
 
 /** 같은 계열 증강이 이만큼 모이면 특화가 발동한다 */
 export const SYNERGY_THRESHOLD = 3;

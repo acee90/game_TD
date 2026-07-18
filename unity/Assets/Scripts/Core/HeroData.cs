@@ -70,8 +70,8 @@ namespace GodTD.Core
         /// 3등분해 파워 총량을 보존하면서 중간 빌드 전환 비용을 없앤다.
         /// </summary>
         /// <summary>레벨업이 세 스탯에 나눠 주는 총 포인트 — 후반 레벨일수록 굵게</summary>
-        // 2+L/10 → 1+L/7 (2026-07-16 2차): 파워커브 백로딩 — 중반 -20%, 후반 보존. ← web
-        public static int LevelStatPoints(int level) => 1 + level / 7;
+        // 2+L/10 → 1+L/7 → 1+L/6 (2026-07-17 4차): 백로딩 유지 + 후반 상향 (Lv38 +14%). ← web
+        public static int LevelStatPoints(int level) => 1 + level / 6;
 
         /// <summary>해당 레벨까지 각 스탯이 공통으로 받은 자연 성장치.</summary>
         public static float StatBonusByLevel(int level)
@@ -108,8 +108,8 @@ namespace GodTD.Core
         /// 1.10이면 골드 2배당 +7레벨 — 새 창: 수입 20%로 R45에 Lv~24, 실질 상한 ~Lv43. ← web
         /// </summary>
         public const float XP_BASE_COST = 14f;
-        // 1.10 → 1.12 (2026-07-16 2차): 영웅 개화를 뒤로 — 수입 20%로 R45에 Lv~21, 상한 ~Lv38. ← web
-        public const float XP_COST_GROWTH = 1.12f;
+        // 1.12 → 1.10 (2026-07-17 4차): Lv30+ 비용 완화 — 후반 가치는 LevelStatPoints 상향과 세트. ← web
+        public const float XP_COST_GROWTH = 1.1f;
         public static int XpToNext(int level) =>
             (int)MathF.Round(XP_BASE_COST * MathF.Pow(XP_COST_GROWTH, level));
 
@@ -146,7 +146,7 @@ namespace GodTD.Core
         /// <summary>보스는 같은 라운드 잡몹 여러 기 몫으로 때린다</summary>
         /// <summary>Lv3까지는 영웅·허수아비를 공격하지 않고 지나간다 — 위협은 누출 라이프뿐 ← web</summary>
         // 3 → 6 (2026-07-17 플레이테스트): 보스는 전 레벨 무해 — 위협은 누출 라이프뿐. ← web
-        public const int BOSS_HARMLESS_MAX_LEVEL = 6;
+        public const int BOSS_HARMLESS_MAX_LEVEL = 7; // Lv7(5차)도 무해 — 전 레벨 불변 ← web
         public static float BossDamage(int level, int round) =>
             level <= BOSS_HARMLESS_MAX_LEVEL ? 0f : EnemyDamage(round) * (1.5f + 0.5f * level);
 
@@ -160,7 +160,7 @@ namespace GodTD.Core
         /// **앞의 네 개는 80% 이상의 판이 받고**(핵심 빌드가 완성된다), 뒤의 두 개는 오래 버틴
         /// 판만 받는 보상이다. 소진 후에는 AUGMENT_TAIL_EVERY 레벨마다 계속 준다.
         /// </summary>
-        public static readonly int[] AUGMENT_LEVELS = { 9, 16, 24, 30, 35, 42 };
+        public static readonly int[] AUGMENT_LEVELS = { 5, 10, 24, 30, 35, 42 }; // 첫 둘 조기화 (5차: 증강 보고 빌드 결정) ← web
         public const int AUGMENT_TAIL_EVERY = 8;
         public const int AUGMENT_CHOICES = 3;
 
@@ -170,6 +170,14 @@ namespace GodTD.Core
             if (Array.IndexOf(AUGMENT_LEVELS, level) >= 0) return true;
             int last = AUGMENT_LEVELS[AUGMENT_LEVELS.Length - 1];
             return level > last && (level - last) % AUGMENT_TAIL_EVERY == 0;
+        }
+
+        /// <summary>다음 증강을 받는 레벨 — UI 예고용 ← web</summary>
+        public static int NextAugmentLevel(int level)
+        {
+            for (int l = level + 1; l <= level + AUGMENT_TAIL_EVERY + 1; l++)
+                if (GrantsAugment(l)) return l;
+            return level + 1;
         }
 
         /// <summary>`level`까지 올렸을 때 받은 증강 개수</summary>

@@ -67,13 +67,14 @@ namespace GodTD.Core
         /// <summary>유닛 추첨용 난수([0,1)). 테스트에서 결정적 함수를 주입한다.</summary>
         readonly Func<double> rand;
 
-        public Game(Func<double> rand = null)
+        public Game(Func<double> rand = null, GameLoggingSession logging = null)
         {
             var rng = new Random();
             this.rand = rand ?? (() => rng.NextDouble());
             Hero = new Hero();
             Slots = new List<Slot>(MapData.SLOT_POS.Length);
             foreach (var p in MapData.SLOT_POS) Slots.Add(new Slot(p.X, p.Y));
+            InitializeLogging(logging);
         }
 
         /// <summary>증강 선택 중에는 시간이 흐르지 않는다.</summary>
@@ -93,8 +94,23 @@ namespace GodTD.Core
             var card = AugmentChoices[index];
 
             var rarity = Augments.RARITIES[card.Rarity];
+            int offerId = currentOfferId;
+            var augment = AugmentRef(card);
             Hero.AddAugment(card);
             AugmentChoices.Clear();
+            Record("augment_chosen", new AugmentChosenData
+            {
+                OfferId = offerId,
+                ChoiceIndex = index,
+                Augment = augment,
+            });
+            chosenAugments.Add(new ChosenAugmentSummary
+            {
+                Augment = augment,
+                ElapsedSeconds = ElapsedSeconds,
+                Round = Round,
+                RoundTime = RoundTime,
+            });
 
             Message = $"[{rarity.Label}] {card.Augment.Name}: {card.Augment.Description}";
             OfferAugmentIfPending();
@@ -107,7 +123,20 @@ namespace GodTD.Core
             if (hero.PendingAugmentPicks <= 0) return;
             AugmentChoices = Hero.RollAugmentChoices(hero, rand);
             RerollsUsed = 0;
-            if (AugmentChoices.Count == 0) hero.PendingAugmentPicks = 0;
+            if (AugmentChoices.Count == 0)
+            {
+                hero.PendingAugmentPicks = 0;
+                return;
+            }
+            currentOfferId = ++offerCounter;
+            var choices = new List<AugmentLogRef>();
+            foreach (var choice in AugmentChoices) choices.Add(AugmentRef(choice));
+            Record("augment_offered", new AugmentOfferedData
+            {
+                OfferId = currentOfferId,
+                HeroLevel = hero.Level,
+                Choices = choices,
+            });
         }
 
         // ── 증강 리롤 (가스) ──
@@ -136,6 +165,15 @@ namespace GodTD.Core
             Gas -= cost;
             RerollsUsed++;
             AugmentChoices = Hero.RollAugmentChoices(Hero, rand);
+            var choices = new List<AugmentLogRef>();
+            foreach (var choice in AugmentChoices) choices.Add(AugmentRef(choice));
+            Record("augment_rerolled", new AugmentRerolledData
+            {
+                OfferId = currentOfferId,
+                RerollCount = RerollsUsed,
+                Cost = cost,
+                Choices = choices,
+            });
             return true;
         }
 
@@ -161,8 +199,16 @@ namespace GodTD.Core
                 return false;
             }
             Gas -= cost;
+            int fromLevel = track == GasSkillTrack.Damage ? Hero.GasSkillDamage : Hero.GasSkillCdr;
             if (track == GasSkillTrack.Damage) Hero.GasSkillDamage++;
             else Hero.GasSkillCdr++;
+            Record("gas_skill_upgraded", new GasSkillUpgradedData
+            {
+                Track = track == GasSkillTrack.Damage ? "damage" : "cdr",
+                FromLevel = fromLevel,
+                ToLevel = fromLevel + 1,
+                Cost = cost,
+            });
             Message = track == GasSkillTrack.Damage
                 ? $"스킬 피해 개조 +{Hero.GasSkillDamage} · 다음 {GasSkillCost(GasSkillTrack.Damage)}"
                 : $"필요 마나 개조 +{Hero.GasSkillCdr} · 다음 {GasSkillCost(GasSkillTrack.Cdr)}";
@@ -212,6 +258,11 @@ namespace GodTD.Core
             Spawn(new EnemySpec(EnemyKind.Boss, $"Lv{level} BOSS",
                 Balance.BossHP(level), Balance.BossArmor(level), Balance.BOSS_SPEED * bossTempo,
                 radius: 18f, bossLevel: level));
+            Record("boss_summoned", new BossSummonedData
+            {
+                Level = level,
+                Cooldown = Balance.BOSS_COOLDOWN_SECONDS,
+            });
             string unlocks = level == MaxBossLevel && level < Balance.BOSS_MAX_LEVEL
                 ? $" 처치하면 Lv{level + 1} 소환이 열립니다."
                 : "";
@@ -242,6 +293,13 @@ namespace GodTD.Core
             UnitsSpawned++;
             var def = Merge.UnitFor(0, rand, BossesKilled);
             slot.Tower = new Tower(def, 0);
+            Record("tower_spawned", new TowerSpawnedData
+            {
+                Source = "purchase",
+                SlotIndex = SlotIndex(slot),
+                Tower = TowerRef(slot.Tower),
+                Cost = cost,
+            });
             Float(slot.X, slot.Y, def.Name, Units.RACE_COLOR[(int)def.Race]);
             Selected = slot;
             ResolveMerges();
@@ -267,6 +325,18 @@ namespace GodTD.Core
                 var result = Merge.FindMerge(Slots, rand, BossesKilled);
                 if (result == null) return;
 
+                TowerLogRef consumed = null;
+                foreach (var candidate in Slots)
+                {
+                    if (candidate.Tower != null && candidate.Tower.Def.Name == result.Consumed &&
+                        candidate.Tower.Tier == result.Tier - 1)
+                    {
+                        consumed = TowerRef(candidate.Tower);
+                        break;
+                    }
+                }
+                if (consumed == null) return;
+
                 int removed = 0;
                 foreach (var slot in Slots)
                 {
@@ -285,6 +355,15 @@ namespace GodTD.Core
                     scoredGods.Add(result.Produced.Name);
                     ScoreValue += Score.GOD_TOWER_SCORE;
                 }
+                mergeCount++;
+                Record("tower_merged", new TowerMergedData
+                {
+                    Consumed = consumed,
+                    ConsumedCount = removed,
+                    Produced = TowerRef(result.Slot.Tower),
+                    SlotIndex = SlotIndex(result.Slot),
+                    IsGod = isGod,
+                });
                 Float(result.Slot.X, result.Slot.Y,
                     isGod ? $"★ {result.Produced.Name}" : result.Produced.Name,
                     isGod ? "#ffd23f" : "#ffffff");
@@ -292,12 +371,63 @@ namespace GodTD.Core
             }
         }
 
+        // ── GOD 리롤 (7차) — 조합의 끝을 운에만 맡기지 않는다 ← web ──
+        /// <summary>지금까지 GOD를 몇 번 다시 뽑았나 — 비용이 지수로 오른다</summary>
+        public int GodRerolls;
+
+        public int GodRerollCost => Balance.GodRerollCost(GodRerolls);
+
+        /// <summary>이 타워를 다시 뽑을 수 있는가 — GOD만, 금화가 있어야</summary>
+        public bool CanRerollGod(Slot slot) =>
+            !Over && slot?.Tower != null && slot.Tower.Tier == Units.GOD_TIER &&
+            Mineral >= GodRerollCost;
+
+        /// <summary>선택한 GOD 타워의 종류를 다시 뽑는다. 보스 6기 이상이면 확장 풀에서 나온다.</summary>
+        public bool RerollGod()
+        {
+            var slot = Selected;
+            if (slot?.Tower == null) return false;
+            if (slot.Tower.Tier != Units.GOD_TIER)
+            {
+                Message = "GOD 타워만 다시 뽑을 수 있습니다.";
+                return false;
+            }
+            int cost = GodRerollCost;
+            if (Mineral < cost)
+            {
+                Message = $"금화 부족 — GOD 리롤 {cost} 필요.";
+                return false;
+            }
+            Mineral -= cost;
+            GodRerolls++;
+            var before = slot.Tower.Def;
+            var beforeTower = TowerRef(slot.Tower);
+            var next = Merge.RerollUnit(Units.GOD_TIER, before, rand, BossesKilled);
+            // GOD는 최고 티어라 이 교체가 조합을 부르지 않는다
+            slot.Tower = new Tower(next, Units.GOD_TIER);
+            Record("god_rerolled", new GodRerolledData
+            {
+                SlotIndex = SlotIndex(slot),
+                Cost = cost,
+                Before = beforeTower,
+                After = TowerRef(slot.Tower),
+                RerollCount = GodRerolls,
+            });
+            Float(slot.X, slot.Y, $"★ {next.Name}", "#ffd23f");
+            Message = $"{before.Name} → {next.Name} 【 {Units.TagLabel(next)} 】 · 다음 리롤 {GodRerollCost}.";
+            return true;
+        }
+
         public bool SellSelected()
         {
             var slot = Selected;
             if (slot?.Tower == null) return false;
+            var tower = TowerRef(slot.Tower);
+            int slotIndex = SlotIndex(slot);
             slot.Tower = null;
             Selected = null;
+            towersSoldCount++;
+            Record("tower_sold", new TowerSoldData { SlotIndex = slotIndex, Tower = tower });
             Message = "유닛을 처분하였습니다.";
             return true;
         }
@@ -320,6 +450,7 @@ namespace GodTD.Core
             }
             Mineral -= cost;
             Probes++;
+            Record("probe_bought", new ProbeBoughtData { Cost = cost, Count = Probes });
             Message = $"프로브 {Probes}기 — 가스를 채취합니다. 다음 {ProbeCost}.";
             return true;
         }
@@ -333,7 +464,16 @@ namespace GodTD.Core
                 return false;
             }
             Gas -= cost;
+            int fromLevel = Upgrades[race];
             Upgrades[race] += 1;
+            Record("race_upgraded", new RaceUpgradedData
+            {
+                Race = (int)race,
+                RaceName = Units.RACES[(int)race],
+                FromLevel = fromLevel,
+                ToLevel = Upgrades[race],
+                Cost = cost,
+            });
             Message = $"파일런 업그레이드 → Lv{Upgrades[race]}";
             return true;
         }
@@ -352,7 +492,20 @@ namespace GodTD.Core
                 return false;
             }
             Mineral -= HeroData.XP_BUY_GOLD;
-            GrantXp(HeroData.XP_BUY_AMOUNT);
+            heroXpPurchases++;
+            heroXpSpent += HeroData.XP_BUY_GOLD;
+            GrantXp(HeroData.XP_BUY_AMOUNT, "purchase", result =>
+            {
+                Record("hero_xp_bought", new HeroXpBoughtData
+                {
+                    Cost = HeroData.XP_BUY_GOLD,
+                    Xp = HeroData.XP_BUY_AMOUNT,
+                    LevelBefore = result.LevelBefore,
+                    LevelAfter = result.LevelAfter,
+                    XpBefore = result.XpBefore,
+                    XpAfter = result.XpAfter,
+                });
+            });
             return true;
         }
 
@@ -366,9 +519,16 @@ namespace GodTD.Core
                 Mineral += reward;
                 ScoreValue += Score.RoundScore(Round);
                 Float(Slots[0].X, Slots[0].Y, $"웨이브 +{reward}", "#ffd23f");
+                Record("round_cleared", new RoundClearedData
+                {
+                    Round = Round,
+                    MineralReward = reward,
+                    GasReward = 0,
+                });
             }
 
             Round++;
+            RoundTime = 0;
             // 초반 느린 템포 — 몹 체력·이동속도를 같은 배수로 낮춘다(공속은 발사부에서 함께 낮춤)
             float tempo = Balance.EarlyTempo(Round);
             float hp = MathF.Round(Balance.EnemyHP(Round) * tempo);
@@ -387,6 +547,12 @@ namespace GodTD.Core
                 Message = waveType.Id == Balance.WaveTypeId.Normal
                     ? $"Round Start — {Round}라운드"
                     : $"Round Start — {Round}라운드 · {waveType.Label} 웨이브! (접촉 피해 ×{waveType.ContactDamageMult:0})";
+                Record("round_started", new RoundStartedData
+                {
+                    Round = Round,
+                    EnemyCount = Balance.EnemyCount(Round),
+                    WaveType = waveType.Id == Balance.WaveTypeId.Normal ? "normal" : "hunter",
+                });
             }
         }
 
@@ -417,6 +583,13 @@ namespace GodTD.Core
                 Lives = 0;
                 Over = true;
                 Message = "패배";
+                Record("game_over", new GameOverData
+                {
+                    EnemyKind = enemy.Kind == EnemyKind.Boss ? "boss" : "mob",
+                    BossLevel = enemy.Kind == EnemyKind.Boss ? (int?)(enemy.BossLevel == 0 ? 1 : enemy.BossLevel) : null,
+                    Lives = 0,
+                });
+                FinishRun(FinishReasons.GameOver);
             }
         }
 
@@ -434,7 +607,14 @@ namespace GodTD.Core
                 BossCleared = Math.Max(BossCleared, level);
                 Float(p.X, p.Y, $"[ Lv{level} BOSS KILL ] +{reward}", "#ffd23f");
                 ScoreValue += Score.BossScore(level);
-                GrantXp(HeroData.XpPerBoss(level));
+                Record("boss_killed", new BossKilledData
+                {
+                    Level = level,
+                    Reward = reward,
+                    Unlocked = unlocked,
+                    MaxBossLevel = MaxBossLevel,
+                });
+                GrantXp(HeroData.XpPerBoss(level), "boss_kill");
 
                 string suffix = !unlocked
                     ? ""
@@ -458,18 +638,45 @@ namespace GodTD.Core
             Mineral += Hero.Stats.MineralPerKill;
             GrantXp(enemy.LastHitByHero
                 ? HeroData.XP_PER_MOB * HeroData.HERO_LASTHIT_XP_MULT
-                : HeroData.XP_PER_MOB);
+                : HeroData.XP_PER_MOB, "mob_kill");
         }
 
         /// <summary>경험치는 타워가 잡든 영웅이 잡든 들어온다. 레벨업 시 증강 선택을 띄운다.</summary>
-        void GrantXp(float amount)
+        sealed class XpGrantResult
+        {
+            public int LevelBefore;
+            public int LevelAfter;
+            public float XpBefore;
+            public float XpAfter;
+        }
+
+        void GrantXp(float amount, string source, Action<XpGrantResult> beforeLevelEvent = null)
         {
             var hero = Hero;
+            int levelBefore = hero.Level;
+            float xpBefore = hero.Xp;
             int levels = hero.GainXp(amount);
             if (levels > 0)
             {
                 ScoreValue += Score.HERO_LEVEL_SCORE * levels;
                 Float(hero.X, hero.Y, $"Lv{hero.Level}!", "#ffd23f");
+            }
+            beforeLevelEvent?.Invoke(new XpGrantResult
+            {
+                LevelBefore = levelBefore,
+                LevelAfter = hero.Level,
+                XpBefore = xpBefore,
+                XpAfter = hero.Xp,
+            });
+            if (levels > 0)
+            {
+                Record("hero_leveled", new HeroLeveledData
+                {
+                    FromLevel = levelBefore,
+                    ToLevel = hero.Level,
+                    Xp = amount,
+                    Source = source,
+                });
             }
             if (AugmentChoices.Count == 0) OfferAugmentIfPending();
         }
@@ -485,6 +692,9 @@ namespace GodTD.Core
             // 밀린 증강 선택이 있으면 먼저 띄운다 — 그래야 아래에서 일시정지된다
             if (AugmentChoices.Count == 0) OfferAugmentIfPending();
             if (Over || Paused) return;
+
+            ElapsedSeconds += dt;
+            RoundTime += dt;
 
             if (BossCooldown > 0f) BossCooldown = MathF.Max(0f, BossCooldown - dt);
 
@@ -508,7 +718,10 @@ namespace GodTD.Core
                 spawnTimer -= dt;
                 if (spawnTimer <= 0f)
                 {
-                    Spawn(spawnQueue.Dequeue());
+                    // 동시 몹 상한 (6차) — 상한이면 스폰을 미룬다 (총 체력 불변) ← web
+                    int normals = 0;
+                    foreach (var e in Enemies) if (e.Kind != EnemyKind.Boss && !e.Dead) normals++;
+                    if (normals < Balance.MAX_ALIVE_MOBS) Spawn(spawnQueue.Dequeue());
                     spawnTimer = Balance.SPAWN_INTERVAL;
                 }
             }

@@ -32,6 +32,14 @@ namespace GodTD.Core
             var hero = Hero;
             switch (skill.Def.Id)
             {
+                case SkillId.Smite:
+                {
+                    // 기본 스킬 — 사거리 안에 하나라도 있으면 값어치가 있다
+                    int count = 0;
+                    foreach (var e in Enemies)
+                        if (!e.Dead && MathF.Abs(e.Distance - hero.Distance) <= hero.Stats.Range) count++;
+                    return count;
+                }
                 case SkillId.Whirlwind:
                 {
                     int count = 0;
@@ -86,6 +94,7 @@ namespace GodTD.Core
 
             switch (skill.Def.Id)
             {
+                case SkillId.Smite: CastSmite(skill); break;
                 case SkillId.Whirlwind: CastWhirlwind(skill); break;
                 case SkillId.Volley: CastVolley(skill); break;
                 case SkillId.Meteor: CastMeteor(skill); break;
@@ -108,6 +117,29 @@ namespace GodTD.Core
                 enemy.SlowFactor = skill.Mods.SlowFactor;
                 enemy.SlowTimer = skill.Mods.SlowSeconds;
             }
+        }
+
+        /// <summary>
+        /// 강타 (기본 스킬) — 사거리 안 가장 가까운 skill.Targets명을 각각 때린다.
+        /// 7차: 반경형 → 대상 수 상한형 (밀집도가 올라도 안 세진다). ← web
+        /// </summary>
+        void CastSmite(ResolvedSkill skill)
+        {
+            var hero = Hero;
+            var inReach = new List<Enemy>();
+            foreach (var e in Enemies)
+                if (!e.Dead && MathF.Abs(e.Distance - hero.Distance) <= hero.Stats.Range) inReach.Add(e);
+            inReach.Sort((a, b) =>
+                MathF.Abs(a.Distance - hero.Distance).CompareTo(MathF.Abs(b.Distance - hero.Distance)));
+            if (inReach.Count > skill.Targets) inReach.RemoveRange(skill.Targets, inReach.Count - skill.Targets);
+            if (inReach.Count == 0) return;
+            foreach (var target in inReach)
+            {
+                SkillHit(target, skill);
+                var t = MapData.PathPos(target.Distance);
+                Shots.Add(new Shot { X = hero.X, Y = hero.Y, Tx = t.X, Ty = t.Y, Life = 0.16f, Color = "#e3b23e" });
+            }
+            Float(hero.X, hero.Y, $"강타 x{inReach.Count}", "#e3b23e");
         }
 
         void CastWhirlwind(ResolvedSkill skill)

@@ -19,11 +19,13 @@
 
 ## 코드
 
-- 현행 게임은 `web/` (Vite + TypeScript). `unity/`는 동일 로직의 C# 미러 —
+- 현행 게임은 `web/` (Vite + Svelte 5). `unity/`는 동일 로직의 C# 미러 —
   `web/src`가 바뀌면 Unity Core/도 동기화가 필요하다.
+  UI는 `web/src/App.svelte` + `web/src/lib/*.svelte`(HUD), 표시 문자열 로직은
+  `web/src/lib/view.ts`. 게임 엔진(`core/data/game/render`)은 프레임워크와 무관하다.
 - 게임 로직(`web/src/game/`)은 DOM 없이 동작하며 시드 주입이 가능하다.
   밸런스 검증은 실제 `Game` 클래스로 시뮬레이션한다 (`npm run sim:ga`, 축소판 `-- --quick`).
-- 검증: `cd web && npx tsc --noEmit && npx vitest run`. 일회성 측정 스크립트
-  (`tests/scratch-*.test.ts`)는 커밋하지 않는다.
+- 검증: `cd web && npm run check && npx vitest run` (`check`=svelte-check, .svelte+.ts 타입 검사).
+  일회성 측정 스크립트 (`tests/scratch-*.test.ts`)는 커밋하지 않는다.
 - 시뮬레이션에서 증강 대기는 `game.paused`로 확인한다 —
   놓치면 첫 증강에서 영구 일시정지되어 그 라운드가 사망처럼 보인다.

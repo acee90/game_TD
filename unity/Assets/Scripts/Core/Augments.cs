@@ -296,7 +296,9 @@ namespace GodTD.Core
         /// </summary>
         public static bool SkillGateAllows(Augment augment, SkillId? currentSkill)
         {
-            if (augment.GrantsSkill.HasValue) return currentSkill == null;
+            // 스킬 획득 증강은 기본 스킬(강타)일 때만 뜬다 — 교체 제안 (6차) ← web
+            if (augment.GrantsSkill.HasValue)
+                return currentSkill == null || currentSkill == Skills.DEFAULT_SKILL;
             if (!augment.RequiresAnySkill && !augment.RequiresSkill.HasValue) return true;
             if (currentSkill == null) return false;
             return augment.RequiresAnySkill || augment.RequiresSkill == currentSkill;

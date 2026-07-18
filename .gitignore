@@ -1,5 +1,6 @@
 .DS_Store
 .playwright-mcp/
+.firecrawl/
 
 # Unity 에디터 생성물
 unity/Library/
@@ -9,6 +10,7 @@ unity/Temp/
 unity/obj/
 unity/Assets/Screenshots/
 unity/Assets/Screenshots.meta
+unity/Captures/
 
 # 일회성 측정 스크립트 — 리포트에 표를 남기고 스크립트는 커밋하지 않는다
 web/tools/scratch-*.ts
@@ -19,6 +21,14 @@ unity/Assets/EffectExamples/
 unity/Assets/EffectExamples.meta
 unity/Assets/Resources/Fx/
 unity/Assets/Resources/Fx.meta
+unity/Assets/AssetHunts!/
+unity/Assets/AssetHunts!.meta
 
 # 외부 에셋 킷 원본 다운로드(Kenney CC0) — 실제 사용분만 Resources에 커밋한다
 resources/kenney_tower-defense-kit/
+
+# 의존성 — vitest 캐시(results.json)가 실수로 커밋된 이력이 있다
+node_modules/
+
+# 루트에서 잘못 생성된 Vite 캐시(소스 프로젝트가 아님)
+web-svelte/

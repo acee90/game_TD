@@ -59,7 +59,7 @@ namespace GodTD.View
         // 게임 쿨타임처럼 버튼 위에서 읽힌다. 전부 raycastTarget=false — 클릭은 버튼이 받는다.
         readonly Image[] bossSeals = new Image[Balance.BOSS_MAX_LEVEL];
         readonly TextMeshProUGUI[] bossSealSecs = new TextMeshProUGUI[Balance.BOSS_MAX_LEVEL];
-        static readonly string[] ROMAN = { "I", "II", "III", "IV", "V", "VI" };
+        static readonly string[] ROMAN = { "I", "II", "III", "IV", "V", "VI", "VII" };
 
         // ── 공용 툴팁 (선택정보 위) ──
         RectTransform tooltipRoot;
@@ -870,8 +870,9 @@ namespace GodTD.View
                 var stats = hero.Stats;
                 SetInfoAccent(UiTheme.HeroCol, "영웅");
                 selTitle.text = $"영웅 <color=#B08CFF>Lv{hero.Level}</color>";
+                // 다음 증강 예고 (6차 편의성) — 몇 레벨에 다음 선택이 오는지 항상 보인다
                 selMeta.text = hero.Alive
-                    ? $"<color=#8A93AD>HP {Mathf.CeilToInt(hero.Hp)}/{stats.MaxHp:0} · XP {Mathf.FloorToInt(hero.Xp)}/{hero.XpNeeded}</color>"
+                    ? $"<color=#8A93AD>HP {Mathf.CeilToInt(hero.Hp)}/{stats.MaxHp:0} · XP {Mathf.FloorToInt(hero.Xp)}/{hero.XpNeeded} · 증강 Lv{HeroData.NextAugmentLevel(hero.Level)}</color>"
                     : $"<color=#FF5A3C>부활 {Mathf.CeilToInt(hero.RespawnTimer)}s</color>";
                 hpVisible = xpVisible = true;
                 UiKit.SetBar(selHpBar.fill, hero.Alive ? hero.Hp / stats.MaxHp : 0f);
@@ -916,16 +917,16 @@ namespace GodTD.View
                 selMeta.text = $"<color=#8A93AD>{Units.TIER_LABEL[tower.Tier]}</color>";
                 float dmg = Combat.Damage(tower, game.Upgrades);
                 float interval = Combat.AttackInterval(tower);
-                selStats.text =
-                    $"공격력 <color=#E8ECF6>{dmg:0}</color> · 공속 <color=#E8ECF6>{AttackRate(interval)}</color>" +
-                    $" · DPS <color=#E8ECF6>{dmg / interval:0}</color> · 사거리 {Combat.Range(tower):0}";
-                // 기본공과 강화(가스 업그레이드) 몫을 분리해 보여준다 (플레이테스트 2026-07-17)
+                // 합계가 주인공, 분해는 괄호 안에 작게 — "공격력 45 (27+18 · Lv3)" (2026-07-17 2차)
                 float baseDmg = Combat.Damage(tower, UpgradeLevels.Zero);
                 int upLevel = game.Upgrades[tower.Def.Race];
-                string upLine = upLevel > 0
-                    ? $"  <color=#85A875>기본 {baseDmg:0} + 강화Lv{upLevel} +{dmg - baseDmg:0}</color>"
+                string breakdown = upLevel > 0
+                    ? $"<size=9><color=#85A875>({baseDmg:0}+{dmg - baseDmg:0}·Lv{upLevel})</color></size> "
                     : "";
-                selBody.text = $"【 {Units.TagLabel(tower.Def)} 】{upLine}";
+                selStats.text =
+                    $"공격력 <color=#E8ECF6>{dmg:0}</color> {breakdown}· 공속 <color=#E8ECF6>{AttackRate(interval)}</color>" +
+                    $" · DPS <color=#E8ECF6>{dmg / interval:0}</color> · 사거리 {Combat.Range(tower):0}";
+                selBody.text = $"【 {Units.TagLabel(tower.Def)} 】";
             }
             else if (sel.IsEmptyTile)
             {

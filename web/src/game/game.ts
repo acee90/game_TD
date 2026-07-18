@@ -6,13 +6,28 @@ import * as H from '../data/hero';
 import * as K from '../data/skills';
 import * as S from '../data/score';
 import { PATH_LENGTH, SLOT_POS, pathPos, type PathProjection } from '../core/map';
-import { GOD_TIER, RACE_COLOR, tagLabel, type Race } from '../data/units';
+import { GOD_TIER, RACES, RACE_COLOR, tagLabel, type Race } from '../data/units';
 import type { AugmentCard } from '../data/hero';
 import { attackInterval, damage, isSplash, range, slowFactor, type UpgradeLevels } from './combat';
 import { bossKillMineral, killIncome } from './economy';
 import { Hero, rollAugmentChoices, type HeroStats } from './hero';
-import { findMerge, unitFor, type Rand } from './merge';
-import type { Decoy, Enemy, EnemySpec, FloatText, Shot, Slot, Zone } from './types';
+import {
+  GAME_LOG_VERSION,
+  type AugmentLogRef,
+  type ChosenAugmentSummary,
+  type FinishReason,
+  type GameEventDataMap,
+  type GameEventSink,
+  type GameEventType,
+  type GameLoggingSession,
+  type GameRunEvent,
+  type RunContext,
+  type RunSummary,
+  type TowerLogRef,
+  type XpSource,
+} from './logging';
+import { findMerge, rerollUnit, unitFor, type Rand } from './merge';
+import type { Decoy, Enemy, EnemySpec, FloatText, Shot, Slot, Tower, Zone } from './types';
 
 export class Game {
   mineral = B.START_MINERAL;
@@ -83,6 +98,8 @@ export class Game {
     tickTimer: number;
     /** 쏘기 시작한 지점 — 빔은 영웅을 따라간다 */
     origin: number;
+    /** 진행 방향 — +1(정방향)·-1(역방향). 시전 시점에 몹이 더 많은 쪽으로 고정된다 */
+    direction: 1 | -1;
   } | null = null;
 
   private spawnQueue: EnemySpec[] = [];
@@ -91,12 +108,145 @@ export class Game {
   private heroHitTimer = 0;
   private decoyHitTimer = 0;
 
+  /** pause·메뉴 시간을 제외한 누적 시뮬레이션 시간. */
+  elapsedSeconds = 0;
+  /** 현재 라운드(오프닝은 round 0)가 시작된 뒤 흐른 시뮬레이션 시간. */
+  roundTime = 0;
+
+  private eventSink: GameEventSink | null = null;
+  private readonly runContext: RunContext | null;
+  private eventSeq = 0;
+  private runFinished = false;
+  private mergeCount = 0;
+  private towersSoldCount = 0;
+  private heroXpPurchases = 0;
+  private heroXpSpent = 0;
+  private offerCounter = 0;
+  private currentOfferId = 0;
+  private readonly chosenAugments: ChosenAugmentSummary[] = [];
+
   /** 유닛 추첨용 난수. 테스트에서 결정적 함수를 주입한다. */
   private readonly rand: Rand;
 
-  constructor(rand: Rand = Math.random) {
+  constructor(rand: Rand = Math.random, logging?: GameLoggingSession) {
     this.rand = rand;
     this.hero = new Hero();
+    this.runContext = logging?.context ?? null;
+    this.eventSink = logging?.sink ?? null;
+    if (this.runContext && this.eventSink) {
+      this.record('run_started', {
+        startedAt: this.runContext.startedAt,
+        build: this.runContext.build,
+        seed: this.runContext.seed,
+        rngAlgorithm: this.runContext.rngAlgorithm,
+        initial: { mineral: this.mineral, gas: this.gas, lives: this.lives },
+      });
+    }
+  }
+
+  private record<Type extends GameEventType>(type: Type, data: GameEventDataMap[Type]): void {
+    if (!this.eventSink || !this.runContext || this.runFinished) return;
+    const event = {
+      v: GAME_LOG_VERSION,
+      runId: this.runContext.runId,
+      seq: ++this.eventSeq,
+      elapsedSeconds: this.elapsedSeconds,
+      round: this.round,
+      roundTime: this.roundTime,
+      score: this.score,
+      type,
+      data,
+    } as GameRunEvent;
+    try {
+      this.eventSink.record(event);
+    } catch {
+      // 기록 실패가 게임 판정이나 시뮬레이션을 중단하면 안 된다.
+      this.eventSink = null;
+    }
+  }
+
+  private towerLogRef(tower: Tower): TowerLogRef {
+    return {
+      name: tower.def.name,
+      tier: tower.tier,
+      race: tower.def.race,
+      raceName: RACES[tower.def.race],
+    };
+  }
+
+  private augmentLogRef(card: AugmentCard): AugmentLogRef {
+    return { id: card.augment.id, name: card.augment.name, rarity: card.rarity };
+  }
+
+  private slotIndex(slot: Slot): number {
+    return this.slots.indexOf(slot);
+  }
+
+  private buildRunSummary(
+    finishReason: FinishReason,
+    complete: boolean,
+    lastSeq: number,
+  ): RunSummary | null {
+    if (!this.runContext) return null;
+    const counts = new Map<string, { tower: TowerLogRef; count: number }>();
+    for (const slot of this.slots) {
+      if (!slot.tower) continue;
+      const tower = this.towerLogRef(slot.tower);
+      const key = `${tower.tier}\u0000${tower.race}\u0000${tower.name}`;
+      const current = counts.get(key);
+      if (current) current.count++;
+      else counts.set(key, { tower, count: 1 });
+    }
+    const towers = [...counts.values()].sort(
+      (a, b) => b.tower.tier - a.tower.tier || a.tower.name.localeCompare(b.tower.name, 'ko'),
+    );
+    return {
+      v: GAME_LOG_VERSION,
+      runId: this.runContext.runId,
+      startedAt: this.runContext.startedAt,
+      complete,
+      finishReason,
+      build: this.runContext.build,
+      seed: this.runContext.seed,
+      rngAlgorithm: this.runContext.rngAlgorithm,
+      score: this.score,
+      round: this.round,
+      elapsedSeconds: this.elapsedSeconds,
+      kills: this.kills,
+      bossCleared: this.bossCleared,
+      bossesKilled: this.bossesKilled,
+      heroLevel: this.hero.level,
+      heroXpPurchases: this.heroXpPurchases,
+      heroXpSpent: this.heroXpSpent,
+      mineral: this.mineral,
+      gas: this.gas,
+      probes: this.probes,
+      upgrades: [...this.upgrades] as [number, number, number, number],
+      towers,
+      augments: [...this.chosenAugments],
+      unitsSpawned: this.unitsSpawned,
+      merges: this.mergeCount,
+      towersSold: this.towersSoldCount,
+      godRerolls: this.godRerolls,
+      firstSeq: 1,
+      lastSeq,
+    };
+  }
+
+  /** 현재 세션을 정확히 한 번 끝내고 최종 summary를 돌려준다. */
+  finishRun(reason: FinishReason, complete: boolean = reason !== 'abandoned'): RunSummary | null {
+    if (this.runFinished || !this.eventSink || !this.runContext) return null;
+    const sink = this.eventSink;
+    const summary = this.buildRunSummary(reason, complete, this.eventSeq + 1);
+    if (!summary) return null;
+    this.record('run_finished', { reason, complete, summary });
+    this.runFinished = true;
+    try {
+      sink.finish?.(summary);
+    } catch {
+      // 이벤트 기록과 마찬가지로 저장 실패는 게임 상태를 바꾸지 않는다.
+    }
+    return summary;
   }
 
   /** 증강 선택 중에는 시간이 흐르지 않는다. */
@@ -154,6 +304,9 @@ export class Game {
     const live = this.enemies.filter((e) => !e.dead);
 
     switch (skill.def.id) {
+      case 'smite':
+        // 기본 스킬 — 사거리 안에 하나라도 있으면 값어치가 있다
+        return live.filter((e) => Math.abs(e.distance - hero.distance) <= hero.stats.range).length;
       case 'whirlwind':
         return live.filter((e) => Math.abs(e.distance - hero.distance) <= skill.radius).length;
       case 'volley':
@@ -175,12 +328,19 @@ export class Game {
           return gap >= 0 && gap <= K.DECOY_AUTOCAST_RANGE;
         }).length;
       case 'laser':
-        // 이미 쏘고 있으면 다시 안 쏜다. 빔은 앞쪽 직선만 태운다.
+        // 이미 쏘고 있으면 다시 안 쏜다. 정방향·역방향 중 더 많이 맞는 쪽으로 판단한다
+        // (실제 시전 방향은 laserDirection이 같은 기준으로 고른다).
         if (this.beam) return 0;
-        return live.filter((e) => {
-          const gap = e.distance - hero.distance;
-          return gap >= -H.ENEMY_TOUCH_RANGE && gap <= skill.beamLength;
-        }).length;
+        return Math.max(
+          live.filter((e) => {
+            const gap = e.distance - hero.distance;
+            return gap >= -H.ENEMY_TOUCH_RANGE && gap <= skill.beamLength;
+          }).length,
+          live.filter((e) => {
+            const gap = hero.distance - e.distance;
+            return gap >= -H.ENEMY_TOUCH_RANGE && gap <= skill.beamLength;
+          }).length,
+        );
       case 'firearrow':
       case 'icearrow':
         // 장판은 '가장 뭉친 곳'에 깐다 — 유성과 같은 셈법
@@ -200,6 +360,18 @@ export class Game {
     }
   }
 
+  /**
+   * 마나를 쓴다 — 단, 오버클럭(freeCastChance)이 뜨면 이번 시전은 공짜다.
+   * castExecution은 "처치하면 마나 안 듦" 자체 로직이 있어 이 헬퍼를 거치지 않는다.
+   */
+  private spendManaUnlessFree(skill: K.ResolvedSkill): void {
+    if (skill.mods.freeCastChance > 0 && this.rand() < skill.mods.freeCastChance) {
+      this.float(this.hero.x, this.hero.y, '오버클럭!', '#ffd23f');
+      return;
+    }
+    this.hero.spendMana();
+  }
+
   /** 스킬을 쓴다. 못 쓰면 false. */
   useSkill(): boolean {
     const hero = this.hero;
@@ -207,6 +379,9 @@ export class Game {
     if (!this.canUseSkill || !skill) return false;
 
     switch (skill.def.id) {
+      case 'smite':
+        this.castSmite(skill);
+        break;
       case 'whirlwind':
         this.castWhirlwind(skill);
         break;
@@ -221,7 +396,7 @@ export class Game {
         break;
       case 'laser':
         this.castLaser(skill);
-        hero.spendMana();
+        this.spendManaUnlessFree(skill);
         // 채널링 — 빔이 나가는 동안은 마나가 차지 않는다 (tickBeam/stepHero가 막는다)
         return true;
       case 'firearrow':
@@ -235,8 +410,25 @@ export class Game {
         this.castChain(skill);
         break;
     }
-    hero.spendMana();
+    this.spendManaUnlessFree(skill);
     return true;
+  }
+
+  /**
+   * 레이저가 맞힐 방향을 고른다 — 정방향(+distance)·역방향(-distance) 중 그 순간
+   * beamLength 안에 적이 더 많은 쪽. 예전엔 항상 정방향으로만 나가 몹이 뒤에 몰려
+   * 있으면 허공에 쐈다.
+   */
+  private laserDirection(skill: K.ResolvedSkill): 1 | -1 {
+    const hero = this.hero;
+    const countTowards = (direction: 1 | -1): number =>
+      this.enemies.filter((e) => {
+        if (e.dead) return false;
+        const gap = (e.distance - hero.distance) * direction;
+        if (gap < -H.ENEMY_TOUCH_RANGE || gap > skill.beamLength) return false;
+        return Math.abs((e.lane ?? 0) * 12) <= skill.beamWidth;
+      }).length;
+    return countTowards(1) >= countTowards(-1) ? 1 : -1;
   }
 
   /**
@@ -244,7 +436,13 @@ export class Game {
    * 실제 피해는 tickBeam이 tickInterval마다 넣는다.
    */
   private castLaser(skill: K.ResolvedSkill): void {
-    this.beam = { skill, remaining: skill.beamSeconds, tickTimer: 0, origin: this.hero.distance };
+    this.beam = {
+      skill,
+      remaining: skill.beamSeconds,
+      tickTimer: 0,
+      origin: this.hero.distance,
+      direction: this.laserDirection(skill),
+    };
     this.float(this.hero.x, this.hero.y, '레이저!', '#c065e0');
   }
 
@@ -308,7 +506,7 @@ export class Game {
     }
 
     // 처치하면 마나가 그대로 남는다 — 잘 고르면 연쇄 처형이 된다
-    if (!killed) hero.spendMana();
+    if (!killed) this.spendManaUnlessFree(skill);
     else this.float(hero.x, hero.y, '처형!', '#ff5a3c');
   }
 
@@ -328,6 +526,46 @@ export class Game {
       enemy.slowFactor = skill.mods.slowFactor;
       enemy.slowTimer = skill.mods.slowSeconds;
     }
+    this.triggerExplosion(enemy, raw);
+  }
+
+  /**
+   * 폭발 ('explosion' 증강) — 명중한 지점 반경 안 다른 적에게 같은 원본 피해(raw)를
+   * 더 준다. deathBlast와 같은 패턴으로 대상마다 자기 장갑을 새로 적용한다.
+   * 여기서 직접 hp를 깎으므로 재귀 폭발은 없다(heroHitEnemy·skillHit을 다시 안 부른다).
+   */
+  private triggerExplosion(origin: Enemy, raw: number): void {
+    const stats = this.hero.stats;
+    if (stats.explosionRadius <= 0) return;
+    const [ox, oy] = pathPos(origin.distance);
+    for (const other of this.enemies) {
+      if (other === origin || other.dead) continue;
+      const [ex, ey] = pathPos(other.distance);
+      if (Math.hypot(ex - ox, ey - oy) > stats.explosionRadius) continue;
+      const dealt = B.effectiveDamage(raw, other.armor);
+      other.hp -= dealt;
+      this.heroDamageDealt += dealt;
+      other.lastHitByHero = true;
+    }
+  }
+
+  /**
+   * 강타 (기본 스킬) — 사거리 안 **가장 가까운 skill.targets명**을 각각 때린다.
+   * 7차: 반경형 → 대상 수 상한형. 밀집도가 올라도 세지지 않는 게 시작 스킬의 자리다.
+   */
+  private castSmite(skill: K.ResolvedSkill): void {
+    const hero = this.hero;
+    const inReach = this.enemies
+      .filter((e) => !e.dead && Math.abs(e.distance - hero.distance) <= hero.stats.range)
+      .sort((a, b) => Math.abs(a.distance - hero.distance) - Math.abs(b.distance - hero.distance))
+      .slice(0, skill.targets);
+    if (inReach.length === 0) return;
+    for (const target of inReach) {
+      this.skillHit(target, skill);
+      const [tx, ty] = pathPos(target.distance);
+      this.shots.push({ x: hero.x, y: hero.y, tx, ty, life: 0.16, color: '#e3b23e' });
+    }
+    this.float(hero.x, hero.y, `강타 x${inReach.length}`, '#e3b23e');
   }
 
   private castWhirlwind(skill: K.ResolvedSkill): void {
@@ -354,20 +592,6 @@ export class Game {
       this.skillHit(target, skill);
       const [tx, ty] = pathPos(target.distance);
       this.shots.push({ x: hero.x, y: hero.y, tx, ty, life: 0.14, color: '#4ea3ff' });
-
-      // 폭발 화살 — 화살마다 주변으로 번진다
-      if (skill.mods.explosiveRadius > 0) {
-        for (const splash of this.enemies) {
-          if (splash === target || splash.dead) continue;
-          if (Math.abs(splash.distance - target.distance) <= skill.mods.explosiveRadius) {
-            this.skillHit(splash, skill);
-          }
-        }
-        this.shots.push({
-          x: tx, y: ty, tx, ty, life: 0.18,
-          color: '#ff8a3c', splashRadius: skill.mods.explosiveRadius,
-        });
-      }
     }
     this.float(hero.x, hero.y, `일제 사격 x${skill.targets}`, '#4ea3ff');
   }
@@ -413,8 +637,17 @@ export class Game {
     if (!card) return false;
 
     const rarity = H.RARITIES[card.rarity];
+    const offerId = this.currentOfferId;
+    const augment = this.augmentLogRef(card);
     this.hero.addAugment(card);
     this.augmentChoices = [];
+    this.record('augment_chosen', { offerId, choiceIndex: index, augment });
+    this.chosenAugments.push({
+      augment,
+      elapsedSeconds: this.elapsedSeconds,
+      round: this.round,
+      roundTime: this.roundTime,
+    });
 
     this.message = `[${rarity.label}] ${card.augment.name}: ${card.augment.description}`;
     this.offerAugmentIfPending();
@@ -426,37 +659,38 @@ export class Game {
     if (hero.pendingAugmentPicks <= 0) return;
     this.augmentChoices = rollAugmentChoices(hero, this.rand);
     this.rerollsUsed = 0;
-    if (this.augmentChoices.length === 0) hero.pendingAugmentPicks = 0;
+    if (this.augmentChoices.length === 0) {
+      hero.pendingAugmentPicks = 0;
+      return;
+    }
+    this.currentOfferId = ++this.offerCounter;
+    this.record('augment_offered', {
+      offerId: this.currentOfferId,
+      heroLevel: hero.level,
+      choices: this.augmentChoices.map((choice) => this.augmentLogRef(choice)),
+    });
   }
 
-  // ── 증강 리롤 (마정석) ──
-  get rerollCost(): number {
-    return H.augmentRerollCost(this.rerollsUsed);
-  }
-
+  // ── 증강 리롤 — 무료 (2026-07-18, 사용자 지시) ──
   get canReroll(): boolean {
-    return (
-      this.augmentChoices.length > 0 &&
-      this.rerollsUsed < H.AUGMENT_REROLL_MAX &&
-      this.gas >= this.rerollCost
-    );
+    return this.augmentChoices.length > 0 && this.rerollsUsed < H.AUGMENT_REROLL_MAX;
   }
 
-  /** 선택지 3장을 마정석로 다시 뽑는다 — 한 선택당 최대 2회 */
+  /** 선택지 3장을 다시 뽑는다 — 무료, 한 선택당 최대 AUGMENT_REROLL_MAX회 */
   rerollAugments(): boolean {
     if (this.augmentChoices.length === 0) return false;
     if (this.rerollsUsed >= H.AUGMENT_REROLL_MAX) {
       this.message = `리롤은 선택당 ${H.AUGMENT_REROLL_MAX}회까지입니다.`;
       return false;
     }
-    const cost = this.rerollCost;
-    if (this.gas < cost) {
-      this.message = `마정석 부족 — 리롤 ${cost} 필요.`;
-      return false;
-    }
-    this.gas -= cost;
     this.rerollsUsed++;
     this.augmentChoices = rollAugmentChoices(this.hero, this.rand);
+    this.record('augment_rerolled', {
+      offerId: this.currentOfferId,
+      rerollCount: this.rerollsUsed,
+      cost: 0,
+      choices: this.augmentChoices.map((choice) => this.augmentLogRef(choice)),
+    });
     return true;
   }
 
@@ -481,8 +715,10 @@ export class Game {
       return false;
     }
     this.gas -= cost;
+    const fromLevel = track === 'damage' ? this.hero.gasSkillDamage : this.hero.gasSkillCdr;
     if (track === 'damage') this.hero.gasSkillDamage++;
     else this.hero.gasSkillCdr++;
+    this.record('gas_skill_upgraded', { track, fromLevel, toLevel: fromLevel + 1, cost });
     this.message =
       track === 'damage'
         ? `스킬 피해 개조 +${this.hero.gasSkillDamage} · 다음 ${this.gasSkillCost('damage')}`
@@ -535,6 +771,7 @@ export class Game {
       radius: 18,
       bossLevel: level,
     });
+    this.record('boss_summoned', { level, cooldown: B.BOSS_COOLDOWN_SECONDS });
     const unlocks =
       level === this.maxBossLevel && level < B.BOSS_MAX_LEVEL
         ? ` 처치하면 Lv${level + 1} 소환이 열립니다.`
@@ -562,6 +799,12 @@ export class Game {
     this.unitsSpawned++;
     const def = unitFor(0, this.rand, this.bossesKilled);
     slot.tower = { def, tier: 0, cooldown: 0 };
+    this.record('tower_spawned', {
+      source: 'purchase',
+      slotIndex: this.slotIndex(slot),
+      tower: this.towerLogRef(slot.tower),
+      cost,
+    });
     this.float(slot.x, slot.y, def.name, RACE_COLOR[def.race]);
     this.selected = slot;
     this.resolveMerges();
@@ -590,14 +833,15 @@ export class Game {
   /**
    * 지금 복제할 수 있는 최고 티어.
    * 증강이 준 기본 상한(towerCopyTier) + 라운드/영웅 레벨이 밀어올린 만큼.
-   * 초반엔 싸구려만, 후반엔 GOD까지 — 복제가 "언젠가 쓸 카드"로 남는다.
+   * 초반엔 싸구려만, 후반에도 GOD 바로 아래(T4)까지 — GOD 자체는 복제 대상이
+   * 아니다(COPY_TIER_MAX, 2026-07-18). 직접 만들거나 조합해야 GOD가 생긴다.
    */
   get copyTierCap(): number {
     if (!this.canCopyTower) return -1;
     const base = this.hero.stats.towerCopyTier - 1; // 1스택 = 티어 0(가장 낮은 등급)까지
     const byRound = Math.floor(this.round / B.COPY_TIER_ROUNDS);
     const byLevel = Math.floor(this.hero.level / B.COPY_TIER_LEVELS);
-    return Math.min(GOD_TIER, base + Math.max(byRound, byLevel));
+    return Math.min(B.COPY_TIER_MAX, base + Math.max(byRound, byLevel));
   }
 
   /** 이 타워를 복제 예약할 수 있는가 */
@@ -613,8 +857,13 @@ export class Game {
   /** 라운드가 끝날 때 복제할 타워를 찍는다. 다시 찍으면 예약이 풀린다. */
   markCopyTarget(slot: Slot): boolean {
     if (this.copyTarget === slot) {
+      const tower = slot.tower ? this.towerLogRef(slot.tower) : undefined;
       this.copyTarget = null;
       this.message = '복제 예약을 취소했습니다.';
+      this.record('tower_copy_marked', {
+        action: 'cancelled',
+        ...(tower ? { slotIndex: this.slotIndex(slot), tower } : {}),
+      });
       return true;
     }
     if (!this.canCopyTower) return false;
@@ -628,14 +877,28 @@ export class Game {
     }
     this.copyTarget = slot;
     this.message = `${slot.tower.def.name} 복제 예약 — 라운드가 끝나면 하나 더 생깁니다.`;
+    this.record('tower_copy_marked', {
+      action: 'marked',
+      slotIndex: this.slotIndex(slot),
+      tower: this.towerLogRef(slot.tower),
+    });
     return true;
   }
 
-  /** 라운드 종료 — 예약된 타워를 빈 타일에 복제한다 */
+  /** 라운드 종료 — 예약된 타워를 빈 타일에 복제한다. 예약이 없으면 자동으로 최고 티어. */
   private resolveCopy(): void {
-    const target = this.copyTarget;
+    let target = this.copyTarget;
     this.copyTarget = null;
-    if (!target?.tower || !this.canCopyTower) return;
+    if (!this.canCopyTower) return;
+    // 무조작 시 자동 선택 (2026-07-17 6차, 플레이테스트): 복제 가능한 것 중 최고 티어.
+    // 예약 UI를 몰라도 증강이 놀지 않고, 아는 플레이어는 예약으로 덮어쓴다.
+    if (!target?.tower) {
+      target = this.slots
+        .filter((s): s is Slot & { tower: NonNullable<Slot['tower']> } =>
+          s.tower !== null && s.tower.tier <= this.copyTierCap)
+        .sort((a, b) => b.tower.tier - a.tower.tier)[0] ?? null;
+    }
+    if (!target?.tower) return;
 
     const empty = this.slots.find((s) => !s.tower && s !== this.altarSlot);
     if (!empty) {
@@ -644,6 +907,12 @@ export class Game {
     }
     // 복제는 생성 비용을 올리지 않는다 (unitsSpawned를 건드리지 않는다) — 그게 복제의 값어치다
     empty.tower = { def: target.tower.def, tier: target.tower.tier, cooldown: 0 };
+    this.record('tower_spawned', {
+      source: 'copy',
+      slotIndex: this.slotIndex(empty),
+      tower: this.towerLogRef(empty.tower),
+      cost: 0,
+    });
     this.float(empty.x, empty.y, `복제: ${target.tower.def.name}`, '#7ce7ff');
     this.message = `${target.tower.def.name}을(를) 복제했습니다.`;
     this.resolveMerges();
@@ -654,6 +923,12 @@ export class Game {
     for (let guard = 0; guard < 64; guard++) {
       const result = findMerge(this.slots, this.rand, this.bossesKilled);
       if (!result) return;
+
+      const consumedTower = this.slots.find(
+        (slot) => slot.tower?.def.name === result.consumed && slot.tower.tier === result.tier - 1,
+      )?.tower;
+      if (!consumedTower) return;
+      const consumed = this.towerLogRef(consumedTower);
 
       let removed = 0;
       for (const slot of this.slots) {
@@ -669,6 +944,14 @@ export class Game {
         this.scoredGods.add(result.produced.name);
         this.score += S.GOD_TOWER_SCORE;
       }
+      this.mergeCount++;
+      this.record('tower_merged', {
+        consumed,
+        consumedCount: removed,
+        produced: this.towerLogRef(result.slot.tower),
+        slotIndex: this.slotIndex(result.slot),
+        isGod,
+      });
       this.float(
         result.slot.x,
         result.slot.y,
@@ -679,11 +962,67 @@ export class Game {
     }
   }
 
+  // ── GOD 리롤 (7차) — 조합의 끝을 운에만 맡기지 않는다 ──
+  /** 지금까지 GOD를 몇 번 다시 뽑았나 — 비용이 지수로 오른다 */
+  godRerolls = 0;
+
+  get godRerollCost(): number {
+    return B.godRerollCost(this.godRerolls);
+  }
+
+  /** 이 타워를 다시 뽑을 수 있는가 — GOD만, 금화가 있어야 */
+  canRerollGod(slot: Slot | null): boolean {
+    return (
+      !this.over &&
+      slot?.tower !== undefined &&
+      slot?.tower !== null &&
+      slot.tower.tier === GOD_TIER &&
+      this.mineral >= this.godRerollCost
+    );
+  }
+
+  /** 선택한 GOD 타워의 종류를 다시 뽑는다. 처치한 보스가 6기 이상이면 확장 풀에서 나온다. */
+  rerollGod(): boolean {
+    const slot = this.selected;
+    if (!slot?.tower) return false;
+    if (slot.tower.tier !== GOD_TIER) {
+      this.message = 'GOD 타워만 다시 뽑을 수 있습니다.';
+      return false;
+    }
+    const cost = this.godRerollCost;
+    if (this.mineral < cost) {
+      this.message = `금화 부족 — GOD 리롤 ${cost} 필요.`;
+      return false;
+    }
+    this.mineral -= cost;
+    this.godRerolls++;
+    const before = slot.tower.def;
+    const beforeTower = this.towerLogRef(slot.tower);
+    const next = rerollUnit(GOD_TIER, before, this.rand, this.bossesKilled);
+    // GOD는 최고 티어라 이 교체가 조합을 부르지 않는다 (findMerge는 tier < GOD_TIER만 본다)
+    slot.tower = { def: next, tier: GOD_TIER, cooldown: 0 };
+    this.record('god_rerolled', {
+      slotIndex: this.slotIndex(slot),
+      cost,
+      before: beforeTower,
+      after: this.towerLogRef(slot.tower),
+      rerollCount: this.godRerolls,
+    });
+    this.float(slot.x, slot.y, `★ ${next.name}`, '#ffd23f');
+    this.message =
+      `${before.name} → ${next.name} 【 ${tagLabel(next)} 】 · 다음 리롤 ${this.godRerollCost}.`;
+    return true;
+  }
+
   sellSelected(): boolean {
     const slot = this.selected;
     if (!slot?.tower) return false;
+    const tower = this.towerLogRef(slot.tower);
+    const slotIndex = this.slotIndex(slot);
     slot.tower = null;
     this.selected = null;
+    this.towersSoldCount++;
+    this.record('tower_sold', { slotIndex, tower });
     this.message = '유닛을 처분하였습니다.';
     return true;
   }
@@ -705,6 +1044,7 @@ export class Game {
     }
     this.mineral -= cost;
     this.probes++;
+    this.record('probe_bought', { cost, count: this.probes });
     this.message = `광부 ${this.probes}기 — 마정석를 채취합니다. 다음 ${this.probeCost}.`;
     return true;
   }
@@ -716,11 +1056,19 @@ export class Game {
       return false;
     }
     this.gas -= cost;
+    const fromLevel = this.upgrades[race];
     const next: UpgradeLevels = [
       this.upgrades[0], this.upgrades[1], this.upgrades[2], this.upgrades[3],
     ];
     next[race] += 1;
     this.upgrades = next;
+    this.record('race_upgraded', {
+      race,
+      raceName: RACES[race],
+      fromLevel,
+      toLevel: this.upgrades[race],
+      cost,
+    });
     this.message = `파일런 업그레이드 → Lv${this.upgrades[race]}`;
     return true;
   }
@@ -741,7 +1089,18 @@ export class Game {
       return false;
     }
     this.mineral -= H.XP_BUY_GOLD;
-    this.grantXp(H.XP_BUY_AMOUNT);
+    this.heroXpPurchases++;
+    this.heroXpSpent += H.XP_BUY_GOLD;
+    this.grantXp(H.XP_BUY_AMOUNT, 'purchase', ({ levelBefore, levelAfter, xpBefore, xpAfter }) => {
+      this.record('hero_xp_bought', {
+        cost: H.XP_BUY_GOLD,
+        xp: H.XP_BUY_AMOUNT,
+        levelBefore,
+        levelAfter,
+        xpBefore,
+        xpAfter,
+      });
+    });
     return true;
   }
 
@@ -766,6 +1125,13 @@ export class Game {
         this.float(this.hero.x, this.hero.y, parts.join(' · '), '#8fd6ff');
       }
 
+      this.record('round_cleared', {
+        round: this.round,
+        mineralReward: reward + stats.mineralPerWave,
+        gasReward: stats.gasPerWave,
+        semantic: 'timer_elapsed',
+      });
+
       // 성장 증강 — 라운드를 넘길 때마다 누적된다
       this.hero.waveStacks++;
 
@@ -774,6 +1140,7 @@ export class Game {
     }
 
     this.round++;
+    this.roundTime = 0;
     // 초반 느린 템포 — 몹 체력을 ×p로 낮춘다. 이동·공속은 update의 combatDt가 함께 늦춘다.
     const hp = Math.round(B.enemyHP(this.round) * B.earlyTempo(this.round));
     const armor = B.enemyArmor(this.round);
@@ -795,6 +1162,11 @@ export class Game {
       waveType.id === 'normal'
         ? `Round Start — ${this.round}라운드`
         : `Round Start — ${this.round}라운드 · ${waveType.label} 웨이브! (접촉 피해 ×${waveType.contactDamageMult})`;
+    this.record('round_started', {
+      round: this.round,
+      enemyCount: B.enemyCount(this.round),
+      waveType: waveType.id,
+    });
   }
 
   /** 모든 적은 북측 왼쪽 문 하나에서 나온다 */
@@ -823,6 +1195,13 @@ export class Game {
       this.lives = 0;
       this.over = true;
       this.message = '패배';
+      this.record('game_over', {
+        cause: 'leak',
+        enemyKind: enemy.kind,
+        ...(enemy.kind === 'boss' ? { bossLevel: enemy.bossLevel ?? 1 } : {}),
+        lives: 0,
+      });
+      this.finishRun('game_over');
     }
   }
 
@@ -838,7 +1217,8 @@ export class Game {
       this.bossCleared = Math.max(this.bossCleared, level);
       this.float(x, y, `[ Lv${level} BOSS KILL ] +${reward}`, '#ffd23f');
       this.score += S.bossScore(level);
-      this.grantXp(H.xpPerBoss(level));
+      this.record('boss_killed', { level, reward, unlocked, maxBossLevel: this.maxBossLevel });
+      this.grantXp(H.xpPerBoss(level), 'boss_kill');
 
       const suffix = !unlocked
         ? ''
@@ -867,7 +1247,10 @@ export class Game {
       this.hero.killStacks++;
       this.heroExplode(enemy, x, y);
     }
-    this.grantXp(enemy.lastHitByHero ? H.XP_PER_MOB * H.HERO_LASTHIT_XP_MULT : H.XP_PER_MOB);
+    this.grantXp(
+      enemy.lastHitByHero ? H.XP_PER_MOB * H.HERO_LASTHIT_XP_MULT : H.XP_PER_MOB,
+      'mob_kill',
+    );
   }
 
   /**
@@ -895,12 +1278,33 @@ export class Game {
   }
 
   /** 경험치는 타워가 잡든 영웅이 잡든 들어온다. 레벨업 시 증강 선택을 띄운다. */
-  private grantXp(amount: number): void {
+  private grantXp(
+    amount: number,
+    source: XpSource,
+    beforeLevelEvent?: (result: {
+      readonly levelBefore: number;
+      readonly levelAfter: number;
+      readonly xpBefore: number;
+      readonly xpAfter: number;
+    }) => void,
+  ): void {
     const hero = this.hero;
-    const levels = hero.gainXp(amount * hero.stats.xpMult);
+    const actualXp = amount * hero.stats.xpMult;
+    const levelBefore = hero.level;
+    const xpBefore = hero.xp;
+    const levels = hero.gainXp(actualXp);
     if (levels > 0) {
       this.score += S.HERO_LEVEL_SCORE * levels;
       this.float(hero.x, hero.y, `Lv${hero.level}!`, '#ffd23f');
+    }
+    beforeLevelEvent?.({ levelBefore, levelAfter: hero.level, xpBefore, xpAfter: hero.xp });
+    if (levels > 0) {
+      this.record('hero_leveled', {
+        fromLevel: levelBefore,
+        toLevel: hero.level,
+        xp: actualXp,
+        source,
+      });
     }
     if (this.augmentChoices.length === 0) this.offerAugmentIfPending();
   }
@@ -914,6 +1318,9 @@ export class Game {
     // 밀린 증강 선택이 있으면 먼저 띄운다 — 그래야 아래에서 일시정지된다
     if (this.augmentChoices.length === 0) this.offerAugmentIfPending();
     if (this.over || this.paused) return;
+
+    this.elapsedSeconds += dt;
+    this.roundTime += dt;
 
     if (this.bossCooldown > 0) this.bossCooldown = Math.max(0, this.bossCooldown - dt);
 
@@ -933,8 +1340,16 @@ export class Game {
     if (this.spawnQueue.length) {
       this.spawnTimer -= dt;
       if (this.spawnTimer <= 0) {
-        this.spawn(this.spawnQueue.shift()!);
-        this.spawnTimer = B.SPAWN_INTERVAL;
+        // 동시 몹 상한 (2026-07-17 6차): 필드의 일반 몹이 상한이면 스폰을 미룬다 —
+        // 후반에 웨이브가 겹쳐 수십 기가 쌓이는 압사를 막는다 (총 체력은 그대로,
+        // 압력이 시간으로 펴진다). 보스는 상한과 무관.
+        const normals = this.enemies.filter((e) => e.kind !== 'boss' && !e.dead).length;
+        if (normals < B.MAX_ALIVE_MOBS) {
+          this.spawn(this.spawnQueue.shift()!);
+          this.spawnTimer = B.SPAWN_INTERVAL;
+        } else {
+          this.spawnTimer = B.SPAWN_INTERVAL; // 잠시 뒤 다시 시도
+        }
       }
     }
 
@@ -1244,6 +1659,7 @@ export class Game {
     enemy.hp -= dealt;
     this.heroDamageDealt += dealt;
     enemy.lastHitByHero = true;
+    this.triggerExplosion(enemy, raw);
 
     if (stats.lifesteal > 0 && this.hero.alive) {
       this.hero.heal(dealt * stats.lifesteal);
@@ -1333,13 +1749,17 @@ export class Game {
       const raw = hero.attackDamage * beam.skill.damageMult * hero.stats.skillPower;
       for (const enemy of this.enemies) {
         if (enemy.dead) continue;
-        const gap = enemy.distance - hero.distance;
-        // 앞쪽 beamLength 안 + 경로에서 벗어난 레인은 beamWidth 안
+        const gap = (enemy.distance - hero.distance) * beam.direction;
+        // 빔 방향으로 beamLength 안 + 경로에서 벗어난 레인은 beamWidth 안
         if (gap < -H.ENEMY_TOUCH_RANGE || gap > beam.skill.beamLength) continue;
         if (Math.abs((enemy.lane ?? 0) * 12) > beam.skill.beamWidth) continue;
         this.skillHit(enemy, beam.skill, raw); // 틱마다 화상 한 겹 (skillHit 안에서)
       }
-      const [tx, ty] = pathPos(Math.min(PATH_LENGTH, hero.distance + beam.skill.beamLength));
+      const tipDistance = Math.min(
+        PATH_LENGTH,
+        Math.max(0, hero.distance + beam.direction * beam.skill.beamLength),
+      );
+      const [tx, ty] = pathPos(tipDistance);
       this.shots.push({ x: hero.x, y: hero.y, tx, ty, life: beam.skill.tickInterval, color: '#c065e0' });
     }
 
@@ -1449,15 +1869,21 @@ export class Game {
       const color = RACE_COLOR[tower.def.race];
 
       if (isSplash(tower)) {
+        // 스플래시 감쇠 (2026-07-18, 사용자 지시) — 사거리 안 전원이 균일 피해를 받던 것을,
+        // 폭심(샷이 날아가는 지점)에서 멀수록 줄어들게 한다. 폭심 자체(거리 0)는 100%,
+        // 사거리 끝은 SPLASH_EDGE_FALLOFF까지 선형으로 준다.
+        const [cx, cy] = pathPos(inReach[0].distance);
         for (const e of inReach) {
-          const dealt = B.effectiveDamage(raw, e.armor);
+          const [ex, ey] = pathPos(e.distance);
+          const dist = Math.hypot(ex - cx, ey - cy);
+          const falloff = 1 - (1 - B.SPLASH_EDGE_FALLOFF) * Math.min(1, dist / reach);
+          const dealt = B.effectiveDamage(raw * falloff, e.armor);
           e.hp -= dealt;
           this.towerDamageDealt += dealt;
           if (e.held) this.tankAssistDamage += dealt;
           e.lastHitByHero = false;
         }
-        const [x, y] = pathPos(inReach[0].distance);
-        this.shots.push({ x: slot.x, y: slot.y, tx: x, ty: y, life: 0.08, color, splashRadius: reach });
+        this.shots.push({ x: slot.x, y: slot.y, tx: cx, ty: cy, life: 0.08, color, splashRadius: reach });
       } else {
         // 파워는 체력 최대(보스) 우선, 그 외에는 가장 멀리 간 적(돌파 임박) 우선
         const power = tower.def.tags.includes('power');

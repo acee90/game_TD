@@ -42,7 +42,7 @@ namespace GodTD.Core
         /// <summary>보스 처치 보상 Lv1..Lv6 [프로토]</summary>
         // 원본은 { 5, 8, 13, 20, 29, 39 } (trigger #601~#606 [원본확정]).
         // 2026-07-11 [프로토] 대체 — 보스 HP ×2.5와 함께 리스크에 보상이 따라가게. ← web
-        public static readonly int[] BOSS_KILL_MINERAL = { 5, 10, 18, 32, 55, 90 };
+        public static readonly int[] BOSS_KILL_MINERAL = { 5, 10, 18, 32, 55, 90, 150 }; // Lv7 +150 (5차)
 
         /// <summary>킬 마일스톤 보상. trigger #546~#566. 200킬 간격 [원본확정] — (킬 수, 미네랄)</summary>
         public static readonly (int kills, int mineral)[] KILL_MILESTONES =
@@ -60,7 +60,9 @@ namespace GodTD.Core
         /// 그러면 유닛 1기당 20킬을 모아야 해서 초반이 굶는다. 라운드마다 목돈이 들어오는 편이
         /// 타워를 세우는 리듬과 맞는다. [프로토]
         /// </summary>
-        public static int WaveReward(int round) => 10 + 3 * round; // 2026-07-11 초반 수입 축소
+        // 4차 (2026-07-17): R35+ 이차항 — "R40부터 급격히 어려워지는데 보상은 선형". ← web
+        public static int WaveReward(int round) =>
+            (int)MathF.Round(10 + 3 * round + 0.1f * MathF.Pow(MathF.Max(0, round - 35), 2));
 
         /// <summary>누출 시 라이프 -1 · 미네랄 +5. strings:358 'Life -1 ! ! ! ! !미네랄 +5' [원본확정]</summary>
         public const int LEAK_MINERAL = 5;
@@ -78,6 +80,15 @@ namespace GodTD.Core
         public const int PROBE_MINERAL = 60;
 
         /// <summary>
+        /// GOD 타워 타입 리롤 (7차) — 어떤 GOD가 나오는지는 순수 운이었다. 병과가 어긋나면
+        /// (가스 업그레이드는 병과별) 반쪽이 된다. 금화로 운을 교정한다. 지수 비용. ← web
+        /// </summary>
+        public const int GOD_REROLL_MINERAL = 150;
+        public const float GOD_REROLL_GROWTH = 1.5f;
+        public static int GodRerollCost(int rolled) =>
+            (int)MathF.Round(GOD_REROLL_MINERAL * MathF.Pow(GOD_REROLL_GROWTH, rolled));
+
+        /// <summary>
         /// 유닛 생성 비용 — 누적 생성 횟수에 선형으로 오른다. ← web/src/data/balance.ts
         ///
         /// 고정 12일 때 중반 미네랄의 94%가 유닛 생성으로 흘러 GOD 타워가 R51에 20기(필드의 60%),
@@ -89,7 +100,7 @@ namespace GodTD.Core
         /// [프로토]
         /// </summary>
         public const int SPAWN_FREE_COUNT = 8;
-        public const float SPAWN_COST_GROWTH = 0.45f;
+        public const float SPAWN_COST_GROWTH = 0.4f; // 0.35 → 0.4 (5차: GOD 페이스 -10~20%) ← web
         public static int SpawnUnitCost(int spawned) =>
             (int)System.Math.Round(
                 SPAWN_UNIT_MINERAL + SPAWN_COST_GROWTH * System.Math.Max(0, spawned - SPAWN_FREE_COUNT),
@@ -103,7 +114,7 @@ namespace GodTD.Core
         public static int ProbeCost(int owned) =>
             (int)MathF.Round(PROBE_MINERAL * MathF.Pow(PROBE_COST_GROWTH, owned));
         public const int PROBE_MAX = 16;
-        public const float GAS_PER_PROBE_SECOND = 0.25f;
+        public const float GAS_PER_PROBE_SECOND = 0.4f; // 0.25 → 0.4 (4차: 가스가 보드 파워 주축) ← web
 
         /// <summary>
         /// 파일런 종족 업그레이드. 가스 소비. [프로토]
@@ -111,13 +122,15 @@ namespace GodTD.Core
         /// 비용 8+4L+L² → 선형 2+4L. 가산+선형만이 "레벨이 오를수록 효율 감소"를 만든다.
         /// 첫 업 2 = 시작 가스 6으로 3개 병과 1업. ← web/src/data/balance.ts
         /// </summary>
-        public const float UPGRADE_DAMAGE_PER_LEVEL = 0.4f;
-        public static int UpgradeGasCost(int level) => 2 + 4 * level;
+        public const float UPGRADE_DAMAGE_PER_LEVEL = 0.45f; // 0.4 → 0.45 (4차) ← web
+        // 5차 2+6L → 6차 2+3L+0.2L²: 첫 스텝 2→8 점핑 해소 (2→5→9→13), 총예산 보존. ← web
+        public static int UpgradeGasCost(int level) =>
+            (int)MathF.Round(2f + 3f * level + 0.2f * level * level);
 
         // ───────── 보스 소환 ─────────
         // 소환은 라운드 진행과 무관한 상시 액션이고 쿨타임만 있다. 비용 없음.
         // Lv N은 Lv N-1을 처치해야 열린다. (원본 감지 로직·쿨타임은 EUD로 미확인 — §11.1)
-        public const int BOSS_MAX_LEVEL = 6;
+        public const int BOSS_MAX_LEVEL = 7; // 6 → 7 (5차: 종반 적장 신설 — 원본은 Lv6까지) ← web
         public const float BOSS_COOLDOWN_SECONDS = 45f; // [프로토]
 
         /// <summary>
@@ -133,8 +146,21 @@ namespace GodTD.Core
         // 2026-07-16: 기본공 7→4에 맞춰 HP 1150→700, 장갑 3L→1.5L (장갑은 감산이라 함께 절반).
         // 2026-07-17: 성장 2.5 → 3.0 — 사다리 소진 R22가 너무 빨랐다 (Lv4 R15·Lv6 R22).
         // Lv1~2 앵커 유지, 상위만 가팔라진다: Lv6 = 170k (GOD 1기 시대 종료). ← web
-        public static float BossHP(int level) => 700f * MathF.Pow(3.0f, level - 1);
-        public static float BossArmor(int level) => 1.5f * level;
+        // 4차: base 550(기본공 3 동행)·성장 3.4 — GOD 다수 체제에서 사다리 재조정. ← web
+        // 7차: 꼭대기 두 단만 완만하게 (Lv6 -24% · Lv7 -42%) — 아래 단 리듬은 불변. ← web
+        public const float BOSS_HP_BASE = 800f;
+        public const float BOSS_HP_GROWTH = 3.4f;
+        public const int BOSS_HP_TOP_FROM = 5;
+        public const float BOSS_HP_TOP_GROWTH = 2.6f;
+        public static float BossHP(int level)
+        {
+            int capped = Math.Min(level, BOSS_HP_TOP_FROM);
+            float b = BOSS_HP_BASE * MathF.Pow(BOSS_HP_GROWTH, capped - 1);
+            return level <= BOSS_HP_TOP_FROM
+                ? b
+                : b * MathF.Pow(BOSS_HP_TOP_GROWTH, level - BOSS_HP_TOP_FROM);
+        }
+        public static float BossArmor(int level) => 1.1f * level;
         public const float BOSS_SPEED = 26f;
 
         /// <summary>
@@ -160,20 +186,21 @@ namespace GodTD.Core
         // 시뮬(48판)로 측정한 기대 유효 DPS(장갑 감산 반영, P50)의 구분지수 근사.
         // 벽은 지수 — 선형이면 지수로 크는 보드가 결국 이긴다. 보정 5회 이력은 웹 주석 참조.
         // 2026-07-16 재적합: 기본공 7→4 + 가산 가스 업그레이드로 곡선 전면 갱신 (후반 성장 7.1%/R).
+        // 2026-07-17 4차 재적합: 기본공 3·가스 0.4/s·보상 가속 — 후반 성장 8.8%/R. ← web
         public static float ExpectedBoardDps(int round)
         {
-            if (round <= 13) return 37f * MathF.Pow(1.22f, round - 1);
-            if (round <= 31) return 420f * MathF.Pow(1.086f, round - 13);
-            return 1850f * MathF.Pow(1.071f, round - 31);
+            if (round <= 13) return 28f * MathF.Pow(1.195f, round - 1);
+            if (round <= 31) return 237f * MathF.Pow(1.116f, round - 13);
+            return 1705f * MathF.Pow(1.088f, round - 31);
         }
 
         // 6차 (2026-07-16): 킥 있는 벽 폐지 → 성장률 연속 램프 (R30~48에 1.4%→20% 선형,
         // 이후 유지). 최종 보스 없음 — R60도 그냥 강한 웨이브라 "갑자기 벽"이 없어야 한다.
         // 목표: R60 도달 ≤10% · 클리어 ≤5%. ← web/src/data/balance.ts
-        public const int WAVE_RAMP_START = 30;
-        public const int WAVE_RAMP_END = 48;
+        public const int WAVE_RAMP_START = 26; // 30 → 26 (6차: 중반 R30~40 강화) ← web
+        public const int WAVE_RAMP_END = 52; // 48 → 52 (4차: R40 절벽 완화) ← web
         public const float WAVE_BASE_RATE = 0.014f;
-        public const float WAVE_MAX_RATE = 0.22f; // 0.20 → 0.22 (2026-07-17: 보스 무해화 후 재보정) ← web
+        public const float WAVE_MAX_RATE = 0.24f; // 0.27 → 0.24 (6차: 후반 완화 + 동시 몹 상한 세트) ← web
         public static float TargetClearSeconds(int round)
         {
             if (round <= WAVE_RAMP_START) return 18f + 0.45f * (round - 1);
@@ -195,7 +222,7 @@ namespace GodTD.Core
         /// </summary>
         public const int ENEMY_ARMOR_STEP_ROUNDS = 5;
         // 2026-07-16: 3 → 1.5 — 기본공 7→4와 세트 (장갑은 감산이라 원피해와 함께 절반).
-        public const float ENEMY_ARMOR_PER_STEP = 1.5f;
+        public const float ENEMY_ARMOR_PER_STEP = 1.1f; // 기본공 3 동행 (2026-07-17 4차)
         public static float EnemyArmor(int round) => (round / ENEMY_ARMOR_STEP_ROUNDS) * ENEMY_ARMOR_PER_STEP;
 
         /// <summary>
@@ -208,6 +235,8 @@ namespace GodTD.Core
 
         /// <summary>웨이브 내 스폰 간격(초) [프로토]</summary>
         public const float SPAWN_INTERVAL = 0.18f;
+        /// <summary>동시 일반 몹 상한 (6차) — 상한이면 스폰을 미룬다 (총 체력 불변). ← web</summary>
+        public const int MAX_ALIVE_MOBS = 45;
 
         /// <summary>몹 2열 레인 — 경로 중심선에서 좌우로 비끼는 표시 오프셋(px). 판정은 1D. [프로토]</summary>
         public const float MOB_LANE_OFFSET = 8f;
@@ -246,8 +275,8 @@ namespace GodTD.Core
         // ───────── 전투 (전부 [프로토]) ─────────
         // 원본은 무기슬롯→유닛 바인딩 정보가 없어 실제 공격력을 읽을 수 없다(§11.3).
         // 태그 3종의 전투 의미도 원본이 정의하지 않는다. 아래는 태그 이름에서 유도한 설계다.
-        // 7 → 4 (2026-07-16 economy-power-rebalance D2): 공짜 파워를 가스 업그레이드로 이관. ← web
-        public const float BASE_DAMAGE = 4f;
+        // 7 → 4 → 3 (2026-07-17 4차): 공짜 파워를 가스 업그레이드로 이관, 가스 0.4/s와 세트. ← web
+        public const float BASE_DAMAGE = 3f;
         public static readonly float[] TIER_DAMAGE = { 1f, 3f, 9f, 28f, 95f };
         public static readonly float[] TIER_RANGE = { 120f, 140f, 160f, 185f, 225f };
         public const float BASE_ATTACK_INTERVAL = 0.9f;

@@ -87,7 +87,7 @@ describe('밸런스 CSV — 코드와 일치해야 한다', () => {
     expect(rows[0]).toContain('grantsSkill');
     expect(rows[0]).toContain('requiresSkill');
     expect(rows.some((r) => r.includes('skill_volley'))).toBe(true);
-    expect(rows.some((r) => r.includes('explosive_arrow'))).toBe(true);
+    expect(rows.some((r) => r.includes('explosion'))).toBe(true);
   });
 
   test('파워 커브에 무증강과 특화 빌드가 둘 다 있다', () => {

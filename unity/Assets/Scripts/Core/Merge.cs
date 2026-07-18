@@ -43,6 +43,19 @@ namespace GodTD.Core
         }
 
         /// <summary>
+        /// 같은 티어 풀에서 **지금과 다른** 유닛을 뽑는다 (GOD 리롤용, 7차).
+        /// 현재 것을 빼고 뽑으므로 리롤은 반드시 무언가를 바꾼다. ← web
+        /// </summary>
+        public static UnitDef RerollUnit(int tier, UnitDef current, Func<double> rand, int bossesKilled)
+        {
+            var pool = PoolFor(tier, bossesKilled);
+            var others = new List<UnitDef>();
+            foreach (var d in pool) if (d.Name != current.Name) others.Add(d);
+            if (others.Count == 0) return current;
+            return others[Math.Min(others.Count - 1, (int)(rand() * others.Count))];
+        }
+
+        /// <summary>
         /// 같은 이름 유닛이 MERGE_REQUIRED기 모인 가장 낮은 티어를 한 번 조합한다.
         /// 연쇄 조합은 호출자가 반복 호출해서 처리한다.
         /// </summary>

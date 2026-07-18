@@ -166,12 +166,22 @@ namespace GodTD.View
                 tooltip: $"영웅 스킬 필요 마나 -6% — 더 자주 터진다. 필요 마정석 {game.GasSkillCost(GasSkillTrack.Cdr)}.");
         }
 
-        // ── 타워: 판매뿐. GOD 타입 변경(금화 리롤)은 게임 시스템이라 보류 — c[1] 자리를 비워 둔다. ──
+        // ── 타워: 판매 + GOD 리롤 (7차 — 예약해 둔 c[1] 자리를 채웠다) ──
         static void FillTower(Command[] c, Game game, Slot slot)
         {
             c[0] = new Command("판매", "금화 환급", true, () => game.SellSelected(),
                 DANGER, HudIcon.Sell,
                 tooltip: "이 타워를 팔고 금화 일부를 돌려받습니다.");
+
+            // GOD만 다시 뽑는다 — 병과가 어긋난 GOD를 금화로 교정 (지수 비용)
+            if (slot?.Tower == null || slot.Tower.Tier != Units.GOD_TIER) return;
+            bool can = game.CanRerollGod(slot);
+            c[1] = new Command("다시 뽑기",
+                Min(game.GodRerollCost),
+                can,
+                () => game.RerollGod(), HERO, HudIcon.Score,
+                reason: can ? DisableReason.None : DisableReason.Cost,
+                tooltip: $"이 GOD 타워의 종류를 다시 뽑습니다 (지금과 다른 것으로). 필요 금화 {game.GodRerollCost}.");
         }
 
         static void FillEmptyTile(Command[] c, Game game, Slot slot)

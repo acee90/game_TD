@@ -53,6 +53,8 @@ export interface HeroStats {
   readonly thorns: number;
   readonly deathBlast: number;
   readonly deathBlastRadius: number;
+  /** 평타·스킬 명중마다 이 반경 안 다른 적에게 같은 피해를 준다 ('폭발' 증강) */
+  readonly explosionRadius: number;
 
   // ── 경제
   readonly mineralPerWave: number;
@@ -138,8 +140,8 @@ export function computeStats(
   let thorns = 0;
   let deathBlast = 0;
   let deathBlastRadius = 0;
-  let killStackDamage = 0;
-  let killStackCap = 0;
+  let explosionRadius = 0;
+  let killStackFlatDamage = 0;
   let waveStackDamage = 0;
   let waveStackHp = 0;
   let manaOnDamaged = 0;
@@ -222,8 +224,8 @@ export function computeStats(
     if (e.thorns) thorns += e.thorns;
     if (e.deathBlast) deathBlast += e.deathBlast;
     if (e.deathBlastRadius) deathBlastRadius += e.deathBlastRadius;
-    if (e.killStackDamage) killStackDamage += e.killStackDamage;
-    if (e.killStackCap) killStackCap += e.killStackCap;
+    if (e.explosionRadius) explosionRadius += e.explosionRadius;
+    if (e.killStackFlatDamage) killStackFlatDamage += e.killStackFlatDamage;
     if (e.waveStackDamage) waveStackDamage += e.waveStackDamage;
     if (e.waveStackHp) waveStackHp += e.waveStackHp;
     if (e.manaOnDamaged) manaOnDamaged += e.manaOnDamaged;
@@ -237,18 +239,21 @@ export function computeStats(
   // ── 성장 누적. 성장 배수(growth 보너스 + 진화의 곱)가 누적치 자체를 키운다.
   //    성장도 가산이다 — 공격력 보너스에 합류할 뿐 따로 곱하지 않는다.
   const growthMult = (1 + bonus.growth) * compound.growth;
-  if (killStackDamage > 0) {
-    const gained = Math.min(killStackDamage * growth.killStacks, killStackCap);
-    bonus.damage += gained * growthMult;
-  }
+  // 고정치 막타 성장 — waveStackDamage처럼 상한 없이 그대로 쌓인다. %가 아니라
+  // 최종 공격력에 그대로 더해지므로 다른 배수 보너스 계산과 분리해 아래서 가산한다.
+  let killStackFlatBonus = 0;
+  if (killStackFlatDamage > 0) killStackFlatBonus = killStackFlatDamage * growth.killStacks * growthMult;
   if (waveStackDamage > 0) bonus.damage += waveStackDamage * growth.waveStacks * growthMult;
   if (waveStackHp > 0) bonus.hp += waveStackHp * growth.waveStacks * growthMult;
 
-  // 최종 = 기본 × (1 + 가산 보너스 합) × 곱연산 증강
+  // 최종 = 기본 × (1 + 가산 보너스 합) × 곱연산 증강, 그 위에 고정치 성장을 더한다
   maxHp *= Math.max(0.1, 1 + bonus.hp) * compound.hp;
   damage *= Math.max(0.1, 1 + bonus.damage) * compound.damage;
+  damage += killStackFlatBonus;
   range *= Math.max(0.2, 1 + bonus.range);
   attackSpeed *= Math.max(0.2, 1 + bonus.attackSpeed);
+  // 레벨 기본 공속 — 증강 배수(바로 위)와는 별도로 곱연산 (2026-07-18, 사용자 지시)
+  attackSpeed *= 1 + H.LEVEL_ATTACK_SPEED_RATE * level;
   moveSpeed *= Math.max(0.2, 1 + bonus.moveSpeed);
 
   return {
@@ -281,6 +286,7 @@ export function computeStats(
     thorns,
     deathBlast,
     deathBlastRadius,
+    explosionRadius,
 
     mineralPerWave,
     waveRewardMult: Math.max(0.1, 1 + bonus.waveReward),
@@ -397,7 +403,9 @@ export class Hero {
 
   /** 들고 있는 액티브 스킬. 스킬 증강을 안 골랐으면 null. */
   get skillId(): SkillId | null {
-    return this.augments.find((c) => c.augment.grantsSkill)?.augment.grantsSkill ?? null;
+    // 기본 스킬 '강타' (6차) — 스킬 증강을 뽑으면 그쪽이 교체한다.
+    // 가스 스킬 강화가 게임 시작부터 유효해진다.
+    return this.augments.find((c) => c.augment.grantsSkill)?.augment.grantsSkill ?? K.DEFAULT_SKILL;
   }
 
   /** 개조가 반영된 스킬 수치 — 증강 개조와 가스 개조가 함께 접힌다 */
@@ -419,7 +427,7 @@ export class Hero {
       gas.push({ manaMaxMult: Math.pow(K.GAS_SKILL_CDR_MULT, this.gasSkillCdr) });
     // 허수아비·처형은 손이 빠를수록 자주 나간다 — 공속이 쿨을 깎는다
     const attackSpeedRatio = H.HERO_ATTACK_INTERVAL / stats.attackInterval;
-    return resolveSkill(id, foldMods([...patches, ...gas]), attackSpeedRatio);
+    return resolveSkill(id, foldMods([...patches, ...gas]), attackSpeedRatio, this.level);
   }
 
   /** 시전에 필요한 마나 (개조 반영) */
@@ -585,7 +593,8 @@ export function rollAugmentChoices(hero: Hero, rand: () => number): AugmentCard[
   const cards: AugmentCard[] = [];
   while (cards.length < H.AUGMENT_CHOICES && remaining.length > 0) {
     const index = weightedIndex(remaining.map(weightOf), rand);
-    cards.push(H.makeCard(remaining[index], H.rollRarity(rand)));
+    const augment = remaining[index];
+    cards.push(H.makeCard(augment, augment.fixedRarity ?? H.rollRarity(rand)));
     remaining.splice(index, 1);
   }
   return cards;

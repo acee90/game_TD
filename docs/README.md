@@ -1,6 +1,6 @@
 # docs — 문서 지도
 
-> 상태: **현행** (새 문서는 여기에 등록한다) · 최종 갱신: 2026-07-16
+> 상태: **현행** (새 문서는 여기에 등록한다) · 최종 갱신: 2026-07-18
 > 규칙: [documentation-rules.md](documentation-rules.md) · 상태가 **현행**인 문서만 기준으로 삼는다.
 
 ```
@@ -31,6 +31,7 @@ docs/
 | [ga-policy-validation-v0.1.md](reports/ga-policy-validation-v0.1.md) | 현행 | GA 운영정책 검증 v0.1/v0.2 |
 | [hero-tower-power-balance-v0.1.md](reports/hero-tower-power-balance-v0.1.md) | 현행 | 영웅/타워 딜 지분·구간별 커브 실측 |
 | [unity-hud-playtest-v0.1.md](reports/unity-hud-playtest-v0.1.md) | 현행 | Unity HUD 입력 안전·상태 가독성·영웅 이동 정성 관찰 6건 |
+| [unity-vfx-baseline-v0.1.md](reports/unity-vfx-baseline-v0.1.md) | 현행 | Unity 전투 VFX 2조건×6시나리오×3시점 자동 캡처 비교 |
 
 ## reference/ — 원본·외부 게임 분석
 
@@ -60,6 +61,8 @@ docs/
 |---|---|---|
 | [unity-sync-plan.md](exec-plans/unity-sync-plan.md) | 진행 중 | Unity 동기화 이어하기 (미커밋 부분 반영 상태 포함) |
 | [unity-hud-redesign.md](exec-plans/unity-hud-redesign.md) | 초안 | H1~H4 구현 이력 + H5 프로덕션 HUD 업그레이드 계획 |
+| [unity-vfx-quality-plan.md](exec-plans/unity-vfx-quality-plan.md) | 초안 | 로우폴리·카툰 전투 VFX 스타일 통일, 버티컬 슬라이스·애셋 평가·검증 계획 |
+| [game-run-logging.md](exec-plans/game-run-logging.md) | 초안 | GitHub #12~#16 — Web·Unity 공통 JSONL 게임 로그, 저장·분석·회귀 검증 실행 계획 |
 | [hero-point-movement.md](exec-plans/hero-point-movement.md) | 초안 | 클릭 지점 영웅 이동 모델 + 목적지·경로 표시 |
 | [economy-power-rebalance.md](exec-plans/economy-power-rebalance.md) | 구현됨 | 영웅 비용 스케일링 + 가스 업그레이드 개편 — 시뮬 검증 완료, 사람 플레이테스트 대기 |
 
