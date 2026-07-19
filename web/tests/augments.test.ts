@@ -133,6 +133,19 @@ describe('발동 효과 — 새 전투 프리미티브', () => {
     expect(hero.hp).toBeGreaterThan(10);
   });
 
+  test('흡혈은 등급으로 증폭되지 않고 총 12%를 넘지 않는다', () => {
+    const silver = card('berserk', 'silver');
+    const platinum = card('berserk', 'platinum');
+    expect(silver.augment.effect.lifesteal).toBe(0.03);
+    expect(platinum.augment.effect.lifesteal).toBe(0.03);
+
+    const hero = new Hero();
+    for (let i = 0; i < 3; i++) hero.addAugment(card('lifesteal', 'platinum'));
+    hero.addAugment(card('bloodpact', 'platinum'));
+    hero.addAugment(card('berserk', 'platinum'));
+    expect(hero.stats.lifesteal).toBe(H.LIFESTEAL_CAP);
+  });
+
   test('처형은 체력이 낮은 몹을 즉사시킨다 — 보스는 예외', () => {
     const game = new Game();
     const hero = game.hero;
