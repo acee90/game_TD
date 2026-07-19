@@ -31,7 +31,6 @@
 // - 보스는 **잡을 수 있는 최고 레벨만** 부르는 안전 운영을 가정한다(실패 = 라이프 -1).
 
 import * as B from '../src/data/balance';
-import { GOD_TIER } from '../src/data/units';
 
 /** 누적 유닛 수 → [평균 DPS, 변동계수] — 실제 조합 로직 MC 실측 (업그레이드 0 기준) */
 const DPS_TABLE: readonly (readonly [units: number, mean: number, cv: number])[] = [
