@@ -385,6 +385,7 @@ export function eventDescription(event: GameRunEvent): string {
     case 'race_upgraded': return `${event.data.raceName} Lv${event.data.toLevel}`;
     case 'round_started': return `라운드 ${event.data.round} 시작`;
     case 'round_cleared': return `라운드 ${event.data.round} 정산`;
+    case 'game_cleared': return `R${event.data.round} 클리어! (라이프 ${event.data.lives})`;
     case 'game_over': return `${event.data.enemyKind} 누출로 패배`;
     case 'run_started': return '런 시작';
     case 'run_finished': return `런 종료 (${event.data.reason})`;

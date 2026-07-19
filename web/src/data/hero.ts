@@ -72,8 +72,20 @@ export const HERO_OOC_REGEN_DELAY = 4;
 /** 비전투 재생 — 초당 최대 체력의 이 비율 (풀피까지 ~17초, 라운드 간격이 22초다) */
 export const HERO_OOC_REGEN_RATIO = 0.06;
 
-/** 민첩 1당 공격 속도 +4% */
-export const AS_PER_AGI = 0.04;
+/**
+ * 민첩 공속 — 포화식 (2026-07-19, 사용자 지시: "레벨당 공속 증가율 감소, Lv40 기준 3.0/초").
+ *
+ * 민첩은 자동 균등 성장으로 레벨에 초선형으로 자라서(Lv40 민첩 84) 선형 공속으로는
+ * 무증강도 Lv20~30에 하한(0.25s)에 박혔다 — 이후 민첩·레벨 공속이 전부 낭비되고,
+ * 영웅 몰빵 평타 DPS가 서고점을 만든다. 포화식(AS_PER_AGI×agi/(1+agi/CAP))으로 눌러
+ * 기여 상한을 +AS_PER_AGI×CAP(= +129%)로 둔다.
+ *
+ * 상수(0.056/23)는 두 앵커의 재적합 해다 — **Lv1 1.67/초(기존 그대로 — 저레벨을
+ * 건드리면 Lv1 보스 앵커 boss-balance.test.ts가 깨진다) · Lv40 3.0/초(사용자 지시)**.
+ * 무증강 기준: Lv1 1.67 · Lv10 1.9 · Lv20 2.3 · Lv30 2.7 · **Lv40 3.0** · Lv56 3.4.
+ */
+export const AS_PER_AGI = 0.056;
+export const AS_AGI_SOFT_CAP = 23;
 /**
  * 레벨업마다 오르는 **기본** 공격 속도 (2026-07-18, 사용자 지시) — 민첩 스탯과는
  * 별개 축이다. "기본 공격속도"라 증강의 attackSpeedMult와는 가산이 아니라
@@ -88,7 +100,9 @@ export const AS_PER_AGI = 0.04;
  * 안에서 오간다 — 정확히 같지는 않지만(공속 하한이라는 비선형이 이미 있어 완전한
  * 상쇄가 불가능하다) 훨씬 가깝다.
  */
-export const LEVEL_ATTACK_SPEED_RATE = 0.0125;
+// 0.0125 → 0.005 (2026-07-19, 사용자 지시): 민첩 소프트캡과 세트 — 레벨 축 공속도
+// 완만하게. Lv40 무증강 3.0/초 앵커의 나머지 절반을 이 축이 만든다.
+export const LEVEL_ATTACK_SPEED_RATE = 0.005;
 /** 공격 간격 하한 — 민첩을 아무리 골라도 이 밑으로는 안 내려간다 */
 export const MIN_ATTACK_INTERVAL = 0.25;
 /** 지능 1당 스킬 피해 +3.5% */
@@ -729,6 +743,32 @@ export const makeCard = (augment: Augment, rarity: Rarity): AugmentCard => ({
  * 설계 참고: LoL 아레나 226종 · TFT 세트17 275종을 기능 분류한
  * docs/reference/augment-taxonomy-v1.0.md. 그쪽에서 가져온 패턴은 주석에 적었다.
  */
+/**
+ * 영웅 직접 캐리 빌드 **임시 차단** (2026-07-19, 사용자 지시).
+ *
+ * "처형자의 일격·막타 공격력 스택 같은 직접 캐리 빌드는 고점 예측이 어려워 밸런스를
+ * 잡기 어렵다 — 영웅 역할을 **탱커·타워 보조**로 한정하자." 여기 든 id는 드래프트에서
+ * 제외된다(rollAugmentChoices). **데이터는 지우지 않는다** — 임시 조치라 명단만 걷어내면
+ * 복구되고, 효과 로직·분류 테스트는 그대로 산다.
+ *
+ * 남는 축: 방어·가시·어그로(탱킹) / 감속·방깎·화상 고정딜(군중 제어) / 경제 /
+ * 타워 강화 / 체력 성장. 허용된 보조 딜: 체력 비례(초신성)·잃은 체력 조건(최후의 저항)·
+ * 화염 고정 피해(중첩) — 전부 공격력 스탯과 무관하거나 상한이 읽히는 축이다.
+ */
+export const HERO_CARRY_BLOCKLIST: ReadonlySet<string> = new Set([
+  // 공격 스탯 — 평타 캐리의 연료 (순수 탱크 방벽·bulwark만 남긴다)
+  'might', 'marksman', 'rapid', 'longbow', 'vigor', 'arcane', 'goliath', 'glasscannon', 'duelist',
+  // 평타 확장·치명·즉사·폭발 — 예측 불가 고점의 주범 (즉사는 사용자가 직접 지목)
+  'novasmall', 'novabig', 'crit', 'deadeye', 'execute', 'ruthless', 'deathblast', 'berserk',
+  // 딜 스킬 획득 — 남는 스킬: 허수아비(탱킹)·불화살(화상 지원)·얼음화살(감속)
+  'skill_whirlwind', 'skill_volley', 'skill_meteor', 'skill_chain', 'skill_execution', 'skill_laser',
+  // 스킬 딜 증폭·차단된 스킬 전용 개조 (마나·회전 개조는 남긴다 — 보조 스킬도 쓴다)
+  'skill_amp', 'skill_overload', 'skill_focus', 'explosion',
+  'multishot', 'cyclone', 'cataclysm', 'laser_range', 'laser_rapid', 'skill_barrage',
+  // 공격력 성장 스택 — "막타시 공격력 증가" (체력 성장 ironblood·진화는 남긴다)
+  'hunterinstinct', 'bloodthirst', 'veteran', 'momentum', 'adaptive', 'relentless', 'warmachine',
+]);
+
 export const AUGMENTS: readonly Augment[] = [
   // ══ 강화 (stat) — 순수 수치. 재편 전 31%에서 14%로 줄였다.
   { id: 'might', kind: 'stat', name: '완력', description: '공격력 +60%', maxStacks: 3,

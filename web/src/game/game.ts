@@ -59,6 +59,11 @@ export class Game {
   private readonly scoredGods = new Set<string>();
   message = '소용돌이를 클릭해 유닛을 생성하세요. 같은 유닛 2기가 모이면 조합됩니다.';
 
+  /** R60(CLEAR_ROUND)을 넘겼는가 — 클리어 후에도 게임은 무한 모드로 계속된다 */
+  cleared = false;
+  /** 클리어 직후 승리 오버레이 대기 중 — 이 동안 게임이 멈춘다 (증강 선택과 같은 방식) */
+  clearPending = false;
+
   /** 처치한 최고 보스 레벨. Lv N+1 소환은 Lv N을 잡아야 열린다. */
   bossCleared = 0;
   bossesKilled = 0;
@@ -219,6 +224,7 @@ export class Game {
       round: this.round,
       elapsedSeconds: this.elapsedSeconds,
       kills: this.kills,
+      cleared: this.cleared,
       bossCleared: this.bossCleared,
       bossesKilled: this.bossesKilled,
       heroLevel: this.hero.level,
@@ -255,9 +261,16 @@ export class Game {
     return summary;
   }
 
-  /** 증강 선택 중에는 시간이 흐르지 않는다. */
+  /** 증강 선택·클리어 오버레이 중에는 시간이 흐르지 않는다. */
   get paused(): boolean {
-    return this.augmentChoices.length > 0;
+    return this.augmentChoices.length > 0 || this.clearPending;
+  }
+
+  /** 클리어 오버레이에서 "무한 모드 계속"을 누른다 */
+  continueAfterClear(): void {
+    if (!this.clearPending) return;
+    this.clearPending = false;
+    this.message = `무한 모드 — R${B.CLEAR_ROUND + 1}부터는 명예의 전당 점수 경쟁입니다.`;
   }
 
   // ── 제단 · 영웅 ──
@@ -1344,10 +1357,22 @@ export class Game {
       this.gasFraction -= whole;
     }
 
-    this.roundTimer -= dt;
-    if (this.roundTimer <= 0) {
-      this.roundTimer = B.ROUND_SECONDS;
-      this.beginRound();
+    // 다음 라운드 카운트다운은 **이번 웨이브가 다 나온 뒤에야** 흐른다 (2026-07-19,
+    // 사용자 지시: "몬스터가 아직 지나가는데 다음 몬스터가 계속 나와 더 어렵게 느껴진다").
+    // 후반에 동시 몹 상한으로 스폰이 밀리면 그만큼 다음 라운드도 밀린다 — 웨이브가
+    // 겹겹이 쌓이지 않는다. 클리어 라운드(R60)는 한 발 더: 웨이브를 **완전히 정리**할
+    // 때까지 다음 라운드를 열지 않는다 — 그 정리가 곧 승리 판정이다 (아래 resolveClear).
+    const holdRoundTimer =
+      this.spawnQueue.length > 0 ||
+      (this.round === B.CLEAR_ROUND &&
+        !this.cleared &&
+        this.enemies.some((e) => !e.dead && e.kind !== 'boss'));
+    if (!holdRoundTimer) {
+      this.roundTimer -= dt;
+      if (this.roundTimer <= 0) {
+        this.roundTimer = B.ROUND_SECONDS;
+        this.beginRound();
+      }
     }
 
     if (this.spawnQueue.length) {
@@ -1392,6 +1417,8 @@ export class Game {
     if (this.selectedEnemy?.dead) this.selectedEnemy = null;
     this.enemies = this.enemies.filter((e) => !e.dead);
 
+    this.resolveClear();
+
     // 투사체 궤적은 전투의 일부 — combatDt로 함께 늦춘다. (아래 떠오르는 텍스트는 UI라 실시간)
     for (const shot of this.shots) shot.life -= combatDt;
     this.shots = this.shots.filter((s) => s.life > 0);
@@ -1400,6 +1427,27 @@ export class Game {
       f.y -= 18 * dt;
     }
     this.floats = this.floats.filter((f) => f.life > 0);
+  }
+
+  /**
+   * R60 클리어 판정 (2026-07-19, 사용자 지시: "타이머가 아니라 웨이브를 정리해야 승리") —
+   * CLEAR_ROUND의 몹이 **전부 필드에서 사라지고**(죽였든, 놓쳐서 누출됐든) 라이프가
+   * 남아 있으면 승리. 누출로 라이프가 0이 되면 game_over가 먼저 잡는다(update 상단 return).
+   * 보스는 웨이브가 아니라 플레이어 소환물이라 판정에서 제외한다.
+   */
+  private resolveClear(): void {
+    if (this.cleared || this.over || this.round !== B.CLEAR_ROUND) return;
+    if (this.spawnQueue.length > 0) return; // 아직 다 나오지도 않았다
+    if (this.enemies.some((e) => e.kind !== 'boss')) return;
+    this.cleared = true;
+    this.clearPending = true;
+    this.score += S.CLEAR_SCORE;
+    this.record('game_cleared', {
+      round: B.CLEAR_ROUND,
+      score: this.score,
+      lives: this.lives,
+    });
+    this.message = `R${B.CLEAR_ROUND} 클리어! +${S.CLEAR_SCORE.toLocaleString()}점`;
   }
 
   /**

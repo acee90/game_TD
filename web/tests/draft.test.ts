@@ -26,6 +26,41 @@ function offerCounts(hero: Hero, rolls: number, seed = 42): Map<H.AugmentKind, n
   return counts;
 }
 
+describe('영웅 캐리 빌드 임시 차단 (2026-07-19, 사용자 지시)', () => {
+  test('차단 명단의 증강은 어떤 드래프트에도 뜨지 않는다', () => {
+    const rand = lcg(7);
+    // 빈 손 영웅 + 여러 계열을 든 영웅 모두에서 확인
+    const heroes = [new Hero(), new Hero()];
+    heroes[1].addAugment(card('bulwark'));
+    heroes[1].addAugment(card('provoke'));
+    heroes[1].addAugment(card('burn'));
+    for (const hero of heroes) {
+      for (let i = 0; i < 200; i++) {
+        for (const c of rollAugmentChoices(hero, rand)) {
+          expect(H.HERO_CARRY_BLOCKLIST.has(c.augment.id)).toBe(false);
+        }
+      }
+    }
+  });
+
+  test('스킬 보장 카드는 보조 스킬(허수아비·불화살·얼음화살)만 나온다', () => {
+    const rand = lcg(11);
+    const hero = new Hero(); // 기본 강타만 보유 — 매 제안에 스킬 획득 1장 보장
+    const allowed = new Set(['skill_decoy', 'skill_firearrow', 'skill_icearrow']);
+    for (let i = 0; i < 200; i++) {
+      const grants = rollAugmentChoices(hero, rand).filter((c) => c.augment.grantsSkill);
+      expect(grants.length).toBe(1);
+      expect(allowed.has(grants[0].augment.id)).toBe(true);
+    }
+  });
+
+  test('차단은 드래프트만 막는다 — 데이터·효과는 그대로 산다 (임시 조치)', () => {
+    for (const id of H.HERO_CARRY_BLOCKLIST) {
+      expect(H.AUGMENTS.some((a) => a.id === id)).toBe(true);
+    }
+  });
+});
+
 describe('적응형 드래프트', () => {
   test('타입 제한이 없다 — 빈 손이면 모든 계열·모든 스킬이 뜰 수 있다', () => {
     const hero = new Hero();

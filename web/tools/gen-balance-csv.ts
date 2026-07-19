@@ -198,7 +198,8 @@ write(
       ['HERO_BASE_INT', H.HERO_BASE_INT, '기본 지능'],
       ['DMG_PER_STR', H.DMG_PER_STR, '힘 1당 공격력'],
       ['HP_PER_STR', H.HP_PER_STR, '힘 1당 체력'],
-      ['AS_PER_AGI', H.AS_PER_AGI, '민첩 1당 공속'],
+      ['AS_PER_AGI', H.AS_PER_AGI, '민첩 1당 공속 (포화식 분자)'],
+      ['AS_AGI_SOFT_CAP', H.AS_AGI_SOFT_CAP, '민첩 공속 소프트캡 — 기여 상한 AS_PER_AGI×CAP'],
       ['SKILL_PER_INT', H.SKILL_PER_INT, '지능 1당 스킬 피해'],
       ['XP_BUY_GOLD', H.XP_BUY_GOLD, 'XP 골드 구매 — 1골드=1XP, 버튼당 20 (3안 유지)'],
       ['levelStatPoints(1)', H.levelStatPoints(1), '레벨업당 세 스탯 총 포인트 (2+floor(L/10), 3등분)'],
@@ -216,51 +217,33 @@ write(
 );
 
 
-// ── 라운드별 수입 저점·고점 — 영웅/타워/몬스터 밸런스의 공통 기준
+// ── 난이도 모델 시트 (2026-07-19 재설계) — 수입 → 전투력 → 웨이브를 잇는 수학 기준
 //
-// 웨이브 보상·킬 마일스톤은 사실상 결정론이라, 수입 격차는 **보스 레벨 선택**에서 나온다.
-// 저점: 필요마나(45초)마다 부르되 **Lv1만** — 항상 성공하는 안전 운영 (+5씩).
-// 고점: 필요마나마다 **항상 최고 해금 레벨**을 부르고 전부 잡는 상한 —
-//   k번째 소환 = Lv min(k, 6). 소환은 t=0부터 가능하므로 floor(t/45)+1회.
-// 제외: 증강 mineralPerKill(빌드 의존), 누출 보너스(킬 마일스톤과 대략 상쇄).
-// 주의: 수입의 결정 축이 보스 하나뿐이다 — 원작의 미션류(빙고) 같은 두 번째 축은 백로그.
+// 모든 열이 src/data/balance.ts의 모델 함수를 **그대로** 읽는다 — 시트에 자체 수식이
+// 없으므로 상수를 바꾸면 시트가 즉시 따라온다. 시뮬레이션은 검산용이지 기준이 아니다.
+// growthPct가 난이도 체감의 핵심 열: R13~50은 수입 성장률을 따라 한 자릿수로 내려가고
+// (선형 체감), R50부터 벽 램프가 라운드당 ~1.4%p씩 올려 R58+ ~17.5%로 고정된다.
 const incomeRows: (string | number)[][] = [];
 {
-  let waveCum = 0;
-  let kills = 0;
-  const milestoneCum = (k: number): number => {
-    let sum = 0;
-    for (const [need, reward] of B.KILL_MILESTONES) if (k >= need) sum += reward;
-    return sum;
-  };
-  const bossHighCum = (summons: number): number => {
-    let sum = 0;
-    for (let k = 1; k <= summons; k++) sum += B.BOSS_KILL_MINERAL[Math.min(k, 6) - 1];
-    return sum;
-  };
-  for (let r = 1; r <= 60; r++) {
-    waveCum += B.waveReward(r);
-    kills += B.enemyCount(r);
-    const elapsed = B.OPENING_SECONDS + r * B.ROUND_SECONDS;
-    const summons = Math.floor(elapsed / B.BOSS_COOLDOWN_SECONDS) + 1;
-    const base = B.START_MINERAL + waveCum + milestoneCum(kills);
-    const bossLow = summons * B.BOSS_KILL_MINERAL[0];
-    const bossHigh = bossHighCum(summons);
+  for (let r = 1; r <= 70; r++) {
+    const total = B.enemyHP(r) * B.enemyCount(r);
+    const growth =
+      r > 1 ? Math.round((B.waveTotalHp(r) / B.waveTotalHp(r - 1) - 1) * 1000) / 10 : 0;
+    // 함의된 clear(초) = 총체력 ÷ 보드 DPS 모델 — R15+는 성장률 지정이라 역산으로 보여준다
+    const impliedClear = B.waveTotalHp(r) / B.expectedBoardDps(r);
     incomeRows.push([
       r,
       B.waveReward(r),
       B.enemyCount(r),
-      kills,
-      milestoneCum(kills),
-      bossLow,
-      bossHigh,
-      base + bossLow,
-      base + bossHigh,
+      Math.round(B.cumulativeIncomeMid(r)),
+      Math.round(B.bossSummonsBy(r) * 10) / 10,
+      Math.round(B.expectedBoardDps(r)),
+      Math.round(impliedClear * 10) / 10,
       B.enemyHP(r),
       B.enemyArmor(r),
-      B.enemyHP(r) * B.enemyCount(r),
-      Math.round(B.targetClearSeconds(r) * 10) / 10,
-      Math.round(B.expectedBoardDps(r)),
+      total,
+      growth,
+      r === B.CLEAR_ROUND ? 'CLEAR' : '',
     ]);
   }
 }
@@ -268,9 +251,9 @@ write(
   'income-curve.csv',
   toCsv(
     [
-      'round', 'waveReward', 'mobs', 'cumKills', 'milestoneCum',
-      'bossLowCum', 'bossHighCum', 'cumIncomeLow', 'cumIncomeHigh',
-      'enemyHp', 'enemyArmor', 'waveTotalHp', 'targetClearSec', 'expectedBoardDps',
+      'round', 'waveReward', 'mobs', 'cumIncomeMid', 'bossSummons',
+      'boardDpsModel', 'impliedClearSec', 'enemyHp', 'enemyArmor', 'waveTotalHp',
+      'growthPct', 'note',
     ],
     incomeRows,
   ),

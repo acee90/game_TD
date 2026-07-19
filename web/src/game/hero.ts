@@ -118,7 +118,8 @@ export function computeStats(
   let maxHp = H.HERO_BASE_HP + H.HP_PER_STR * str;
   let damage = H.DMG_PER_STR * str;
   let range = H.HERO_BASE_RANGE;
-  let attackSpeed = 1 + H.AS_PER_AGI * agi;
+  // 민첩 공속은 포화식 — 소프트캡 위로는 기여가 점점 줄어든다 (2026-07-19, 사용자 지시)
+  let attackSpeed = 1 + (H.AS_PER_AGI * agi) / (1 + agi / H.AS_AGI_SOFT_CAP);
   let moveSpeed = H.HERO_SPEED;
   let regen = 0;
   let splashRadius = 0;
@@ -582,7 +583,10 @@ function weightedIndex(weights: readonly number[], rand: () => number): number {
  * 스킬 개조 증강은 이미 그 스킬을 든 영웅에게만 뜨므로 보유 스킬 계열만큼 기운다.
  */
 export function rollAugmentChoices(hero: Hero, rand: () => number): AugmentCard[] {
-  let remaining = H.AUGMENTS.filter((augment) => augmentAllowed(hero, augment));
+  // 영웅 직접 캐리 축은 임시 차단 (2026-07-19, 사용자 지시 — data/hero.ts HERO_CARRY_BLOCKLIST)
+  let remaining = H.AUGMENTS.filter(
+    (augment) => augmentAllowed(hero, augment) && !H.HERO_CARRY_BLOCKLIST.has(augment.id),
+  );
   const heldByKind = new Map<H.AugmentKind, number>();
   for (const c of hero.augments) {
     heldByKind.set(c.augment.kind, (heldByKind.get(c.augment.kind) ?? 0) + 1);

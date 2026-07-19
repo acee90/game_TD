@@ -4,6 +4,7 @@
 // [원본확정] 맵파일에서 직접 읽은 수치. 바꾸면 원작 재현이 깨진다.
 // [프로토]   원본이 EUD로 가려져 읽을 수 없어 플레이 가능하게 정한 수치.
 
+import { PATH_LENGTH } from '../core/map';
 import { GOD_TIER, type Tag } from './units';
 
 // ── 시작 자원 — trigger #349 SetResources(SetTo, 55, ore) / (SetTo, 6, gas) [원본확정]
@@ -23,6 +24,11 @@ export const ORIGINAL_ROUND_SECONDS = 57;
  * 고정 간격이면 시간당 보스 소환 횟수가 라운드 진행과 무관하게 일정하다.
  *
  * 원본 57초는 연출과 조합 시간이 있을 때의 값이라 프로토에서는 짧게 잡았다. [프로토]
+ *
+ * 2026-07-19 (사용자 지시): 카운트다운은 **이번 웨이브 스폰이 끝난 뒤부터** 흐른다
+ * (game.ts update). 후반에 동시 몹 상한으로 스폰이 밀리면 다음 라운드도 그만큼 밀려
+ * 웨이브가 겹겹이 쌓이지 않는다. "빨리 잡아도 안 앞당겨진다"는 원칙은 그대로다 —
+ * 정리 속도가 아니라 스폰 완료가 기준이라 보스 쿨 악용 여지도 없다.
  */
 export const ROUND_SECONDS = 22;
 /**
@@ -44,27 +50,29 @@ export const OPENING_SECONDS = 5;
 // Lv7 신설 (2026-07-17 5차 [프로토] — 원본은 Lv6까지): "R30 전에 Lv6을 잡으면
 // 성장의 흥미가 끝난다" — 사다리 꼭대기를 종반(R50+)으로 연장. 보상은 ×1.65 패턴.
 // Lv8 추가 (2026-07-18, 사용자 지시) — 같은 ×1.65 패턴을 한 단 더 (150 × 1.65 ≈ 248).
+// 2026-07-19 (사용자 지시): 보스 보상 ×2~4 배증을 **롤백**했다. 배증 상태에서 총 수입이
+// 부풀어 GOD 1기 도달이 R11까지 당겨졌다(측정: 유닛 52기 · 910골드 = 그 시점 누적수입).
+// 보스 비중을 올리는 목적은 라운드 보상을 평탄하게 낮춘 것(아래 waveReward)만으로도
+// 달성된다 — 총량은 그대로 두고 **비중만** 바꾸는 쪽이 GOD 페이스를 안 흔든다.
 export const BOSS_KILL_MINERAL = [5, 10, 18, 32, 55, 90, 150, 248] as const;
 
-/** 킬 마일스톤 보상. trigger #546~#566. 200킬 간격 [원본확정] */
-export const KILL_MILESTONES: readonly (readonly [kills: number, mineral: number])[] = [
-  [200, 5], [400, 5], [600, 10], [800, 5], [1000, 10],
-  [1200, 6], [1400, 10], [1600, 6], [1800, 6], [2000, 15],
-  [2200, 6], [2400, 6], [2600, 15], [2800, 6], [3000, 15],
-  [3200, 6], [3400, 6], [3600, 15], [3800, 6], [4000, 15],
-];
+/**
+ * 반복 킬 미션 — 20킬마다 +20골드 (2026-07-19, 사용자 지시).
+ * 200킬 간격 마일스톤 표(trigger #546~#566 [원본확정])를 대체한다. 원본의 반복
+ * 20킬 보상(trigger #544/#545, +10/+12)과 같은 리듬으로 돌아간 셈 — 액수만 우리 것.
+ */
+export const KILL_MISSION_EVERY = 20;
+export const KILL_MISSION_REWARD = 20;
 
 /**
- * 웨이브 클리어 보상.
+ * 웨이브 클리어 보상 — **거의 평탄** (2026-07-19, 사용자 지시: "라운드당 20 + 0.2×(라운드−5)").
  *
- * 원본에는 없다. 원본은 반복 20킬 보상(trigger #544/#545, +10/+12)으로 소득을 줬지만,
- * 그러면 유닛 1기당 20킬을 모아야 해서 초반이 굶는다. 라운드마다 목돈이 들어오는 편이
- * 타워를 세우는 리듬과 맞는다. [프로토]
+ * 옛 곡선(10+3r+이차항)은 후반 보상이 보스 수입을 압도해(R60에 라운드 253 vs 보스 62)
+ * 보스 소환 실패의 리스크가 무의미했다. 라운드 보상을 깔아두는 기본기로 낮추고,
+ * 소득의 성장 축을 보스 사다리(위 BOSS_KILL_MINERAL ×2~4)와 킬 미션으로 옮긴다.
  */
-// 2026-07-17 (4차): R35+ 이차항 가산 — "R40부터 급격히 어려워지는데 보상은 선형"
-// (플레이테스트). 후반 라운드 돌파가 목돈이 되어 종반 벽과 나란히 큰다.
 export const waveReward = (round: number): number =>
-  Math.round(10 + 3 * round + 0.1 * Math.max(0, round - 35) ** 2);
+  Math.round(20 + 0.2 * Math.max(0, round - 5));
 
 /** 누출 시 라이프 -1 · 미네랄 +5. strings:358 'Life -1 ! ! ! ! !미네랄 +5' [원본확정] */
 export const LEAK_MINERAL = 5;
@@ -109,7 +117,7 @@ export const spawnUnitCost = (spawned: number): number =>
 /**
  * 100 → 60 (2026-07-16, economy-power-rebalance D4). 진입가 100은 초반 라운드 보상
  * (10+3r)의 3배를 넘어서 시뮬·플레이 모두 프로브 0~1기로 끝났다 — 가스 엔진이
- * 아예 시동이 안 걸렸다. 지수 성장(×1.5)은 유지 — "몇 기까지"의 딜레마는 그대로다.
+ * 아예 시동이 안 걸렸다. (성장 방식은 아래 probeCost — 2026-07-19부터 선형.)
  */
 export const PROBE_MINERAL = 60;
 
@@ -143,12 +151,16 @@ export const COPY_TIER_LEVELS = 15;
 /** 복제로 도달 가능한 최고 티어 — GOD(4)은 제외. 직접 만들거나 조합해야 한다. */
 export const COPY_TIER_MAX = GOD_TIER - 1;
 /**
- * [프로토] 프로브 비용은 지수로 오른다 — "지금 전력이냐 미래 경제냐"의 일꾼 딜레마.
- * 8기 고정 상한이던 시절에는 GA가 전 세대 7~8로 수렴하는 무뇌 투자였다.
+ * [프로토] 프로브 비용 — **선형 증가** (2026-07-19, 사용자 지시).
+ *
+ * 지수(×1.5)는 10기째가 2,300을 넘어 가스 엔진이 중반에 봉인됐다 — 파워 사슬이
+ * "가스 → 업그레이드(선형) → 보드 피해(선형)"인데 그 시작이 지수로 잠기면
+ * 후반 구매 파워가 죽는다. 선형이면 광부 확장이 게임 내내 열려 있는 결정으로 남는다.
+ * 첫 두 기(60·90)는 지수 시절과 같아 초반 앵커는 불변. 16기 총액 4,560
+ * (지수 시절 R40 기준 사실상 도달 불가 → 이제 후반의 실질 선택지).
  */
-export const PROBE_COST_GROWTH = 1.5;
-export const probeCost = (owned: number): number =>
-  Math.round(PROBE_MINERAL * Math.pow(PROBE_COST_GROWTH, owned));
+export const PROBE_COST_STEP = 30;
+export const probeCost = (owned: number): number => PROBE_MINERAL + PROBE_COST_STEP * owned;
 export const PROBE_MAX = 16;
 // 0.25 → 0.4 (2026-07-17 4차): 기본공을 3으로 더 깎은 몫을 가스 축이 받는다 —
 // 업그레이드가 보드 파워의 주축이 된다. 광부 2~3기로도 엔진이 돈다.
@@ -191,7 +203,21 @@ export const upgradeGasCost = (level: number): number => 2 + 3 * level;
 // 6 → 7 (5차) — Lv7 = 최후의 적장. 7 → 8 (2026-07-18, 사용자 지시) — 꼭대기
 // 완만화(BOSS_HP_TOP_GROWTH 2.6) 구간에 한 단 추가, 사다리를 R60 이후로 더 늘린다.
 export const BOSS_MAX_LEVEL = 8;
-export const BOSS_COOLDOWN_SECONDS = 45; // [프로토]
+
+/** 보스 이동 속도 — 잡몹(42)보다 느리다. 화력으로 못 잡으면 걸어나가 목숨을 문다. */
+export const BOSS_SPEED = 26;
+/** 보스가 입구에서 출구까지 한 바퀴 도는 시간(초) — 저지 없이 쭉 걸었을 때 */
+export const BOSS_LAP_SECONDS = PATH_LENGTH / BOSS_SPEED;
+/**
+ * 보스 소환 쿨타임 = **한 바퀴의 80%** (2026-07-19, 사용자 지시).
+ *
+ * 이전에는 45라는 고정 상수였다 — 우연히 한 바퀴(56.2초)의 80%와 같았지만, 경로 길이나
+ * 보스 속도를 건드리면 그 관계가 조용히 깨진다. 유도값으로 바꿔 **"직전 보스가 한 바퀴를
+ * 거의 돌 무렵 다음 보스를 부를 수 있다"**는 의미를 코드가 스스로 지키게 한다.
+ * 80%라 소환은 항상 조금씩 겹친다 — 앞 보스를 빨리 못 잡으면 두 마리가 함께 걷는다.
+ */
+export const BOSS_COOLDOWN_RATIO = 0.8;
+export const BOSS_COOLDOWN_SECONDS = Math.round(BOSS_LAP_SECONDS * BOSS_COOLDOWN_RATIO);
 
 /**
  * 보스 HP·장갑. 원본 UNIx는 Lv1~Lv6 전부 hp=100000이라 밸런스 근거로 못 쓴다(§4.6). [프로토]
@@ -222,7 +248,10 @@ export const BOSS_COOLDOWN_SECONDS = 45; // [프로토]
 // (플레이테스트). Lv5까지는 그대로 두고 Lv6+만 성장 2.6으로 꺾는다:
 // Lv6 363k → 278k(-24%) · Lv7 1.24M → 723k(-42%). 아래 단의 리듬은 건드리지 않고
 // 사다리 꼭대기만 손에 닿게 하는 국소 조정이다.
-export const BOSS_HP_BASE = 700;
+// 700 → 640 (2026-07-19): 영웅 캐리 축 임시 차단(HERO_CARRY_BLOCKLIST)으로 초반 영웅
+// 딜 기대값이 줄어 Lv1 앵커(75미네랄 6기 처치율 ≥0.85)가 0.825로 미달 — 보스 쪽을
+// 내려 앵커를 지킨다. 영웅이 보조 역할인 체제에서는 보스도 보드 화력 기준으로 잰다.
+export const BOSS_HP_BASE = 640;
 export const BOSS_HP_GROWTH = 3.4;
 /** 이 레벨을 넘으면 완만한 성장으로 갈아탄다 (사다리 꼭대기) */
 export const BOSS_HP_TOP_FROM = 5;
@@ -235,7 +264,7 @@ export const bossHP = (level: number): number => {
     : base * Math.pow(BOSS_HP_TOP_GROWTH, level - BOSS_HP_TOP_FROM);
 };
 export const bossArmor = (level: number): number => 1.1 * level; // 기본공 3 동행
-export const BOSS_SPEED = 26;
+// BOSS_SPEED는 위 '보스 소환' 절로 옮겼다 — 쿨타임이 이 값에서 유도되기 때문이다.
 /**
  * 보스 누출 = 잡몹과 같은 **라이프 -1** (2026-07-17, 2+L → 1).
  *
@@ -270,135 +299,127 @@ export const CYCLE_ROUNDS = 5;
 export const cycleOf = (round: number): number => Math.floor((round - 1) / CYCLE_ROUNDS);
 export const posInCycle = (round: number): number => (round - 1) % CYCLE_ROUNDS;
 
-/**
- * 기대 유효 DPS (P50) — scratch-model.ts 측정의 구분지수 근사.
- *
- * 주의: 이 곡선은 웨이브 난이도에 **되먹임**된다 — 웨이브가 세지면 몹이 오래 살고,
- * 영웅 막타 XP가 늘어 증강이 빨라져 DPS/수입 비율이 오른다.
- * (압박이 성장을 가속하는 자기 균형 고리.) 그래서 새 웨이브 아래에서 재측정해 갱신했다.
- *
- * 2026-07-16 재적합 (economy-power-rebalance §3-4, 정책 6 × 시드 8):
- * 기본공 7→4로 초·중반이 내려가고(R1 58→37, R31 3830→1842), 가산 가스
- * 업그레이드 엔진이 후반 성장률을 3.5% → **7.1%/라운드**로 올렸다 —
- * 공짜 파워를 깎고 구매 파워로 옮긴 개편의 의도된 모양이다.
- */
-export const expectedBoardDps = (round: number): number => {
-  // 2026-07-17 4차 재적합 (정책 6 × 시드 8): 기본공 3·가스 0.4/s·생성비 0.35·보상 가속.
-  // 후반 성장률 7.1% → 8.8%/라운드 — 더 부유한 경제가 보드를 더 오래 키운다.
-  if (round <= 13) return 28 * Math.pow(1.195, round - 1);
-  if (round <= 31) return 237 * Math.pow(1.116, round - 13);
-  return 1705 * Math.pow(1.088, round - 31);
+// ───────── 수입 모델 (결정론) — 소득 설계의 수학적 기준 (2026-07-19) ─────────
+// 시뮬레이션 재적합 대신 결정론 모델을 시트로 검산한다 (사용자 지시: "매번 시뮬레이션보다
+// 수학적 모델"). 웨이브 보상·킬 미션은 결정론이고, 유일한 스프레드 축은 보스 레벨 선택 —
+// 저점(항상 Lv1)과 고점(항상 최고 해금)의 중간값을 쓴다.
+// 시트(docs/balance/income-curve.csv)가 이 함수를 그대로 읽어 표로 만든다.
+// (2차 개정 후 웨이브 체력은 성장률 직접 지정 — 이 모델은 소득 설계·검산 전용이다.)
+
+/** 킬 미션 누적 보상 — 연속 버전 (모델용): 20킬마다 +20 ⇒ 킬당 1골드 */
+const milestoneCumAt = (kills: number): number =>
+  (kills / KILL_MISSION_EVERY) * KILL_MISSION_REWARD;
+
+/** r라운드 종료 시점까지의 보스 소환 횟수 (연속 — 모델용. 쿨타임 45초가 유일한 제한) */
+export const bossSummonsBy = (round: number): number =>
+  (OPENING_SECONDS + round * ROUND_SECONDS) / BOSS_COOLDOWN_SECONDS + 1;
+
+/** "항상 최고 해금 보스 + 전부 처치" 상한의 누적 보상 — 소수 소환은 선형 보간 */
+const bossCumHigh = (summons: number): number => {
+  let sum = 0;
+  const whole = Math.floor(summons);
+  for (let k = 1; k <= whole; k++) {
+    sum += BOSS_KILL_MINERAL[Math.min(k, BOSS_KILL_MINERAL.length) - 1];
+  }
+  const frac = summons - whole;
+  if (frac > 0) sum += frac * BOSS_KILL_MINERAL[Math.min(whole + 1, BOSS_KILL_MINERAL.length) - 1];
+  return sum;
 };
 
+const incomeMidMemo: number[] = [];
+let incomeMemoWaveCum = 0;
+let incomeMemoKills = 0;
 /**
- * 목표 clear(초) — 웨이브를 녹이는 데 걸려야 하는 시간. R51+는 종반 벽.
- *
- * 보정 이력:
- * - 1차 (14 + 0.22r, 벽 +1.5/r): 봇이 R140까지 살았다. 사망 임계를 clear 25초로 가정했지만
- *   라이프 20 버퍼 + 누출당 +5 미네랄 + 몹 경로 노출 ~28초(1460px/52, 감속 타워가 최대 2배로
- *   늘림) 탓에 실제 절벽 임계는 clear ≈ 노출시간의 1.5~2배다.
- * - 2차: **선형 벽(+3초/라운드)은 상대 성장률이 감소해** 지수로 크는 보드(~4%/라운드)가
- *   결국 이긴다 — 봇이 R138까지 살았다. 벽은 지수여야 보드를 항상 앞선다.
- * - 3차: 벽 ×1.10은 사망을 R72~88에 놓았다(설계보다 20라운드 늦음) — 압박→성장 되먹임이
- *   벽을 미는 동안 보드가 계속 자라기 때문. ×1.18은 R58~75(중앙 R68)로 당겼다.
- * - 4차: 기울기 0.45, 벽 R44부터 ×1.20 — 사망 중앙값을 R50대로. 유한 종결(R60 최종 보스)이
- *   구현되면 마지막 1%는 보스가 가른다. 봇 기준 정밀 보정은 여기까지 — 이후는 사람 플레이테스트.
- * - 5차 (2026-07-16, economy-power-rebalance): 가산 가스 업그레이드로 보드 후반 성장률이
- *   3.5% → 7.1%/라운드가 되어 벽을 미는 힘이 커졌다(사망 중앙 R63~64로 밀림).
- *   벽 시작을 R44 → R40으로 당겨 중앙을 R50대로 되돌린다.
- * - 6차 (2026-07-16, 사용자 지시): **킥 있는 벽 폐지 → 성장률 연속 램프.** 최종 보스는
- *   없다 — R60도 그냥 강한 웨이브이므로 "갑자기 높아진 난이도를 벽으로 느끼면" 안 된다.
- *   옛 곡선은 R40에서 성장률이 1.3% → 20%로 점프하는 킥이었다. 새 곡선은 성장률 자체가
- *   R30부터 R48까지 **선형으로** 1.4% → 20%(연속 복리)로 오르고(로그-2차) 그 뒤 유지된다 —
- *   값도 기울기도 연속이라 "여기부터 벽"인 지점이 없다. 상한 0.20은 보드 후반 성장률
- *   (+7.1%/라운드)을 확실히 앞서는 값 — 이보다 낮게 깔리면 R50을 넘긴 보드가 곡선을
- *   따돌리고 영생한다(거듭제곱 꼬리로 시도했다가 이 함정을 확인).
- *   목표: R60 도달 ≤10%, R60 통과(클리어) ≤5% — 상수는 시드 시뮬로 보정
- *   (1차 시도 RAMP_END 52·0.18은 통과율 31%로 물렀다).
+ * r라운드까지의 누적 미네랄 수입 중간값 — 저점(항상 Lv1 보스)·고점(항상 최고 해금)의
+ * 평균. 시작 자원 포함, 증강 수입·누출 보너스 제외(누출은 킬 마일스톤과 대략 상쇄).
+ * 보스·마일스톤을 연속 보간해 계단 없이 매끄럽다 — 웨이브 성장률이 널뛰지 않는다.
  */
-// 30 → 26 (6차): "중반 R30~40을 조금 더 높이자" — 가속이 4라운드 일찍 시작된다
-// (R30 성장률 1.4% → 4.9%, R35 5.5% → 9.2%).
-// 26 → 15 (2026-07-18, 사용자 지시: "R20~45는 너무 쉽고 R50~60은 너무 급격하다").
-// 측정(총 체력 증가율): 옛 곡선은 R14~26이 13.3~13.7%로 평평했다가(R6~13의 21~24%보다
-// 오히려 낮음) R51+에서 42.5%로 고정돼 R50→60에 체력이 34배가 됐다 — "쉬움 평지 → 갑자기 벽".
-// 램프를 R15부터 당기고(아래 BASE_RATE도 같이 올림) 끝을 R58로 늘리며 상한을 낮춰
-// (MAX_RATE 0.27→0.19) 중반을 끌어올리고 후반 벽을 편다. R60 누적 체력 2억 → 7,900만.
-export const WAVE_RAMP_START = 15;
-// 48 → 52 (2026-07-17 4차): "R40부터 급격히 어려워진다" — 램프를 늘려 R40 시점
-// 성장률을 12.9% → 10.4%로 눌러 절벽 체감을 완화한다 (보드 후반 성장 8.8%와의 간극 축소).
-// 52 → 58 (2026-07-18, 사용자 지시): 위 항목과 세트 — 최대 성장률 도달을 더 늦춰
-// R50~60 구간을 완만하게 편다.
-export const WAVE_RAMP_END = 58;
-// 0.014 → 0.03 (2026-07-18, 사용자 지시): 램프 시작을 앞당긴 만큼 초입 기울기도 올려
-// R20~45 전 구간의 체감 난이도를 끌어올린다. (기존 유도식 0.45/31.1은 RAMP_START=30
-// 시절 기준이라 지금은 직접 지정한다.)
-export const WAVE_BASE_RATE = 0.03;
-// 0.27 → 0.19 (2026-07-18, 사용자 지시): 최종 상한을 낮춰 R51+ 고정 증가율을
-// 42.5%/라운드에서 31.6%/라운드로 낮춘다 — "R50~60이 너무 급격하다".
-export const WAVE_MAX_RATE = 0.19;
-const RATE_SLOPE = (WAVE_MAX_RATE - WAVE_BASE_RATE) / (WAVE_RAMP_END - WAVE_RAMP_START);
-const CLEAR_AT_RAMP_START = 18 + 0.45 * (WAVE_RAMP_START - 1);
-/** 위 6차 램프 그대로 — R50 이후는 지금도 이 공식을 그대로 쓴다 (아래 SMOOTH 구간의 도착 앵커이기도 하다) */
-const legacyTargetClearSeconds = (round: number): number => {
-  if (round <= WAVE_RAMP_START) return 18 + 0.45 * (round - 1);
-  const t = Math.min(round, WAVE_RAMP_END) - WAVE_RAMP_START;
-  const ramp = Math.exp(WAVE_BASE_RATE * t + (RATE_SLOPE * t * t) / 2);
-  const tail = round > WAVE_RAMP_END ? Math.exp(WAVE_MAX_RATE * (round - WAVE_RAMP_END)) : 1;
-  return CLEAR_AT_RAMP_START * ramp * tail;
+export const cumulativeIncomeMid = (round: number): number => {
+  for (let r = incomeMidMemo.length + 1; r <= round; r++) {
+    incomeMemoWaveCum += waveReward(r);
+    incomeMemoKills += enemyCount(r);
+    const summons = bossSummonsBy(r);
+    const bossMid = (summons * BOSS_KILL_MINERAL[0] + bossCumHigh(summons)) / 2;
+    incomeMidMemo.push(
+      START_MINERAL + incomeMemoWaveCum + milestoneCumAt(incomeMemoKills) + bossMid,
+    );
+  }
+  return incomeMidMemo[round - 1];
 };
 
-/**
- * R13~50 재설계 (2026-07-18, 사용자 지시: "R13~50을 더 가파르게, 매끄럽게, R50은 지금 그대로").
- *
- * 옛 곡선은 이 구간에 두 번의 이음매가 있었다 — expectedBoardDps가 R13/14와 R31/32에서
- * 증가율 자체가 꺾이고(19.5%→11.6%→8.8%), 여기(clearSeconds)의 램프도 R15에서 3%로
- * 리셋되면서 겹쳐 R14~15에 13%대로 파이는 골짜기가 생겼다.
- *
- * 총 예산(expectedBoardDps × clearSeconds)을 R13~50 구간에서 3차 로그커브로 다시 잇는다.
- * 2차(선형 증가율)로 양끝 **값**만 고정했더니 R50 진입 증가율이 legacy와 안 맞아 R50→51
- * 경계에서 오히려 더 큰 이음매(8.8%p 점프)가 생겼다 — 3차를 써서 양끝 **값과 증가율**을
- * 모두 legacy와 맞춘다(R12→13, R50→51 실측 증가율을 그대로 경계 조건으로 문다).
- * 양끝이 이미 legacy 대비 높은 증가율(~22%·~28%)이라 중간(R20~35)이 그만큼 부풀고
- * (최대 R24 +38%), 어디서도 옛 값 밑으로 안 떨어진다 — R50은 정확히 legacy와 같다.
- * (R35 방어 상한 — 17 GOD 타워 총합 — 대비 41% 여유 확인됨.)
- */
-export const WAVE_SMOOTH_FROM = 13;
-export const WAVE_SMOOTH_TO = 50;
-const SMOOTH_FROM = WAVE_SMOOTH_FROM;
-const SMOOTH_TO = WAVE_SMOOTH_TO;
-const SMOOTH_SPAN = SMOOTH_TO - SMOOTH_FROM;
-const P_AT_SMOOTH_FROM = expectedBoardDps(SMOOTH_FROM) * legacyTargetClearSeconds(SMOOTH_FROM);
-const P_AT_SMOOTH_TO = expectedBoardDps(SMOOTH_TO) * legacyTargetClearSeconds(SMOOTH_TO);
-const SMOOTH_LN_RATIO = Math.log(P_AT_SMOOTH_TO / P_AT_SMOOTH_FROM);
-// 경계 증가율(로그) — legacy에서 그대로 읽는다. 진입: R12→13. 진출: R50→51.
-const SMOOTH_ENTRY_RATE = Math.log(
-  (expectedBoardDps(SMOOTH_FROM) * legacyTargetClearSeconds(SMOOTH_FROM)) /
-    (expectedBoardDps(SMOOTH_FROM - 1) * legacyTargetClearSeconds(SMOOTH_FROM - 1)),
-);
-const SMOOTH_EXIT_RATE = Math.log(
-  (expectedBoardDps(SMOOTH_TO + 1) * legacyTargetClearSeconds(SMOOTH_TO + 1)) /
-    (expectedBoardDps(SMOOTH_TO) * legacyTargetClearSeconds(SMOOTH_TO)),
-);
-// exponent(t) = c1·t + c2·t² + c3·t³ — rate(t)=exponent'(t)가 t=0에서 SMOOTH_ENTRY_RATE,
-// t=SPAN에서 SMOOTH_EXIT_RATE, exponent(SPAN)=SMOOTH_LN_RATIO를 동시에 만족하도록 푼다.
-const SMOOTH_C1 = SMOOTH_ENTRY_RATE;
-const SMOOTH_C3 =
-  (SMOOTH_C1 + SMOOTH_EXIT_RATE) / (SMOOTH_SPAN * SMOOTH_SPAN) -
-  (2 * SMOOTH_LN_RATIO) / (SMOOTH_SPAN * SMOOTH_SPAN * SMOOTH_SPAN);
-const SMOOTH_C2 =
-  (SMOOTH_EXIT_RATE - SMOOTH_C1 - 3 * SMOOTH_C3 * SMOOTH_SPAN * SMOOTH_SPAN) / (2 * SMOOTH_SPAN);
+/** R1 기대 유효 DPS — 시뮬 실측 앵커. 이후 모양은 수입 곡선이 만든다. */
+export const BOARD_DPS_AT_R1 = 28;
 
-export const targetClearSeconds = (round: number): number => {
-  if (round <= SMOOTH_FROM || round >= SMOOTH_TO) return legacyTargetClearSeconds(round);
-  const t = round - SMOOTH_FROM;
-  const exponent = SMOOTH_C1 * t + SMOOTH_C2 * t * t + SMOOTH_C3 * t * t * t;
-  const pTarget = P_AT_SMOOTH_FROM * Math.exp(exponent);
-  return pTarget / expectedBoardDps(round);
+/**
+ * 기대 유효 DPS — **수입 비례 모델** (2026-07-19, 시뮬 적합 구분지수를 대체).
+ *
+ * 근거: 2026-07-11 측정 "유효 DPS ≈ 누적수입 × 상수 — 재화가 곧 전투력".
+ * 옛 구분지수 적합(후반 8.8%/라운드)은 시뮬을 다시 돌려야만 갱신됐고, 실제 후반
+ * 파워 사슬(가스 → 업그레이드 → 피해)이 **선형**인 것과 어긋나 웨이브만 지수로
+ * 달아났다. 수입 모델은 결정론이라 경제 상수를 바꾸면 곡선과 시트가 즉시 따라온다.
+ * R1 = 28(실측)로 절대 스케일을 고정하면 초반 곡선은 옛 적합(1.195^r)과 거의 겹친다
+ * — 초반 수입 자체가 라운드당 ~20%로 크기 때문이다.
+ */
+export const expectedBoardDps = (round: number): number =>
+  (BOARD_DPS_AT_R1 * cumulativeIncomeMid(round)) / cumulativeIncomeMid(1);
+
+// 목표 clear(초) 보정 이력 1~6차(2026-07-14~18)는 명세 §11 결정 기록으로 이관.
+// 남길 교훈: ① 선형 벽은 상대 성장률이 감소해 지수로 크는 보드가 결국 이긴다(봇 R138 생존)
+// — 벽 구간만은 지수여야 한다. ② 실제 사망 임계는 clear ≈ 몹 경로 노출시간(~28초)의
+// 1.5~2배다(라이프 20 버퍼 + 감속 타워 때문).
+// ── 2026-07-19 재설계 3차 (사용자 지시): 웨이브 총체력은 **성장률 직접 지정** —
+// 수입 모델과 완전히 분리한다. 보상 구조를 아무리 바꿔도 난이도가 흔들리지 않고,
+// 시트의 growthPct 열이 곧 설계 상수다.
+//
+// 1차(수입 비례)는 중반 성장률이 수입을 따라 4~7%까지 내려가 "너무 쉬워졌다" —
+// 실제 보드 파워는 수입에 곱(타워 수 × 업그레이드)으로 붙어 수입보다 빨리 크기 때문.
+/** 클리어 라인 — 이 라운드를 넘기면 승리. 이후는 무한 모드. */
+export const CLEAR_ROUND = 60;
+/** R1 웨이브 총체력 = 기대 보드 DPS 실측 28 × 목표 clear 18초 — 초반 앵커의 유래 */
+export const WAVE_HP_R1 = 504;
+
+/**
+ * 구간별 라운드당 총체력 성장률. `from` 라운드부터 다음 구간 직전까지 이 배율로 큰다.
+ * 마지막 구간은 상한 없이 이어진다 — 무한 모드의 벽이다.
+ *
+ * 이력: R15~50 10% · R51+ 12% (2026-07-19 2차) → **R15~40을 12%로 상향**(3차, 사용자
+ * 지시: "R40까지 상승률 2% 올려줘"). R41~50이 10%로 남아 성장률이 잠시 완만해지는
+ * 골짜기가 생긴다 — 총체력은 계속 오르되(단조) 가속만 쉬어가는 구간이고, R60 총체력은
+ * 68.8만 → 111만이 된다.
+ */
+export const WAVE_RATE_SEGMENTS: readonly (readonly [from: number, rate: number])[] = [
+  [2, 0.227], // R2~14 — 옛 수입 모델 초반 곡선의 기하평균
+  [15, 0.17], // R15~40 (사용자 지시: 10% → 12% → 14% → +3%p → 17%)
+  [41, 0.19], // R41~50 (사용자 지시: 10% → 16% → +3%p → 19%)
+  [51, 0.15], // R51+ — 무한 모드의 벽. 보드 실성장(~5~7%/R 추정)을 앞서야 영생이 없다
+];
+
+/** 하위 호환·가독용 별칭 — 테스트와 문서가 이 이름으로 구간을 가리킨다 */
+export const WAVE_EARLY_RATE = WAVE_RATE_SEGMENTS[0][1];
+export const WAVE_MID_FROM = WAVE_RATE_SEGMENTS[1][0];
+export const WAVE_MID_RATE = WAVE_RATE_SEGMENTS[1][1];
+export const WAVE_LATEMID_FROM = WAVE_RATE_SEGMENTS[2][0];
+export const WAVE_LATEMID_RATE = WAVE_RATE_SEGMENTS[2][1];
+export const WAVE_WALL_FROM = WAVE_RATE_SEGMENTS[3][0];
+export const WAVE_WALL_RATE = WAVE_RATE_SEGMENTS[3][1];
+
+/** 그 라운드로 넘어올 때 적용된 성장률 (R1은 앵커라 없다) */
+export const waveGrowthRate = (round: number): number => {
+  let rate = WAVE_RATE_SEGMENTS[0][1];
+  for (const [from, r] of WAVE_RATE_SEGMENTS) if (round >= from) rate = r;
+  return rate;
+};
+
+/** 웨이브 총 체력 — 구간별 순수 지수. 수입·시뮬과 무관한 설계 상수다. */
+export const waveTotalHp = (round: number): number => {
+  let hp = WAVE_HP_R1;
+  for (let r = 2; r <= round; r++) hp *= 1 + waveGrowthRate(r);
+  return hp;
 };
 
 /** 웨이브 총 체력 → 몹 1기 체력. "새 몹이 사이클마다 굵어지는" 리듬은 count 리셋이 만든다 */
 export const enemyHP = (round: number): number =>
-  Math.max(1, Math.round((expectedBoardDps(round) * targetClearSeconds(round)) / enemyCount(round)));
+  Math.max(1, Math.round(waveTotalHp(round) / enemyCount(round)));
 /**
  * 적 장갑은 계단식이다. 선형으로 매 라운드 오르면 저티어 유닛이 매 라운드 조금씩
  * 무력해져서 언제 갈아엎어야 하는지 감이 안 온다. 5라운드마다 한 칸씩 오르면

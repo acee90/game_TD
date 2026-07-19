@@ -18,24 +18,22 @@ const read = (name: string): string[] => {
 };
 
 describe('밸런스 CSV — 코드와 일치해야 한다', () => {
-  test('수입 곡선 시트 — 저점(Lv1 보스)·고점(최고 보스) 공식이 코드와 같다', () => {
+  test('난이도 모델 시트 — 모든 열이 balance.ts 모델 함수와 같다 (2026-07-19 재설계)', () => {
     const rows = read('income-curve.csv').slice(1);
-    expect(rows).toHaveLength(60);
-    // R1: 소환 1회. 저점 = 시작 + 웨이브 + Lv1 보상, 고점도 첫 소환은 Lv1이라 같다
-    const r1 = rows[0].split(',').map(Number);
-    expect(r1[7]).toBe(B.START_MINERAL + B.waveReward(1) + B.BOSS_KILL_MINERAL[0]);
-    expect(r1[8]).toBe(r1[7]);
-    // 고점은 사다리가 오른 뒤 저점보다 확실히 크다
-    const r20 = rows[19].split(',').map(Number);
-    expect(r20[8]).toBeGreaterThan(r20[7]);
-    // 몬스터 압력 열은 코드 함수 그대로
-    for (const idx of [0, 16, 44]) {
-      const c = rows[idx].split(',').map(Number);
-      const r = c[0];
-      expect(c[9]).toBe(B.enemyHP(r));
-      expect(c[11]).toBe(B.enemyHP(r) * B.enemyCount(r));
-      expect(c[13]).toBe(Math.round(B.expectedBoardDps(r)));
+    expect(rows).toHaveLength(70); // 클리어(R60) 너머 무한 모드 초입까지
+    for (const idx of [0, 16, 44, 59, 69]) {
+      const c = rows[idx].split(',');
+      const r = Number(c[0]);
+      expect(Number(c[1])).toBe(B.waveReward(r));
+      expect(Number(c[2])).toBe(B.enemyCount(r));
+      expect(Number(c[3])).toBe(Math.round(B.cumulativeIncomeMid(r)));
+      expect(Number(c[5])).toBe(Math.round(B.expectedBoardDps(r)));
+      expect(Number(c[7])).toBe(B.enemyHP(r));
+      expect(Number(c[9])).toBe(B.enemyHP(r) * B.enemyCount(r));
     }
+    // 클리어 라인 표기
+    const clearRow = rows[B.CLEAR_ROUND - 1].split(',');
+    expect(clearRow[11]).toBe('CLEAR');
   });
   test('증강이 전부 들어있다', () => {
     const rows = read('augments.csv');

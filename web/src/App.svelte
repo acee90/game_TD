@@ -12,6 +12,7 @@
   import MissionsPanel from './lib/MissionsPanel.svelte';
   import AugmentOverlay from './lib/AugmentOverlay.svelte';
   import AugmentPanel from './lib/AugmentPanel.svelte';
+  import ClearOverlay from './lib/ClearOverlay.svelte';
   import GameOverOverlay from './lib/GameOverOverlay.svelte';
   import MenuOverlay from './lib/MenuOverlay.svelte';
   import * as hallOfFame from './ui/hall-of-fame';
@@ -235,6 +236,7 @@
 </main>
 
 <AugmentOverlay {game} {tick} />
+<ClearOverlay {game} {tick} />
 
 {#if menuOpen}
   <MenuOverlay onClose={closeMenu} onRestart={restart} />

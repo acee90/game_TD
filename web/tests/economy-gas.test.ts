@@ -11,11 +11,14 @@ import { Game } from '../src/game/game';
 const card = (id: string, r: H.Rarity = 'silver') =>
   H.makeCard(H.AUGMENTS.find((a) => a.id === id)!, r);
 
-describe('프로브 — 지수 비용', () => {
-  test('살수록 비싸진다', () => {
+describe('프로브 — 선형 비용 (2026-07-19, 지수 → 선형)', () => {
+  test('살수록 등차로 비싸진다 — 지수가 아니다', () => {
     expect(B.probeCost(0)).toBe(B.PROBE_MINERAL);
-    expect(B.probeCost(4)).toBeGreaterThan(B.probeCost(0) * 2);
-    expect(B.probeCost(8)).toBeGreaterThan(B.probeCost(4) * 2);
+    expect(B.probeCost(1)).toBe(B.PROBE_MINERAL + B.PROBE_COST_STEP);
+    // 선형: 간격이 일정하다
+    expect(B.probeCost(8) - B.probeCost(7)).toBe(B.probeCost(2) - B.probeCost(1));
+    // 마지막 광부(16기째)도 후반 수입으로 살 수 있는 값이어야 한다 — 지수 시절 봉인 방지
+    expect(B.probeCost(B.PROBE_MAX - 1)).toBeLessThan(1000);
   });
 
   test('게임이 실제 비용을 차감한다', () => {

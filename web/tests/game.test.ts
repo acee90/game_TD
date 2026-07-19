@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import * as B from '../src/data/balance';
+import * as S from '../src/data/score';
 import { ARM_TILES, CORNER_COLS, CORNER_ROWS, PATH_LENGTH, SLOT_POS, TILE, nearestPathDistance, pathPos } from '../src/core/map';
 import { CREATURE, GOD_POOL_EARLY, GOD_POOL_LATE, GOD_TIER, TIER_POOLS, godPool } from '../src/data/units';
 import { damage } from '../src/game/combat';
@@ -81,17 +82,29 @@ describe('라운드 진행 — 고정 간격', () => {
     expect(game.round).toBe(2);
   });
 
-  test('라운드 간격은 항상 ROUND_SECONDS다 — 느리게 잡아도 이득이 없다', () => {
+  test('다음 라운드 카운트다운은 웨이브가 다 나온 뒤부터 흐른다 (2026-07-19)', () => {
     const game = new Game();
     game.update(B.OPENING_SECONDS + 0.01);
+    expect(game.round).toBe(1);
+    expect(game.roundTimer).toBeCloseTo(B.ROUND_SECONDS, 1);
 
-    for (let round = 1; round <= 5; round++) {
-      expect(game.round).toBe(round);
-      expect(game.roundTimer).toBeCloseTo(B.ROUND_SECONDS, 1);
-      game.update(B.ROUND_SECONDS);
-      game.lives = B.START_LIVES;
-      game.over = false;
-    }
+    // 스폰이 진행되는 동안 타이머는 멈춰 있다
+    game.update(B.SPAWN_INTERVAL * 3);
+    expect(game.roundTimer).toBeCloseTo(B.ROUND_SECONDS, 1);
+
+    // 스폰 창(16기 × 0.18 ≈ 2.9초)이 끝나고 나서야 카운트다운이 흐른다.
+    // 총 4.5초를 돌리면: 스폰 중 ~2.9초는 멈춰 있었고 나머지 ~1.6초만 깎였어야 한다.
+    for (let i = 0; i < 40; i++) game.update(0.1);
+    expect(game.round).toBe(1);
+    expect(game.roundTimer).toBeLessThan(B.ROUND_SECONDS); // 카운트다운은 시작됐고
+    expect(game.roundTimer).toBeGreaterThan(B.ROUND_SECONDS - 3); // 스폰 동안은 멈춰 있었다
+
+    // 이제부터 남은 시간을 다 기다려야 다음 라운드다 — 빨리 잡아도 앞당겨지지 않는다
+    const timer = game.roundTimer;
+    game.update(timer - 0.05);
+    expect(game.round).toBe(1);
+    game.update(0.1);
+    expect(game.round).toBe(2);
   });
 
   test('일반 웨이브는 보스를 만들지 않는다 — 보스는 소환으로만 나온다', () => {
@@ -166,38 +179,38 @@ describe('라운드 진행 — 고정 간격', () => {
     expect(B.WAVE_TYPES.hunter.contactDamageMult).toBeGreaterThan(3);
   });
 
-  test('웨이브 총 체력 = 목표 clear × 기대 유효 DPS (재화→전투력 모델)', () => {
+  test('웨이브 총 체력 — 세 구간 성장률 직접 지정 (2026-07-19 3차)', () => {
     const waveHp = (r: number) => B.enemyHP(r) * B.enemyCount(r);
 
     // 정의가 곧 법칙이다 — 반올림 오차 안에서 일치
     for (const r of [1, 7, 13, 25, 40, 55, 60]) {
-      const target = B.expectedBoardDps(r) * B.targetClearSeconds(r);
+      const target = B.waveTotalHp(r);
       expect(waveHp(r)).toBeGreaterThan(target * 0.97);
       expect(waveHp(r)).toBeLessThan(target * 1.03);
     }
 
-    // 목표 clear: R1부터 긴장(18초). 6차 보정 — 킥 없는 성장률 연속 램프 (balance.ts 주석)
-    expect(B.targetClearSeconds(1)).toBeCloseTo(18, 1);
-    // 후반 성장률은 보드 후반 성장(+7.1%/라운드)을 확실히 앞선다 — 아니면 생존 보드가
-    // 곡선을 따돌리고 영생한다 (거듭제곱 꼬리로 확인한 함정)
-    const lateGrowth = B.targetClearSeconds(56) / B.targetClearSeconds(55);
-    expect(lateGrowth).toBeGreaterThan(1.1);
-    // 킥 없음 — 플레이어가 실제로 겪는 건 targetClearSeconds 자체가 아니라 그것과
-    // expectedBoardDps를 곱한 총 예산(웨이브 총 체력)이다. R13~50 구간(2026-07-18,
-    // 사용자 지시로 재설계)은 총 예산을 매끄럽게 잇기 위해 clearSeconds 쪽에서
-    // expectedBoardDps의 자체 이음매(R31/32)를 상쇄하므로, clearSeconds 단독의
-    // 증가율은 그 지점에서 오히려 꺾인다 — 검사 대상은 총 예산이어야 한다.
-    const totalBudget = (r: number) => B.expectedBoardDps(r) * B.targetClearSeconds(r);
-    // 선형 오프닝(≤램프 시작)은 상대 성장률이 자연 감소하므로 단조 검사는 램프부터.
-    let prevRate = totalBudget(2) / totalBudget(1);
-    for (let r = 2; r < 70; r++) {
-      const rate = totalBudget(r + 1) / totalBudget(r);
-      if (r >= B.WAVE_SMOOTH_TO) {
-        expect(rate).toBeGreaterThanOrEqual(prevRate - 1e-9); // R50 이후는 옛 램프 그대로 — 완화 구간 없음
-      }
-      expect(rate - prevRate).toBeLessThan(0.02); // 벽 킥 금지
-      prevRate = rate;
+    // R1 앵커 = 기대 보드 DPS 실측 28 × 목표 clear 18초
+    expect(B.WAVE_HP_R1).toBe(504);
+    // 성장률 직접 지정 (사용자 지시): R2~14 22.7% · R15~40 12% · R41~50 10% · R51+ 12%
+    for (const r of [3, 8, 14]) {
+      expect(B.waveTotalHp(r) / B.waveTotalHp(r - 1)).toBeCloseTo(1 + B.WAVE_EARLY_RATE, 5);
     }
+    for (const r of [16, 25, 35, 40]) {
+      expect(B.waveTotalHp(r) / B.waveTotalHp(r - 1)).toBeCloseTo(1 + B.WAVE_MID_RATE, 5);
+    }
+    for (const r of [41, 45, 50]) {
+      expect(B.waveTotalHp(r) / B.waveTotalHp(r - 1)).toBeCloseTo(1 + B.WAVE_LATEMID_RATE, 5);
+    }
+    for (const r of [51, 55, 58, 65]) {
+      expect(B.waveTotalHp(r) / B.waveTotalHp(r - 1)).toBeCloseTo(1 + B.WAVE_WALL_RATE, 5);
+    }
+    // 구간 표와 실제 곡선이 어긋나지 않는다 — 표가 유일한 출처다
+    for (const [from, rate] of B.WAVE_RATE_SEGMENTS) {
+      expect(B.waveGrowthRate(from)).toBeCloseTo(rate, 10);
+    }
+    // 벽(R51+)은 보드 실성장을 앞서야 무한 모드 영생이 없다 (과거 확인된 함정) —
+    // 캐리 차단 후 보드 성장 추정 ~5-7%/R. 12%는 앞서지만 여유가 얇다 — 플레이테스트 확인.
+    expect(B.WAVE_WALL_RATE).toBeGreaterThan(0.08);
 
     // 총 체력은 단조 증가 — 사이클 경계 포함
     for (let r = 1; r < 60; r++) {
@@ -223,6 +236,61 @@ describe('라운드 진행 — 고정 간격', () => {
       for (let i = 0; i < 3; i++) game.update(B.SPAWN_INTERVAL + 0.001);
       expect(game.enemies.every((e) => e.kind === 'mob')).toBe(true);
     }
+  });
+
+  test('R60 클리어 — 타이머가 아니라 웨이브 정리가 기준이다 (2026-07-19)', () => {
+    const game = new Game(() => 0.5);
+    game.round = B.CLEAR_ROUND;
+    game.roundTimer = B.ROUND_SECONDS;
+
+    // R60 웨이브가 남아 있는 동안에는 시간이 얼마가 지나도 클리어가 아니고,
+    // 다음 라운드 카운트다운도 흐르지 않는다 (몹은 판정만 확인하도록 정지시킨다)
+    game.enemies.push({
+      kind: 'mob', name: 'R60', maxHp: 1e9, hp: 1e9, armor: 0,
+      speed: 0, radius: 9, distance: 100,
+    });
+    for (let i = 0; i < 100; i++) game.update(0.5);
+    expect(game.cleared).toBe(false);
+    expect(game.round).toBe(B.CLEAR_ROUND); // R61이 열리지 않는다
+    expect(game.roundTimer).toBeCloseTo(B.ROUND_SECONDS, 1);
+
+    // 마지막 몹을 잡으면 (놓쳐서 누출돼도 라이프만 남으면 같다) — 클리어
+    const scoreBefore = game.score;
+    game.enemies[0].hp = 0;
+    game.update(1 / 60);
+    expect(game.cleared).toBe(true);
+    expect(game.clearPending).toBe(true);
+    expect(game.paused).toBe(true); // 오버레이 동안 시간이 멈춘다
+    expect(game.over).toBe(false); // 게임오버가 아니다
+    expect(game.score).toBeGreaterThan(scoreBefore + S.CLEAR_SCORE - 1);
+
+    // 멈춘 동안에는 아무 일도 안 일어난다
+    game.update(1);
+    expect(game.round).toBe(B.CLEAR_ROUND);
+
+    // 계속 — 무한 모드. ROUND_SECONDS 뒤 R61이 열린다
+    game.continueAfterClear();
+    expect(game.paused).toBe(false);
+    game.update(B.ROUND_SECONDS + 0.1);
+    expect(game.round).toBe(B.CLEAR_ROUND + 1);
+
+    // 클리어는 한 번뿐 — 다시 발동하지 않는다
+    expect(game.cleared).toBe(true);
+    expect(game.clearPending).toBe(false);
+  });
+
+  test('R60에서 라이프가 0이 되면 클리어가 아니라 패배다', () => {
+    const game = new Game(() => 0.5);
+    game.round = B.CLEAR_ROUND;
+    game.lives = 1;
+    // 출구 직전 몹 — 누출로 마지막 라이프가 깎인다
+    game.enemies.push({
+      kind: 'mob', name: 'R60', maxHp: 10, hp: 10, armor: 0,
+      speed: 1000, radius: 9, distance: PATH_LENGTH - 1,
+    });
+    game.update(0.5);
+    expect(game.over).toBe(true);
+    expect(game.cleared).toBe(false);
   });
 });
 
@@ -423,23 +491,26 @@ describe('보스 소환 — 상시 액션, 쿨타임만, 순차 해금', () => {
 });
 
 describe('소득 — 차감 없는 누적형', () => {
-  test('200킬 마일스톤에서 보상이 나온다', () => {
-    expect(killIncome(199, 200).mineral).toBeGreaterThanOrEqual(5);
+  test('킬 미션 — 20킬마다 +20골드 (2026-07-19, 마일스톤 표 대체)', () => {
+    expect(killIncome(0, 19).mineral).toBe(0); // 문턱 전에는 무소득
+    expect(killIncome(19, 20).mineral).toBe(B.KILL_MISSION_REWARD);
+    expect(killIncome(0, 199).mineral).toBe(9 * B.KILL_MISSION_REWARD); // 문턱 9회
+    expect(killIncome(39, 61).mineral).toBe(2 * B.KILL_MISSION_REWARD); // 한 번에 두 문턱
   });
 
-  test('반복 20킬 보상은 없앴다 — 킬만으로는 마일스톤 전까지 무소득', () => {
-    expect(killIncome(0, 20).mineral).toBe(0);
-    expect(killIncome(0, 199).mineral).toBe(0);
-  });
-
-  test('웨이브를 넘기면 목돈이 들어오고, 라운드가 오를수록 커진다', () => {
-    expect(B.waveReward(5)).toBeGreaterThan(B.waveReward(1));
+  test('웨이브를 넘기면 기본기 보상이 들어온다 — 거의 평탄 (2026-07-19)', () => {
+    expect(B.waveReward(1)).toBe(20);
+    expect(B.waveReward(60)).toBe(31); // 20 + 0.2×55
+    expect(B.waveReward(60) - B.waveReward(1)).toBeLessThan(B.BOSS_KILL_MINERAL[7] / 10);
 
     const game = new Game();
     game.update(B.OPENING_SECONDS + 0.01); // 라운드 1 시작 — 아직 보상 없음
     const mineral = game.mineral;
 
+    // 스폰이 끝나야 카운트다운이 흐른다 (2026-07-19) — 잘게 돌려 스폰 창을 소화한 뒤
+    for (let i = 0; i < 50; i++) game.update(0.1);
     game.update(B.ROUND_SECONDS + 0.01); // 라운드 2 시작 — 라운드 1 클리어 보상
+    expect(game.round).toBe(2);
     expect(game.mineral).toBeGreaterThanOrEqual(mineral + B.waveReward(1));
   });
 

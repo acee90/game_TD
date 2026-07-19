@@ -3,7 +3,7 @@ import type { Race } from '../data/units';
 export const GAME_LOG_VERSION = 1 as const;
 
 export type LogTarget = 'web' | 'unity';
-export type FinishReason = 'game_over' | 'restart' | 'quit' | 'abandoned' | 'test';
+export type FinishReason = 'game_over' | 'cleared' | 'restart' | 'quit' | 'abandoned' | 'test';
 export type XpSource = 'purchase' | 'mob_kill' | 'boss_kill';
 
 export interface BuildInfo {
@@ -57,6 +57,8 @@ export interface RunSummary {
   readonly round: number;
   readonly elapsedSeconds: number;
   readonly kills: number;
+  /** R60(CLEAR_ROUND) 통과 여부 — 스키마상 optional (2026-07-19 이전 로그에는 없다) */
+  readonly cleared?: boolean;
   readonly bossCleared: number;
   readonly bossesKilled: number;
   readonly heroLevel: number;
@@ -171,6 +173,12 @@ export interface GameEventDataMap {
     readonly action: 'marked' | 'cancelled';
     readonly slotIndex?: number;
     readonly tower?: TowerLogRef;
+  };
+  /** R60(CLEAR_ROUND)을 넘겼다 — 게임은 무한 모드로 계속된다 (2026-07-19) */
+  readonly game_cleared: {
+    readonly round: number;
+    readonly score: number;
+    readonly lives: number;
   };
   readonly game_over: {
     readonly cause: 'leak';

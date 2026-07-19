@@ -22,6 +22,7 @@
     { "$ref": "#/$defs/godRerolledEvent" },
     { "$ref": "#/$defs/gasSkillUpgradedEvent" },
     { "$ref": "#/$defs/towerCopyMarkedEvent" },
+    { "$ref": "#/$defs/gameClearedEvent" },
     { "$ref": "#/$defs/gameOverEvent" },
     { "$ref": "#/$defs/runFinishedEvent" }
   ],
@@ -42,7 +43,8 @@
             "run_started", "round_started", "round_cleared", "tower_spawned", "tower_merged",
             "tower_sold", "boss_summoned", "boss_killed", "augment_offered", "augment_rerolled",
             "augment_chosen", "hero_xp_bought", "hero_leveled", "probe_bought", "race_upgraded",
-            "god_rerolled", "gas_skill_upgraded", "tower_copy_marked", "game_over", "run_finished"
+            "god_rerolled", "gas_skill_upgraded", "tower_copy_marked", "game_cleared", "game_over",
+            "run_finished"
           ]
         },
         "data": { "type": "object" }
@@ -125,6 +127,7 @@
         "round": { "type": "integer", "minimum": 0 },
         "elapsedSeconds": { "type": "number", "minimum": 0 },
         "kills": { "type": "integer", "minimum": 0 },
+        "cleared": { "type": "boolean" },
         "bossCleared": { "type": "integer", "minimum": 0 },
         "bossesKilled": { "type": "integer", "minimum": 0 },
         "heroLevel": { "type": "integer", "minimum": 1 },
@@ -151,7 +154,7 @@
       "additionalProperties": false
     },
     "finishReason": {
-      "enum": ["game_over", "restart", "quit", "abandoned", "test"]
+      "enum": ["game_over", "cleared", "restart", "quit", "abandoned", "test"]
     },
     "runStartedData": {
       "type": "object",
@@ -366,6 +369,16 @@
       ],
       "additionalProperties": false
     },
+    "gameClearedData": {
+      "type": "object",
+      "required": ["round", "score", "lives"],
+      "properties": {
+        "round": { "type": "integer", "minimum": 1 },
+        "score": { "type": "number" },
+        "lives": { "type": "integer", "minimum": 1 }
+      },
+      "additionalProperties": false
+    },
     "gameOverData": {
       "type": "object",
       "required": ["cause", "enemyKind", "lives"],
@@ -405,6 +418,7 @@
     "godRerolledEvent": { "allOf": [{ "$ref": "#/$defs/eventBase" }, { "type": "object", "properties": { "type": { "const": "god_rerolled" }, "data": { "$ref": "#/$defs/godRerolledData" } } }] },
     "gasSkillUpgradedEvent": { "allOf": [{ "$ref": "#/$defs/eventBase" }, { "type": "object", "properties": { "type": { "const": "gas_skill_upgraded" }, "data": { "$ref": "#/$defs/gasSkillUpgradedData" } } }] },
     "towerCopyMarkedEvent": { "allOf": [{ "$ref": "#/$defs/eventBase" }, { "type": "object", "properties": { "type": { "const": "tower_copy_marked" }, "data": { "$ref": "#/$defs/towerCopyMarkedData" } } }] },
+    "gameClearedEvent": { "allOf": [{ "$ref": "#/$defs/eventBase" }, { "type": "object", "properties": { "type": { "const": "game_cleared" }, "data": { "$ref": "#/$defs/gameClearedData" } } }] },
     "gameOverEvent": { "allOf": [{ "$ref": "#/$defs/eventBase" }, { "type": "object", "properties": { "type": { "const": "game_over" }, "data": { "$ref": "#/$defs/gameOverData" } } }] },
     "runFinishedEvent": { "allOf": [{ "$ref": "#/$defs/eventBase" }, { "type": "object", "properties": { "type": { "const": "run_finished" }, "data": { "$ref": "#/$defs/runFinishedData" } } }] }
   }

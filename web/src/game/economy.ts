@@ -14,29 +14,30 @@ export interface KillIncome {
 
 /**
  * 누적 킬이 `before` → `after`로 올랐을 때 지급할 금화.
- * 반복 20킬 보상은 없앴다(balance.ts waveReward 참조). 남은 건 마일스톤 미션뿐이다.
+ * 반복 킬 미션 (2026-07-19, 사용자 지시): 20킬마다 +20골드 — 200킬 간격 마일스톤 표를
+ * 대체한다. 원본의 반복 20킬 보상(trigger #544/#545)과 같은 리듬이다.
  */
 export function killIncome(before: number, after: number): KillIncome {
   if (after <= before) return { mineral: 0, notes: [] };
 
-  const notes: string[] = [];
-  let mineral = 0;
-
-  for (const [threshold, reward] of B.KILL_MILESTONES) {
-    if (before < threshold && after >= threshold) {
-      mineral += reward;
-      notes.push(`[${threshold}Kills 보상] +${reward}`);
-    }
-  }
-  return { mineral, notes };
+  const crossings =
+    Math.floor(after / B.KILL_MISSION_EVERY) - Math.floor(before / B.KILL_MISSION_EVERY);
+  if (crossings <= 0) return { mineral: 0, notes: [] };
+  const mineral = crossings * B.KILL_MISSION_REWARD;
+  return {
+    mineral,
+    notes: [`[${B.KILL_MISSION_EVERY}킬 미션] +${mineral}`],
+  };
 }
 
 /** 보스 처치 보상. trigger #601~#606 */
 export const bossKillMineral = (level: number): number =>
   B.BOSS_KILL_MINERAL[Math.min(level, B.BOSS_MAX_LEVEL) - 1] ?? 0;
 
-/** 아직 지나지 않은 다음 킬 마일스톤. 전부 지났으면 null */
+/** 다음 킬 미션 문턱 — 20킬 미션은 무한 반복이라 항상 존재한다 */
 export function nextMilestone(kills: number): { kills: number; reward: number } | null {
-  const found = B.KILL_MILESTONES.find(([threshold]) => threshold > kills);
-  return found ? { kills: found[0], reward: found[1] } : null;
+  return {
+    kills: (Math.floor(kills / B.KILL_MISSION_EVERY) + 1) * B.KILL_MISSION_EVERY,
+    reward: B.KILL_MISSION_REWARD,
+  };
 }

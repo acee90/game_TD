@@ -66,7 +66,10 @@ describe('점수 적립', () => {
     game.update(B.OPENING_SECONDS + 0.01); // 라운드 1 시작 — 아직 클리어 아님
     expect(game.score).toBe(0);
 
+    // 스폰이 끝나야 카운트다운이 흐른다 (2026-07-19) — 스폰 창을 잘게 소화한 뒤
+    for (let i = 0; i < 50; i++) game.update(0.1);
     game.update(B.ROUND_SECONDS + 0.01); // 라운드 1 클리어
+    expect(game.round).toBe(2);
     expect(game.score).toBeGreaterThanOrEqual(S.roundScore(1));
   });
 
