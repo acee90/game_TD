@@ -1,8 +1,9 @@
 // ───────── 부트스트랩: Svelte 앱 마운트 ─────────
 import { mount } from 'svelte';
 import './app.css';
-import App from './App.svelte';
 
-const app = mount(App, { target: document.body });
+const isLogViewer = location.pathname === '/logs' || location.pathname === '/logs/';
+const rootModule = isLogViewer ? import('./LogViewer.svelte') : import('./App.svelte');
+const app = rootModule.then(({ default: Root }) => mount(Root, { target: document.body }));
 
 export default app;

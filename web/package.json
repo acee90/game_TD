@@ -11,7 +11,9 @@
     "check": "svelte-check --tsconfig ./tsconfig.json",
     "test": "vitest run",
     "gen:balance": "vite-node tools/gen-balance-csv.ts",
-    "sim:ga": "vite-node tools/ga-sim.ts"
+    "gen:log-fixture": "vite-node tools/gen-run-log-fixtures.ts",
+    "sim:ga": "vite-node tools/ga-sim.ts",
+    "logs:analyze": "vite-node tools/analyze-run-logs.ts"
   },
   "devDependencies": {
     "@sveltejs/vite-plugin-svelte": "^5.1.1",
