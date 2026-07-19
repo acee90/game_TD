@@ -101,6 +101,116 @@ namespace GodTD.Tests
             }
         }
 
+        [Test]
+        public void SessionSupportsLoggingToggleAndFixedSeed()
+        {
+            string root = Path.Combine(Path.GetTempPath(), "game-td-run-session-tests", Guid.NewGuid().ToString("N"));
+            try
+            {
+                var disabled = UnityRunSession.Create(out var disabledStore, new UnityRunSessionOptions
+                {
+                    LoggingEnabled = false,
+                    Seed = 123u,
+                    RootDirectory = root,
+                });
+                Assert.That(disabled, Is.Not.Null);
+                Assert.That(disabledStore, Is.Null);
+                Assert.That(Directory.Exists(root), Is.False);
+
+                var enabled = UnityRunSession.Create(out var enabledStore, new UnityRunSessionOptions
+                {
+                    LoggingEnabled = true,
+                    Seed = 123u,
+                    RootDirectory = root,
+                });
+                Assert.That(enabledStore, Is.Not.Null);
+                var started = JObject.Parse(File.ReadLines(enabledStore.EventsPath).First());
+                Assert.That((uint)started["data"]["seed"], Is.EqualTo(123u));
+
+                UnityRunSession.FinishAndDispose(enabled, ref enabledStore, FinishReasons.Test);
+                Assert.That(enabledStore, Is.Null);
+            }
+            finally
+            {
+                if (Directory.Exists(root)) Directory.Delete(root, true);
+            }
+        }
+
+        [Test]
+        public void RestartAndQuitFinalizeEachSessionOnlyOnce()
+        {
+            string root = Path.Combine(Path.GetTempPath(), "game-td-run-lifecycle-tests", Guid.NewGuid().ToString("N"));
+            try
+            {
+                var first = UnityRunSession.Create(out var firstStore, new UnityRunSessionOptions
+                {
+                    LoggingEnabled = true,
+                    Seed = 11u,
+                    RootDirectory = root,
+                });
+                string firstEvents = firstStore.EventsPath;
+                string firstSummary = firstStore.SummaryPath;
+                UnityRunSession.FinishAndDispose(first, ref firstStore, FinishReasons.Restart);
+                UnityRunSession.FinishAndDispose(first, ref firstStore, FinishReasons.Quit);
+
+                var second = UnityRunSession.Create(out var secondStore, new UnityRunSessionOptions
+                {
+                    LoggingEnabled = true,
+                    Seed = 12u,
+                    RootDirectory = root,
+                });
+                string secondEvents = secondStore.EventsPath;
+                string secondSummary = secondStore.SummaryPath;
+                UnityRunSession.FinishAndDispose(second, ref secondStore, FinishReasons.Quit);
+                UnityRunSession.FinishAndDispose(second, ref secondStore, FinishReasons.Quit);
+
+                Assert.That(File.ReadAllLines(firstEvents).Length, Is.EqualTo(2));
+                Assert.That(File.ReadAllLines(secondEvents).Length, Is.EqualTo(2));
+                Assert.That((string)JObject.Parse(File.ReadAllText(firstSummary))["finishReason"],
+                    Is.EqualTo("restart"));
+                Assert.That((string)JObject.Parse(File.ReadAllText(secondSummary))["finishReason"],
+                    Is.EqualTo("quit"));
+            }
+            finally
+            {
+                if (Directory.Exists(root)) Directory.Delete(root, true);
+            }
+        }
+
+        [Test]
+        public void FixedSeedSmokeScenarioEmitsDecisionEvents()
+        {
+            string root = Path.Combine(Path.GetTempPath(), "game-td-run-smoke-tests", Guid.NewGuid().ToString("N"));
+            try
+            {
+                var game = UnityRunSession.Create(out var store, new UnityRunSessionOptions
+                {
+                    LoggingEnabled = true,
+                    Seed = 424242u,
+                    RootDirectory = root,
+                    ValidationScenario = "smoke",
+                });
+                string eventsPath = store.EventsPath;
+                UnityRunSession.FinishAndDispose(game, ref store, FinishReasons.Test);
+
+                var events = File.ReadAllLines(eventsPath).Select(JObject.Parse).ToList();
+                var types = events.Select(gameEvent => (string)gameEvent["type"]).ToList();
+                Assert.That((uint)events[0]["data"]["seed"], Is.EqualTo(424242u));
+                Assert.That(types, Does.Contain("tower_spawned"));
+                Assert.That(types, Does.Contain("tower_merged"));
+                Assert.That(types, Does.Contain("boss_summoned"));
+                Assert.That(types, Does.Contain("hero_xp_bought"));
+                Assert.That(types, Does.Contain("hero_leveled"));
+                Assert.That(types, Does.Contain("augment_offered"));
+                Assert.That(types, Does.Contain("augment_chosen"));
+                Assert.That(types.Last(), Is.EqualTo("run_finished"));
+            }
+            finally
+            {
+                if (Directory.Exists(root)) Directory.Delete(root, true);
+            }
+        }
+
         static RunContext TestContext(string runId, uint seed) => new RunContext
         {
             RunId = runId,

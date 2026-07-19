@@ -199,9 +199,7 @@ namespace GodTD.View
 
         void FinishAndDisposeRun(string reason)
         {
-            Game?.FinishRun(reason);
-            runStore?.Dispose();
-            runStore = null;
+            UnityRunSession.FinishAndDispose(Game, ref runStore, reason);
         }
 
         void Update()
@@ -526,7 +524,11 @@ namespace GodTD.View
         static GameObject LoadPlatformerPrefab(string key)
         {
             int idx = key.LastIndexOf('/');
-            return Resources.Load<GameObject>("Platformer/" + (idx >= 0 ? key.Substring(idx + 1) : key));
+            string path = "Platformer/" + (idx >= 0 ? key.Substring(idx + 1) : key);
+            var prefab = Resources.Load<GameObject>(path);
+            if (prefab == null)
+                Debug.LogError($"Missing Resources prefab '{path}' (IslandBuilder key '{key}').");
+            return prefab;
         }
 
         /// <summary>IslandBuilder가 만든 슬롯 캡에 게임 상호작용을 붙인다 — 클릭 콜라이더·마커·틴트.</summary>

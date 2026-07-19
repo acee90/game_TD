@@ -1,6 +1,6 @@
 # 실행 계획 — Web·Unity 공통 게임 런 로그
 
-> 상태: **초안** (P0·P1·P3 완료, P2 잔여 런타임 검증) · 작성일: 2026-07-18 · 최종 갱신: 2026-07-19
+> 상태: **초안** (P0·P1·P2·P3 완료, P4 미착수) · 작성일: 2026-07-18 · 최종 갱신: 2026-07-19
 > 상위 이슈: [#12 게임 로그 기록 시스템 도입](https://github.com/acee90/game_TD/issues/12)
 > 하위 이슈: [#13 P0 스키마](https://github.com/acee90/game_TD/issues/13) →
 > [#15 P1 Web](https://github.com/acee90/game_TD/issues/15) →
@@ -9,16 +9,18 @@
 > 범위: 한 판의 빌드·점수·주요 의사결정을 코어 상태 변경 지점에서 JSONL로 기록하고,
 > Web/Unity 로그를 같은 계약으로 검증·분석한다. 게임 규칙과 밸런스 수치는 바꾸지 않는다.
 
-> 진행 기록 (2026-07-19): **P0 계약과 P1 Web, P3 분석·로컬 viewer를 완료했고 P2 Unity의 잔여 런타임 검증이 남았다.** 공통 JSON Schema,
+> 진행 기록 (2026-07-19): **P0 계약과 P1 Web, P2 Unity, P3 분석·로컬 viewer를 완료했다.** 공통 JSON Schema,
 > `mulberry32-v1`, Core 이벤트 sink, IndexedDB 저장·재로드, 게임오버 JSONL/summary 다운로드와
 > 관련 Web 테스트 6개를 추가했다. Unity에는 같은 RNG·이벤트 DTO·Core sink와
-> `persistentDataPath` JSONL/summary writer를 연결했고 EditMode 테스트 3개를 통과했다.
+> `persistentDataPath` JSONL/summary writer를 연결했고 로그 관련 EditMode 테스트 6개를 통과했다.
 > 실제 Editor Play에서 `quit` 런의 JSONL/summary 생성과 Ajv 공통 schema 통과까지 확인했다.
 > P3에서는 Web·Unity fixture, 공통 validator/projector, CSV·Markdown CLI와 `/logs` 로컬 viewer를
 > 추가했다. 타입 검사, P3 관련 테스트 10개, production build, 두 fixture의 동시 CLI 분석을
 > 통과했다. production viewer에서 실제 fixture 다중 업로드, build 혼합 경고, 2-run 비교,
-> 유형·라운드·시간 필터, 미완료·깨진 JSON 품질 경고까지 검수했다. P2의 standalone·재시작
-> 수명주기와 고정 seed 전체 시나리오는 잔여 작업이다. Cloudflare(P4)는 미착수다.
+> 유형·라운드·시간 필터, 미완료·깨진 JSON 품질 경고까지 검수했다. P2는 개발용 저장 토글,
+> 고정 seed와 smoke 시나리오 환경 변수, 재시작·종료 단일 finalize를 추가했다. macOS standalone에서
+> seed 424242로 생성·조합·보스·증강·XP를 포함한 32개 이벤트와 summary를 만들고 공통 분석기
+> E0/W0을 확인했다. Cloudflare(P4)는 미착수다.
 
 ---
 
@@ -353,20 +355,27 @@ npm run build
 - [x] Web과 같은 seed/PRNG 버전, envelope, payload 키를 구현.
 - [x] 한 이벤트를 완성된 한 줄로 append하고 매 이벤트 flush; 종료 시 summary도 즉시 저장.
 - [x] 디렉터리 생성·쓰기 실패가 게임을 중단하지 않게 로깅 비활성화와 오류 메시지를 분리.
-- [ ] Editor Play, standalone build, 재시작, 정상 종료 수명주기에서 writer를 한 번만 dispose.
+- [x] Editor Play, standalone build, 재시작, 정상 종료 수명주기에서 writer를 한 번만 dispose.
 - [x] build info의 값을 얻지 못하면 키를 생략하지 않고 `unknown`과 `dirty` 상태를 명시.
-- [ ] 개발용 토글로 저장을 끌 수 있게 하되 기본 플레이테스트 빌드는 켠다.
+- [x] 개발용 토글로 저장을 끌 수 있게 하되 기본 플레이테스트 빌드는 켠다.
 
 ### 6.3 Unity 테스트·검수
 
 - [x] EditMode에서 Web 기준 Mulberry32 수열, memory sink 이벤트 순서·단일 종료를 검증.
 - [x] Editor Play 실제 JSONL의 `run_started → run_finished`를 공통 Ajv schema로 검증.
 - [x] Play Mode 한 판에서 `persistentDataPath`의 JSONL·summary 두 파일 생성 확인.
-- [ ] Unity MCP로 고정 seed의 생성/조합/보스/증강/XP 시나리오를 실행하고 로그 경로와
+- [x] Unity CLI/standalone으로 고정 seed의 생성/조합/보스/증강/XP 시나리오를 실행하고 로그 경로와
   Console 컴파일 오류 0을 캡처.
 - [x] Web과 Unity의 대표 sample을 P3 fixture로 승격.
 
 규모: **L**. P1 이벤트 의미가 안정된 뒤 시작한다.
+
+검증 결과 (2026-07-19): Unity 6000.5.3f1 EditMode 7/7 통과, macOS standalone 빌드 성공.
+`GAME_RUN_SEED=424242 GAME_RUN_SCENARIO=smoke` 실행은 `run_started`부터
+`run_finished(quit)`까지 32개 이벤트를 기록했고 Web `logs:analyze`에서 E0/W0으로 분석됐다.
+Player 뷰 계층에서는 `Platformer/3D_Tile_Top_01` 번들 누락과 연쇄 TMP 예외가 별도로 재현됐으나,
+로그 writer·summary 종료에는 영향을 주지 않았다. 이는 런 로그 계약 문제가 아니라 빌드 리소스
+패키징 문제로 분리한다.
 
 ## 7. P3 — 분석 리포트·로컬 viewer·회귀 검증 (#14)
 
