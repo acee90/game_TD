@@ -5,7 +5,13 @@ import * as B from '../data/balance';
 import * as H from '../data/hero';
 import * as K from '../data/skills';
 import * as S from '../data/score';
-import { PATH_LENGTH, SLOT_POS, pathPos, type PathProjection } from '../core/map';
+import {
+  PATH_LENGTH,
+  SLOT_POS,
+  WALKABLE_HALF_WIDTH,
+  pathPos,
+  type PathProjection,
+} from '../core/map';
 import { GOD_TIER, RACES, RACE_COLOR, tagLabel, type Race } from '../data/units';
 import type { AugmentCard } from '../data/hero';
 import { attackInterval, damage, isSplash, range, slowFactor, type UpgradeLevels } from './combat';
@@ -426,7 +432,7 @@ export class Game {
         if (e.dead) return false;
         const gap = (e.distance - hero.distance) * direction;
         if (gap < -H.ENEMY_TOUCH_RANGE || gap > skill.beamLength) return false;
-        return Math.abs((e.lane ?? 0) * 12) <= skill.beamWidth;
+        return Math.abs(e.lateral ?? 0) <= skill.beamWidth;
       }).length;
     return countTowards(1) >= countTowards(-1) ? 1 : -1;
   }
@@ -1169,14 +1175,21 @@ export class Game {
     });
   }
 
+  /** 누적 스폰 수 — 초기 횡오프셋 패턴용 (유닛 추첨 rand를 건드리면 안 된다) */
+  private enemiesSpawned = 0;
+
   /** 모든 적은 북측 왼쪽 문 하나에서 나온다 */
   private spawn(spec: EnemySpec): void {
+    // 잡몹은 좌/우 교대 + 크기가 도는 결정적 패턴으로 벌려서 시작, 보스는 중앙.
+    // 이후에는 separateEnemies가 겹침을 밀어낸다. (전투 판정은 distance 1D)
+    // this.rand는 유닛 추첨용이라 여기서 소비하면 시드 재현이 깨진다 — 쓰지 않는다.
+    const n = this.enemiesSpawned++;
+    const spread = 0.5 + 0.25 * (n % 4); // 0.5 ~ 1.25
     this.enemies.push({
       ...spec,
       hp: spec.maxHp,
       distance: 0,
-      // 2열 레인 — 잡몹은 좌/우 교대, 보스는 중앙. 표시 전용(판정은 distance 1D)
-      lane: spec.kind === 'boss' ? 0 : this.enemies.length % 2 === 0 ? -1 : 1,
+      lateral: spec.kind === 'boss' ? 0 : (n % 2 === 0 ? -1 : 1) * B.MOB_LANE_OFFSET * spread,
     });
   }
 
@@ -1358,6 +1371,7 @@ export class Game {
     const combatDt = dt * B.earlyTempo(this.round);
 
     this.advanceEnemies(combatDt);
+    this.separateEnemies(combatDt);
 
     this.fireTowers(combatDt);
     this.stepHero(combatDt);
@@ -1397,6 +1411,21 @@ export class Game {
     const heroBlocks = hero.alive;
     const decoy = this.decoy;
 
+    // 어그로 수 상한 (2026-07-19) — 범위 안이라고 전부 붙잡히지 않는다.
+    // 영웅에게 가까운 순으로 상한까지만 어그로. 초과분은 영웅을 무시하고 지나간다.
+    // (허수아비는 전담 탱킹 도구라 상한 없음 — isDecoyAggroed가 먼저 다 잡는다.)
+    const aggroed = new Set<Enemy>(
+      heroBlocks
+        ? this.enemies
+            .filter((e) => !e.dead && e.kind !== 'boss' && this.isAggroed(e, hero))
+            .sort(
+              (a, b) =>
+                Math.abs(hero.distance - a.distance) - Math.abs(hero.distance - b.distance),
+            )
+            .slice(0, H.aggroCap(hero.stats.aggroRange))
+        : [],
+    );
+
     for (const enemy of this.enemies) {
       // 스킬 감속 디버프
       if (enemy.slowTimer !== undefined && enemy.slowTimer > 0) {
@@ -1418,7 +1447,7 @@ export class Game {
 
       // 보스는 영웅에게 멈추지 않는다 — 지나가며 칠 뿐이다. 저지 불가라
       // 소환한 보스를 화력으로 못 잡으면 걸어나가 목숨을 문다.
-      if (heroBlocks && enemy.kind !== 'boss' && this.isAggroed(enemy, hero)) {
+      if (aggroed.has(enemy)) {
         enemy.held = true;
         const gap = hero.distance - enemy.distance;
         // 영웅에게 다가가되 지나치지 않는다
@@ -1433,6 +1462,57 @@ export class Game {
         enemy.dead = true;
         this.breakthrough(enemy);
       }
+    }
+  }
+
+  /**
+   * 몹 겹침 분리 (2026-07-19) — (진행도, 횡오프셋) 2D에서 원끼리 겹치면 밀어낸다.
+   * 소프트바디식: 프레임당 겹침의 일부만 해소해 부드럽게 벌어진다.
+   *
+   * 길 막힘 방지가 분리보다 우선이다 —
+   * - 멈춘 몹(held)·보스는 진행도 방향으로 밀리지 않는다(횡으로만 비킨다).
+   *   그래야 영웅 앞 무리가 뒤로 밀려 어그로가 풀리는 떨림이 없다.
+   * - SLACK < 1이라 길이 꽉 차면 약간 겹친 채로 비집고 지나간다 — 몹끼리
+   *   완전히 길을 막는 교착은 만들지 않는다.
+   */
+  private separateEnemies(dt: number): void {
+    const live = this.enemies.filter((e) => !e.dead);
+    if (live.length < 2) return;
+    live.sort((a, b) => a.distance - b.distance);
+
+    const relax = Math.min(1, B.MOB_SEPARATION_RATE * dt);
+    const maxLateral = WALKABLE_HALF_WIDTH;
+
+    for (let i = 0; i < live.length; i++) {
+      const a = live[i];
+      for (let j = i + 1; j < live.length; j++) {
+        const b = live[j];
+        const minDist = (a.radius + b.radius) * B.MOB_SEPARATION_SLACK;
+        const dx = b.distance - a.distance; // 정렬돼 있어 dx >= 0
+        if (dx >= minDist) break; // 이후 몹은 더 멀다
+        let dy = (b.lateral ?? 0) - (a.lateral ?? 0);
+        let gap = Math.hypot(dx, dy);
+        if (gap >= minDist) continue;
+        if (gap < 1e-3) {
+          // 완전히 겹침 — 인덱스 짝홀로 결정적으로 좌우를 가른다
+          dy = j % 2 === 0 ? 0.5 : -0.5;
+          gap = 0.5;
+        }
+        const push = ((minDist - gap) * relax) / gap; // 단위벡터 × 해소량
+        const px = dx * push * 0.5;
+        const py = dy * push * 0.5;
+        this.nudgeEnemy(a, -px, -py, maxLateral);
+        this.nudgeEnemy(b, px, py, maxLateral);
+      }
+    }
+  }
+
+  /** 분리가 몹 하나를 미는 한 번. 보스는 안 밀리고, 멈춘 몹은 횡으로만 비킨다. */
+  private nudgeEnemy(enemy: Enemy, dDist: number, dLat: number, maxLateral: number): void {
+    if (enemy.kind === 'boss') return;
+    enemy.lateral = Math.max(-maxLateral, Math.min(maxLateral, (enemy.lateral ?? 0) + dLat));
+    if (!enemy.held) {
+      enemy.distance = Math.max(0, Math.min(PATH_LENGTH, enemy.distance + dDist));
     }
   }
 
@@ -1531,10 +1611,12 @@ export class Game {
         const raw = hero.attackDamage * (crit ? stats.critMult : 1);
 
         if (stats.splashRadius > 0) {
+          // 영웅 스플래시도 계단 감쇠 (2026-07-19) — 주표적 100%, 멀수록 준다
           for (const enemy of this.enemies) {
             const [ex, ey] = pathPos(enemy.distance);
-            if (Math.hypot(ex - tx, ey - ty) <= stats.splashRadius) {
-              this.heroHitEnemy(enemy, raw, stats);
+            const dist = Math.hypot(ex - tx, ey - ty);
+            if (dist <= stats.splashRadius) {
+              this.heroHitEnemy(enemy, raw * B.splashFalloff(dist, stats.splashRadius), stats);
             }
           }
           this.shots.push({
@@ -1752,7 +1834,7 @@ export class Game {
         const gap = (enemy.distance - hero.distance) * beam.direction;
         // 빔 방향으로 beamLength 안 + 경로에서 벗어난 레인은 beamWidth 안
         if (gap < -H.ENEMY_TOUCH_RANGE || gap > beam.skill.beamLength) continue;
-        if (Math.abs((enemy.lane ?? 0) * 12) > beam.skill.beamWidth) continue;
+        if (Math.abs(enemy.lateral ?? 0) > beam.skill.beamWidth) continue;
         this.skillHit(enemy, beam.skill, raw); // 틱마다 화상 한 겹 (skillHit 안에서)
       }
       const tipDistance = Math.min(
@@ -1869,15 +1951,13 @@ export class Game {
       const color = RACE_COLOR[tower.def.race];
 
       if (isSplash(tower)) {
-        // 스플래시 감쇠 (2026-07-18, 사용자 지시) — 사거리 안 전원이 균일 피해를 받던 것을,
-        // 폭심(샷이 날아가는 지점)에서 멀수록 줄어들게 한다. 폭심 자체(거리 0)는 100%,
-        // 사거리 끝은 SPLASH_EDGE_FALLOFF까지 선형으로 준다.
+        // 스플래시 감쇠 — 폭심(샷이 날아가는 지점)에서 멀수록 계단식으로 줄어든다
+        // (splashFalloff, 2026-07-19: 선형 → 3단계 계단).
         const [cx, cy] = pathPos(inReach[0].distance);
         for (const e of inReach) {
           const [ex, ey] = pathPos(e.distance);
           const dist = Math.hypot(ex - cx, ey - cy);
-          const falloff = 1 - (1 - B.SPLASH_EDGE_FALLOFF) * Math.min(1, dist / reach);
-          const dealt = B.effectiveDamage(raw * falloff, e.armor);
+          const dealt = B.effectiveDamage(raw * B.splashFalloff(dist, reach), e.armor);
           e.hp -= dealt;
           this.towerDamageDealt += dealt;
           if (e.held) this.tankAssistDamage += dealt;

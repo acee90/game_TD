@@ -188,6 +188,19 @@ export const HERO_RESPAWN_SECONDS = 12;
 
 /** 이 거리 안에 영웅이 보이면 몹이 멈춰서 영웅부터 친다 */
 export const HERO_AGGRO_RANGE = 110;
+
+/**
+ * 어그로 수 상한 (2026-07-19, 사용자 지시: "모든 몬스터가 어그로 끌릴 수는 없다").
+ *
+ * 상한 = 어그로 범위 ÷ 이 값 — 범위 22px(= 접촉 사거리, 몸 하나 폭)당 1기.
+ * 기본 110px → 5기. 도발 계열 증강이 범위를 넓히면 상한도 같이 오른다
+ * (도발 오라 2스택 ×2 → 10기). 상한을 넘는 몹은 영웅을 무시하고 지나간다 —
+ * 어그로 탱킹의 기대값이 "전부"에서 "범위에 비례한 만큼"으로 내려간다.
+ * 허수아비(미끼)는 전담 탱킹 도구라 상한을 두지 않는다.
+ */
+export const AGGRO_RANGE_PER_TARGET = 22;
+export const aggroCap = (aggroRange: number): number =>
+  Math.max(1, Math.round(aggroRange / AGGRO_RANGE_PER_TARGET));
 /** 이만큼 붙으면 실제로 때린다 */
 export const ENEMY_TOUCH_RANGE = 22;
 export const ENEMY_ATTACK_INTERVAL = 1;

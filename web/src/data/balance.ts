@@ -459,8 +459,22 @@ export const ENEMY_SPEED = 42;
  */
 export const earlyTempo = (round: number): number => Math.min(1, 0.5 + 0.1 * Math.max(1, round));
 
-/** 몹 2열 레인 — 경로 중심선에서 좌우로 비끼는 표시 오프셋(px). 판정은 1D 그대로. [프로토] */
+/** 스폰 시 몹의 초기 횡오프셋(px) — 좌/우 교대로 벌려서 시작한다. [프로토] */
 export const MOB_LANE_OFFSET = 8;
+
+// ── 몹 겹침 분리 (2026-07-19, 사용자 지시: "어그로 시 몹이 완전히 겹친다") ──
+// 몹은 (경로 진행도, 횡오프셋) 2D에서 원으로 취급하고, 겹치면 서로 밀어낸다.
+// 전투 판정은 여전히 1D(distance)다 — 분리는 시각·공간 점유의 문제만 푼다.
+/**
+ * 프레임당 겹침 해소율(초당). 1프레임에 겹침의 rate×dt 비율만큼만 밀어
+ * 소프트바디처럼 부드럽게 벌어진다 — 즉시 해소하면 튕기는 것처럼 보인다.
+ */
+export const MOB_SEPARATION_RATE = 8;
+/**
+ * 분리 판정 반지름 배수. 1.0이면 몸이 정확히 맞닿을 때까지 밀고, 낮출수록
+ * 약간의 겹침을 허용한다 — 길이 꽉 찼을 때 뒤따르는 몹이 비집고 지나갈 틈이 된다.
+ */
+export const MOB_SEPARATION_SLACK = 0.85;
 
 // ───────── 웨이브 타입 (2026-07-12 골격 — 타입 2개로 시작) ─────────
 // 5R 사이클에 질적 정체성을 준다. 총체력 예산(enemyHP 모델)은 건드리지 않고
@@ -522,11 +536,27 @@ export const TAG_EFFECT: Record<Tag, { damage: number; interval: number; range: 
 };
 
 /**
- * 스플래시 타워 피해 감쇠 (2026-07-18, 사용자 지시) — 사거리 안 전원이 동일 피해를
- * 받던 것을, 폭심(샷이 날아가는 지점)에서 멀수록 이 비율까지 선형으로 줄어들게 한다.
- * 폭심 자체는 1(100%), 사거리 끝은 이 값(요청 범위 0.5~0.6의 중간).
+ * 스플래시 피해 감쇠 — 3단계 계단식 (2026-07-19, 사용자 지시).
+ *
+ * 2026-07-18의 선형 감쇠(폭심 100% → 끝 55%)를 계단식으로 교체 — "2,3단계 나눠서"
+ * 가 화면에서 읽히기 쉽다: 안쪽 ⅓은 100%, 가운데 ⅓은 75%, 바깥 ⅓은 50%.
+ * 경로 위 몹은 폭심 기준 1D로 늘어서므로 구간 평균 0.75 ≈ 선형 시절 평균(0.775) —
+ * 스플래시 타워 총량은 거의 그대로 두고 모양만 계단이 된다.
+ * 영웅 스플래시(다중 투사 등)에도 같은 규칙을 적용한다 — 전에는 100% 균일이었다.
  */
-export const SPLASH_EDGE_FALLOFF = 0.55;
+export const SPLASH_FALLOFF_TIERS: readonly (readonly [upTo: number, mult: number])[] = [
+  [1 / 3, 1],
+  [2 / 3, 0.75],
+  [1, 0.5],
+];
+
+/** 폭심에서 dist만큼 떨어진 대상의 피해 배수. radius 밖은 마지막 단계 값으로 처리. */
+export const splashFalloff = (dist: number, radius: number): number => {
+  if (radius <= 0) return 1;
+  const t = dist / radius;
+  for (const [upTo, mult] of SPLASH_FALLOFF_TIERS) if (t <= upTo) return mult;
+  return SPLASH_FALLOFF_TIERS[SPLASH_FALLOFF_TIERS.length - 1][1];
+};
 
 /** 유효 피해 — 장갑을 뺀다. 최소 10%는 관통 */
 export const effectiveDamage = (raw: number, armor: number): number =>
