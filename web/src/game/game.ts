@@ -1999,19 +1999,34 @@ export class Game {
       const color = RACE_COLOR[tower.def.race];
 
       if (isSplash(tower)) {
-        // 스플래시 감쇠 — 폭심(샷이 날아가는 지점)에서 멀수록 계단식으로 줄어든다
-        // (splashFalloff, 2026-07-19: 선형 → 3단계 계단).
-        const [cx, cy] = pathPos(inReach[0].distance);
-        for (const e of inReach) {
-          const [ex, ey] = pathPos(e.distance);
-          const dist = Math.hypot(ex - cx, ey - cy);
-          const dealt = B.effectiveDamage(raw * B.splashFalloff(dist, reach), e.armor);
+        // 폭발 반경은 사거리 전체가 아니라 그 일부다 (SPLASH_RADIUS_MULT, 2026-07-19).
+        const blast = reach * B.SPLASH_RADIUS_MULT;
+        const pos = inReach.map((e) => pathPos(e.distance));
+        // 폭심 = 반경 안에 몹이 가장 많이 들어오는 지점. 반경이 좁아진 만큼
+        // 아무 몹이나 잡으면 1~2기밖에 못 때린다 — 밀집을 노려야 제값을 한다.
+        let best = 0;
+        let bestHits = -1;
+        for (let i = 0; i < pos.length; i++) {
+          let hits = 0;
+          for (const [px, py] of pos) if (Math.hypot(px - pos[i][0], py - pos[i][1]) <= blast) hits++;
+          if (hits > bestHits) {
+            bestHits = hits;
+            best = i;
+          }
+        }
+        const [cx, cy] = pos[best];
+        // 감쇠 — 폭심에서 멀수록 계단식으로 줄고, 반경 밖은 아예 안 맞는다.
+        for (let i = 0; i < inReach.length; i++) {
+          const dist = Math.hypot(pos[i][0] - cx, pos[i][1] - cy);
+          if (dist > blast) continue;
+          const e = inReach[i];
+          const dealt = B.effectiveDamage(raw * B.splashFalloff(dist, blast), e.armor);
           e.hp -= dealt;
           this.towerDamageDealt += dealt;
           if (e.held) this.tankAssistDamage += dealt;
           e.lastHitByHero = false;
         }
-        this.shots.push({ x: slot.x, y: slot.y, tx: cx, ty: cy, life: 0.08, color, splashRadius: reach });
+        this.shots.push({ x: slot.x, y: slot.y, tx: cx, ty: cy, life: 0.08, color, splashRadius: blast });
       } else {
         // 파워는 체력 최대(보스) 우선, 그 외에는 가장 멀리 간 적(돌파 임박) 우선
         const power = tower.def.tags.includes('power');
