@@ -360,6 +360,20 @@ namespace GodTD.Core
                 (heldByKind.TryGetValue(augment.Kind, out int held) ? held : 0);
 
             var cards = new List<AugmentCard>();
+            // 기본 강타는 시작 장비다. 강타만 든 동안에는 전체 풀의 랜덤에 묻히지 않도록
+            // 스킬 획득 카드 한 장을 보장한다. 하나를 고른 뒤 SkillGateAllows가 추가 획득을 막는다.
+            if (hero.SkillIdHeld == Skills.DEFAULT_SKILL)
+            {
+                var grants = remaining.FindAll(augment => augment.GrantsSkill.HasValue);
+                if (grants.Count > 0)
+                {
+                    var grantWeights = new List<float>(grants.Count);
+                    foreach (var candidate in grants) grantWeights.Add(WeightOf(candidate));
+                    var selectedGrant = grants[WeightedIndex(grantWeights, rand)];
+                    cards.Add(Augments.MakeCard(selectedGrant, Augments.RollRarity(rand)));
+                    remaining.RemoveAll(augment => augment.GrantsSkill.HasValue);
+                }
+            }
             while (cards.Count < HeroData.AUGMENT_CHOICES && remaining.Count > 0)
             {
                 var weights = new List<float>(remaining.Count);

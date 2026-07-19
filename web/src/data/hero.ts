@@ -336,7 +336,7 @@ export const LOW_HP_THRESHOLD = 0.35;
 export const CRIT_BASE_MULT = 2;
 
 // 상한 — 곱연산 증강이 겹쳐도 게임이 깨지지 않게 막는다
-export const LIFESTEAL_CAP = 0.5;
+export const LIFESTEAL_CAP = 0.12;
 export const CRIT_CHANCE_CAP = 0.9;
 /** 처형 임계 상한. 이 이상이면 보스도 순삭된다 */
 export const EXECUTE_CAP = 0.25;
@@ -596,7 +596,9 @@ export function scaleEffect(effect: AugmentEffect, power: number): AugmentEffect
         ? undefined
         : Math.min(0.6, effect.damageReduction * power),
     splashRadius: add(effect.splashRadius),
-    lifesteal: add(effect.lifesteal),
+    // 흡혈은 이미 가한 피해량을 따라 성장한다. 등급까지 곱하면 공격력 성장과 이중으로 커져
+    // 생존이 무한에 가까워지므로 카드에 적힌 비율을 그대로 쓴다.
+    lifesteal: effect.lifesteal,
     critChance: add(effect.critChance),
     critMultAdd: add(effect.critMultAdd),
     executeBelow: add(effect.executeBelow),
@@ -758,8 +760,8 @@ export const AUGMENTS: readonly Augment[] = [
     effect: { damageReduction: 0.2 } },
   { id: 'regen', kind: 'defense', name: '재생', description: '초당 체력 6 회복', maxStacks: 3,
     effect: { regen: 6 } },
-  { id: 'lifesteal', kind: 'defense', name: '흡혈', description: '가한 피해의 12% 회복', maxStacks: 3,
-    effect: { lifesteal: 0.12 } },
+  { id: 'lifesteal', kind: 'defense', name: '흡혈', description: '가한 피해의 4% 회복', maxStacks: 3,
+    effect: { lifesteal: 0.04 } },
   // 아레나 '가시 갑옷' — 맞으면서 되돌려준다. 가시는 허수아비에게도 걸린다.
   { id: 'thorns', kind: 'defense', name: '가시 갑옷', description: '받은 피해의 120%를 때린 적에게 되돌린다 (허수아비도 적용)',
     maxStacks: 2, effect: { thorns: 1.2 } },
@@ -777,8 +779,8 @@ export const AUGMENTS: readonly Augment[] = [
     description: '체력 35% 이하일 때 공격력 +60%', maxStacks: 2,
     effect: { lowHpDamageMult: 1.6 } },
   // TFT 'Blood Price' — 체력을 걸고 흡혈
-  { id: 'bloodpact', kind: 'defense', name: '피의 계약', description: '가한 피해의 18% 회복 · 최대 체력 -20%',
-    maxStacks: 1, effect: { lifesteal: 0.18 }, penalty: { hpMult: 0.8 } },
+  { id: 'bloodpact', kind: 'defense', name: '피의 계약', description: '가한 피해의 7% 회복 · 최대 체력 -20%',
+    maxStacks: 1, effect: { lifesteal: 0.07 }, penalty: { hpMult: 0.8 } },
   { id: 'stoneskin', kind: 'defense', name: '석화 피부', description: '받는 피해 15% 감소 · 공격 속도 -10%',
     maxStacks: 2, effect: { damageReduction: 0.15 }, penalty: { attackSpeedMult: 0.9 } },
 
@@ -826,8 +828,8 @@ export const AUGMENTS: readonly Augment[] = [
   // 아레나 '연쇄 폭발' — 죽은 적이 터진다
   { id: 'deathblast', kind: 'combat', name: '폭사', description: '처치한 적이 반경 50에 공격력 3배로 폭발',
     maxStacks: 2, effect: { deathBlast: 3, deathBlastRadius: 50 } },
-  { id: 'berserk', kind: 'combat', name: '광폭화', description: '공격 속도 +30%, 가한 피해의 8% 회복',
-    maxStacks: 2, effect: { attackSpeedMult: 1.3, lifesteal: 0.08 } },
+  { id: 'berserk', kind: 'combat', name: '광폭화', description: '공격 속도 +30%, 가한 피해의 3% 회복',
+    maxStacks: 2, effect: { attackSpeedMult: 1.3, lifesteal: 0.03 } },
   // 사망도 자원으로 쓴다 — 죽는 순간과 돌아오는 순간이 둘 다 폭발이다
   // 초신성 — 딜러가 아니라 **탱커의 마지막 한 방**이다. 체력 계수가 공격력 계수보다 크다.
   { id: 'supernova', kind: 'combat', name: '초신성',
@@ -982,8 +984,8 @@ export const AUGMENTS: readonly Augment[] = [
     description: '막타마다 공격력 +2 (누적)', maxStacks: 2,
     effect: { killStackFlatDamage: 2 } },
   { id: 'bloodthirst', kind: 'growth', name: '피의 갈증',
-    description: '막타마다 공격력 +1 (누적), 가한 피해의 5% 회복', maxStacks: 2,
-    effect: { killStackFlatDamage: 1, lifesteal: 0.05 } },
+    description: '막타마다 공격력 +1 (누적), 가한 피해의 2% 회복', maxStacks: 2,
+    effect: { killStackFlatDamage: 1, lifesteal: 0.02 } },
   { id: 'veteran', kind: 'growth', name: '역전의 용사', description: '라운드마다 공격력 +3% (영구 누적)',
     maxStacks: 3, effect: { waveStackDamage: 0.03 } },
   { id: 'ironblood', kind: 'growth', name: '강철 혈통', description: '라운드마다 최대 체력 +5% (영구 누적)',

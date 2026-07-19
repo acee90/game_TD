@@ -83,10 +83,12 @@ describe('스킬 획득 — 하나만 든다', () => {
       return seed / 4294967296;
     };
 
-    // 기본 스킬(강타)만 든 동안 — 공용('any') 개조는 나올 수 있지만
-    // 특정 스킬 전용 개조는 한 번도 안 나온다 (6차: 기본 스킬 도입으로 완화)
+    // 기본 스킬(강타)만 든 동안에는 스킬 획득 카드가 정확히 한 장 보장된다.
+    // 공용('any') 개조는 나올 수 있지만 특정 스킬 전용 개조는 나오지 않는다.
     for (let i = 0; i < 200; i++) {
-      for (const c of rollAugmentChoices(hero, rand)) {
+      const choices = rollAugmentChoices(hero, rand);
+      expect(choices.filter((c) => c.augment.grantsSkill !== undefined)).toHaveLength(1);
+      for (const c of choices) {
         if (c.augment.skillMod) {
           expect(
             c.augment.requiresSkill === 'any' || c.augment.requiresZone === true,
@@ -101,7 +103,9 @@ describe('스킬 획득 — 하나만 든다', () => {
     // 스킬을 들면 다른 스킬 증강은 사라지고, 그 스킬 전용 개조가 등장한다
     let sawTaunt = false;
     for (let i = 0; i < 400; i++) {
-      for (const c of rollAugmentChoices(hero, rand)) {
+      const choices = rollAugmentChoices(hero, rand);
+      expect(choices.filter((c) => c.augment.grantsSkill !== undefined)).toHaveLength(0);
+      for (const c of choices) {
         expect(c.augment.grantsSkill).toBeUndefined();
         expect(c.augment.id).not.toBe('explosive_arrow'); // volley 전용
         if (c.augment.id === 'taunt_dummy') sawTaunt = true;
