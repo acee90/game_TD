@@ -61,8 +61,16 @@ const CROSS_SLOTS: readonly Pt[] = [
 export const CORNER_COLS = 3;
 export const CORNER_ROWS = 2;
 
-/** 경로 선의 절반 두께 + 타일 절반 — 이만큼은 경로 중심선에서 떨어져야 겹치지 않는다 */
-const CLEARANCE = 12 + TILE / 2;
+/**
+ * 길의 보행 가능 반폭(px) — 경로 중심선에서 좌우로 이만큼까지 걸을 수 있다.
+ * 영웅 이동과 몹 횡오프셋(겹침 분리)이 모두 이 폭을 쓴다.
+ * 12 → 20 (2026-07-19, 사용자 지시): 몹 겹침 분리를 넣으면서 몹끼리 길을 완전히
+ * 막지 않도록 길을 ~1.7배 넓혔다. 몹(반지름 9) 기준 2~3열이 나란히 지나간다.
+ */
+export const WALKABLE_HALF_WIDTH = 20;
+
+/** 보행 반폭 + 타일 절반 — 이만큼은 경로 중심선에서 떨어져야 겹치지 않는다 */
+const CLEARANCE = WALKABLE_HALF_WIDTH + TILE / 2;
 
 const cornerBlock = (originX: number, originY: number, dx: number, dy: number): Pt[] =>
   Array.from({ length: CORNER_COLS * CORNER_ROWS }, (_, i) => {
@@ -166,12 +174,6 @@ export const NEXUS: Pt = CENTER;
 // ───────── 영웅 클릭 지점 이동 (hero-point-movement.md, 2026-07-16) ─────────
 // 영웅 위치 = 경로 진행도 + 횡방향(법선) 오프셋. 중앙선 고정을 없애되
 // 전후 진행·몸막기 의미는 유지한다. 몹 판정은 여전히 1D(distance)다.
-
-/**
- * 길의 보행 가능 반폭(px) — 경로 중심선에서 좌우로 이만큼까지 걸을 수 있다.
- * 경로 선의 절반 두께(12 — CLEARANCE 주석)와 같다. 몹 레인 오프셋(8)보다 넓다.
- */
-export const WALKABLE_HALF_WIDTH = 12;
 
 /**
  * 코너 블렌딩 반경(px). 웨이포인트(90도 코너)에서 법선이 급변하므로, 코너에서

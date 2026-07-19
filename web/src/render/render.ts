@@ -7,17 +7,19 @@ import {
   DOOR_OUT,
   NEXUS,
   TILE,
+  WALKABLE_HALF_WIDTH,
   WAYPOINTS,
   pathPos,
 } from '../core/map';
-import { BOSS_COOLDOWN_SECONDS, MOB_LANE_OFFSET } from '../data/balance';
+import { BOSS_COOLDOWN_SECONDS } from '../data/balance';
 import { HERO_RADIUS } from '../data/hero';
 import { GOD_TIER, RACE_COLOR } from '../data/units';
 import { range } from '../game/combat';
 import type { Game } from '../game/game';
 import type { Enemy, Slot } from '../game/types';
 
-const PATH_WIDTH = 36; // 2열 레인 (±8px) 수용
+// 보행 반폭 + 몹 몸통(반지름 9)이 비어져 나오는 몫 — 겹침 분리로 벌어진 몹까지 길 위에 담는다
+const PATH_WIDTH = (WALKABLE_HALF_WIDTH + 10) * 2;
 
 function strokePath(ctx: CanvasRenderingContext2D, width: number, color: string): void {
   ctx.beginPath();
@@ -271,7 +273,7 @@ export function render(ctx: CanvasRenderingContext2D, game: Game): void {
   drawZones(ctx, game);
 
   for (const enemy of game.enemies) {
-    const [x, y] = pathPosOffset(enemy.distance, (enemy.lane ?? 0) * MOB_LANE_OFFSET);
+    const [x, y] = pathPosOffset(enemy.distance, enemy.lateral ?? 0);
     drawEnemy(ctx, x, y, enemy);
 
     // 클릭해서 들여다보는 중인 몹에 표식

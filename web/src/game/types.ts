@@ -32,8 +32,12 @@ export interface EnemySpec {
 
 export interface Enemy extends EnemySpec {
   hp: number;
-  /** 2열 레인: -1(좌) | +1(우). 보스·테스트 픽스처는 0/생략. 표시 전용 — 판정은 distance 1D */
-  lane?: number;
+  /**
+   * 경로 중심선에서의 횡오프셋(px, 좌측 법선 기준 부호). 스폰 시 좌/우 교대로 벌려
+   * 시작하고, 이후 겹침 분리가 밀어낸다. 보스·테스트 픽스처는 0/생략.
+   * 전투 판정은 여전히 distance 1D — 이 값은 공간 점유(겹침)와 표시에만 쓴다.
+   */
+  lateral?: number;
   /** 입구에서 이동한 거리. PATH_LENGTH 도달 시 돌파 */
   distance: number;
   dead?: boolean;
