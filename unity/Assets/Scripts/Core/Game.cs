@@ -894,12 +894,16 @@ namespace GodTD.Core
                     var t = MapData.PathPos(target.Distance);
                     if (stats.SplashRadius > 0f)
                     {
+                        // 영웅 스플래시도 계단 감쇠 (2026-07-19) — 주표적 100%, 멀수록 준다.
+                        // 반경은 영웅 스탯 그대로다 (타워의 SPLASH_RADIUS_MULT는 안 걸린다).
                         foreach (var enemy in Enemies)
                         {
                             var e = MapData.PathPos(enemy.Distance);
-                            if (MapData.Hypot(e.X - t.X, e.Y - t.Y) <= stats.SplashRadius)
+                            float dist = MapData.Hypot(e.X - t.X, e.Y - t.Y);
+                            if (dist <= stats.SplashRadius)
                             {
-                                float dealt = Balance.EffectiveDamage(stats.Damage, enemy.Armor);
+                                float dealt = Balance.EffectiveDamage(
+                                    stats.Damage * Balance.SplashFalloff(dist, stats.SplashRadius), enemy.Armor);
                                 enemy.Hp -= dealt;
                                 HeroDamageDealt += dealt;
                                 enemy.LastHitByHero = true;
@@ -1000,19 +1004,41 @@ namespace GodTD.Core
 
                 if (Combat.IsSplash(tower))
                 {
-                    foreach (var e in inReach)
+                    // 폭발 반경은 사거리 전체가 아니라 그 일부다 (SPLASH_RADIUS_MULT, 2026-07-19).
+                    float blast = reach * Balance.SPLASH_RADIUS_MULT;
+                    var pos = new Pt[inReach.Count];
+                    for (int i = 0; i < inReach.Count; i++) pos[i] = MapData.PathPos(inReach[i].Distance);
+                    // 폭심 = 반경 안에 몹이 가장 많이 들어오는 지점. 반경이 좁아진 만큼
+                    // 아무 몹이나 잡으면 1~2기밖에 못 때린다 — 밀집을 노려야 제값을 한다.
+                    int best = 0;
+                    int bestHits = -1;
+                    for (int i = 0; i < pos.Length; i++)
                     {
-                        float dealt = Balance.EffectiveDamage(raw, e.Armor);
+                        int hits = 0;
+                        foreach (var q in pos) if (MapData.Hypot(q.X - pos[i].X, q.Y - pos[i].Y) <= blast) hits++;
+                        if (hits > bestHits)
+                        {
+                            bestHits = hits;
+                            best = i;
+                        }
+                    }
+                    var c = pos[best];
+                    // 감쇠 — 폭심에서 멀수록 계단식으로 줄고, 반경 밖은 아예 안 맞는다.
+                    for (int i = 0; i < inReach.Count; i++)
+                    {
+                        float dist = MapData.Hypot(pos[i].X - c.X, pos[i].Y - c.Y);
+                        if (dist > blast) continue;
+                        var e = inReach[i];
+                        float dealt = Balance.EffectiveDamage(raw * Balance.SplashFalloff(dist, blast), e.Armor);
                         e.Hp -= dealt;
                         TowerDamageDealt += dealt;
                         if (e.Held) TankAssistDamage += dealt;
                         e.LastHitByHero = false;
                     }
-                    var p = MapData.PathPos(inReach[0].Distance);
                     Shots.Add(new Shot
                     {
-                        X = slot.X, Y = slot.Y, Tx = p.X, Ty = p.Y, Life = 0.08f,
-                        Color = color, SplashRadius = reach,
+                        X = slot.X, Y = slot.Y, Tx = c.X, Ty = c.Y, Life = 0.08f,
+                        Color = color, SplashRadius = blast,
                     });
                 }
                 else

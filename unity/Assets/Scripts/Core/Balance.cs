@@ -293,16 +293,61 @@ namespace GodTD.Core
         public const float CREATURE_DAMAGE_MULT = 0.6f;
         public static readonly float[] CREATURE_SLOW = { 0.9f, 0.84f, 0.76f, 0.66f, 0.5f };
 
-        /// <summary>태그별 전투 배수 (damage, interval, range). 인덱스 = Tag enum</summary>
+        /// <summary>
+        /// 태그별 전투 배수 (damage, interval, range). 인덱스 = Tag enum
+        ///
+        /// 2026-07-19 (사용자 지시): 파워를 **느린 한 방**으로 바꾼다.
+        /// interval 1.0 → 1.5, damage 1.6 → 2.2 (지속 DPS 1.6 → 1.47로 소폭 하향, 한 방은 +38%).
+        ///
+        /// 의도 — "파워만 깔면 보스도 잡고 잡몹도 치운다"를 깨는 것. 파워는 최대 체력 대상을
+        /// 먼저 쏘는데(Game.FireTowers), 발사 간격이 1.5배로 늘면 한 웨이브 동안 쏠 수 있는
+        /// 횟수 자체가 줄고 오버킬은 전부 버려진다(피해 이월 없음). 잡몹 한 기에 과잉 피해를
+        /// 꽂는 동안 나머지가 출구로 걸어간다 = **일반 몹을 놓칠 위험**.
+        /// 보스는 체력이 커서 오버킬이 없으므로 한 방 상향분을 그대로 받는다.
+        /// </summary>
         public static (float damage, float interval, float range) TagEffect(Tag tag)
         {
             switch (tag)
             {
-                case Tag.Power: return (1.6f, 1.0f, 1.15f);
-                case Tag.Splash: return (0.7f, 1.0f, 1.0f);
+                case Tag.Power: return (2.2f, 1.5f, 1.15f);
+                case Tag.Splash: return (0.9f, 1.0f, 1.0f);
                 case Tag.Speed: return (1.0f, 0.5f, 0.9f);
                 default: return (1f, 1f, 1f);
             }
+        }
+
+        /// <summary>
+        /// 스플래시 폭발 반경 = 타워 사거리 × 이 값 (2026-07-19, 사용자 지시).
+        ///
+        /// 전에는 반경이 **사거리 전체**였다 — 사실상 무제한 광역이라 감쇠를 아무리 조여도
+        /// 사거리 안 모든 몹을 때렸다. 실제 폭발 반경을 따로 두어야 "감쇠 강화"가 의미를 갖는다.
+        /// </summary>
+        public const float SPLASH_RADIUS_MULT = 0.55f;
+
+        /// <summary>
+        /// 스플래시 피해 감쇠 — 3단계 계단식. 2026-07-19 (사용자 지시) 감쇠 강화:
+        /// 0.75/0.5 → 0.55/0.25. 경로 1D 기준 구간 평균 0.75 → 0.6.
+        ///
+        /// 반경 축소(SPLASH_RADIUS_MULT)와 함께 스플래시 총량이 크게 깎이므로 태그 피해를
+        /// 0.7 → 0.9로 되돌려 보상하고, 폭심을 **가장 몹이 몰린 곳**으로 잡는다(Game.FireTowers).
+        /// 결과: 스플래시는 "뭉친 무리를 정확히 때리면 강한" 타워가 된다 — 넓게 뿌리는 게
+        /// 아니라 밀집을 노리는 쪽으로 성격이 바뀐다.
+        /// 영웅 스플래시(다중 투사 등)에도 같은 감쇠를 적용한다.
+        /// </summary>
+        public static readonly (float upTo, float mult)[] SPLASH_FALLOFF_TIERS =
+        {
+            (1f / 3f, 1f),
+            (2f / 3f, 0.55f),
+            (1f, 0.25f),
+        };
+
+        /// <summary>폭심에서 dist만큼 떨어진 대상의 피해 배수. radius 밖은 마지막 단계 값으로 처리.</summary>
+        public static float SplashFalloff(float dist, float radius)
+        {
+            if (radius <= 0f) return 1f;
+            float t = dist / radius;
+            foreach (var (upTo, mult) in SPLASH_FALLOFF_TIERS) if (t <= upTo) return mult;
+            return SPLASH_FALLOFF_TIERS[SPLASH_FALLOFF_TIERS.Length - 1].mult;
         }
 
         /// <summary>유효 피해 — 장갑을 뺀다. 최소 10%는 관통</summary>
