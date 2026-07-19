@@ -1,6 +1,6 @@
 # 게임시스템 명세 — v1.3
 
-> 상태: **현행** · 최종 갱신: 2026-07-13 · 상위 기준: [vision.md](vision.md)
+> 상태: **현행** · 최종 갱신: 2026-07-19 · 상위 기준: [vision.md](vision.md)
 > 대상: `web/` 프로토 (커밋 `7fdd4ae` = PR #3 머지) · Unity 포팅(`unity/`)은 동일 로직의 C# 미러
 > 이 문서는 **현재 구현된 시스템의 전체 명세**다. 수치의 원본은 언제나 코드
 > (`web/src/data/*.ts`)이고, 여기 적힌 값은 그 스냅샷이다. 값이 다르면 코드가 맞다.
@@ -319,6 +319,7 @@ GOD 타워 **14.7기**(R44 보드 전체가 5.1기)까지 갔다.
 
 | 결정 | 이유 | 상태 | 검증 |
 |---|---|---|---|
+| **Web·Unity 공통 런 로그 v1 + 로컬 분석 viewer** (2026-07-19) — 성공한 상태 변경을 versioned JSONL 이벤트로 기록하고 종료 summary를 함께 저장한다. Web은 IndexedDB와 다운로드, Unity는 `persistentDataPath/GameLogs`를 사용하며, 루트 JSON Schema를 두 런타임의 공통 계약으로 둔다. `/logs` viewer와 CLI는 같은 DOM 없는 validator/projector를 공유한다 | 타워 빌드·보스 소환·증강·영웅 성장 같은 플레이 의사결정을 build/seed와 함께 남겨 밸런스 변경의 정량·정성 근거로 쓰기 위해서다. 클라우드 장애나 서비스 도입 전에도 로그 원본을 보존하고 검수할 수 있도록 local-first로 결정했다 | 채택 | Web·Unity 대표 fixture가 같은 Ajv schema와 분석 모듈을 통과. P3 관련 Vitest 10개·타입 검사·production build·CSV/Markdown 동시 분석 통과. production `/logs`에서 2-run 업로드·비교, 유형/라운드/시간 필터, 미완료·invalid JSON 경고 확인. [실행 계획](../exec-plans/game-run-logging.md) |
 | 라운드 고정 간격 | 클리어 진행식은 보스 쿨 악용을 만든다 | 채택 | — |
 | 5라운드 사이클 난이도 | 지수를 구분선형으로 — 예측 가능 + 주기적 긴장 | 채택 | — |
 | 영웅 타입/전직 **삭제** | 정보 0의 시작 선택 → Lv5 전직 → 최종적으로 드래프트 관성으로. 선택이 맥락을 갖는 지점은 증강 선택 그 자체다 | 채택 | — |

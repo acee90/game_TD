@@ -1,6 +1,6 @@
 # 실행 계획 — Web·Unity 공통 게임 런 로그
 
-> 상태: **초안** (GitHub #12~#16 범위 검토 완료, 구현 전) · 작성일/최종 갱신: 2026-07-18
+> 상태: **초안** (P0·P1·P3 완료, P2 잔여 런타임 검증) · 작성일: 2026-07-18 · 최종 갱신: 2026-07-19
 > 상위 이슈: [#12 게임 로그 기록 시스템 도입](https://github.com/acee90/game_TD/issues/12)
 > 하위 이슈: [#13 P0 스키마](https://github.com/acee90/game_TD/issues/13) →
 > [#15 P1 Web](https://github.com/acee90/game_TD/issues/15) →
@@ -9,13 +9,16 @@
 > 범위: 한 판의 빌드·점수·주요 의사결정을 코어 상태 변경 지점에서 JSONL로 기록하고,
 > Web/Unity 로그를 같은 계약으로 검증·분석한다. 게임 규칙과 밸런스 수치는 바꾸지 않는다.
 
-> 진행 기록 (2026-07-18): **P0 계약과 P1 Web 기준 구현 완료, P2 Unity 구현·EditMode 검증 진행 중.** 공통 JSON Schema,
+> 진행 기록 (2026-07-19): **P0 계약과 P1 Web, P3 분석·로컬 viewer를 완료했고 P2 Unity의 잔여 런타임 검증이 남았다.** 공통 JSON Schema,
 > `mulberry32-v1`, Core 이벤트 sink, IndexedDB 저장·재로드, 게임오버 JSONL/summary 다운로드와
 > 관련 Web 테스트 6개를 추가했다. Unity에는 같은 RNG·이벤트 DTO·Core sink와
 > `persistentDataPath` JSONL/summary writer를 연결했고 EditMode 테스트 3개를 통과했다.
 > 실제 Editor Play에서 `quit` 런의 JSONL/summary 생성과 Ajv 공통 schema 통과까지 확인했다.
-> standalone·재시작 수명주기와 고정 seed 전체 시나리오는 P2 잔여 작업이며,
-> viewer·분석(P3), Cloudflare(P4)는 미착수다.
+> P3에서는 Web·Unity fixture, 공통 validator/projector, CSV·Markdown CLI와 `/logs` 로컬 viewer를
+> 추가했다. 타입 검사, P3 관련 테스트 10개, production build, 두 fixture의 동시 CLI 분석을
+> 통과했다. production viewer에서 실제 fixture 다중 업로드, build 혼합 경고, 2-run 비교,
+> 유형·라운드·시간 필터, 미완료·깨진 JSON 품질 경고까지 검수했다. P2의 standalone·재시작
+> 수명주기와 고정 seed 전체 시나리오는 잔여 작업이다. Cloudflare(P4)는 미착수다.
 
 ---
 
@@ -361,7 +364,7 @@ npm run build
 - [x] Play Mode 한 판에서 `persistentDataPath`의 JSONL·summary 두 파일 생성 확인.
 - [ ] Unity MCP로 고정 seed의 생성/조합/보스/증강/XP 시나리오를 실행하고 로그 경로와
   Console 컴파일 오류 0을 캡처.
-- [ ] Web과 Unity의 대표 sample을 P3 fixture로 승격.
+- [x] Web과 Unity의 대표 sample을 P3 fixture로 승격.
 
 규모: **L**. P1 이벤트 의미가 안정된 뒤 시작한다.
 
@@ -418,14 +421,14 @@ viewer와 CLI가 서로 다른 계산을 하지 않도록 parser와 summary proj
 
 ### 7.3 회귀 게이트
 
-- [ ] JSON 파싱 실패, schema 위반, seq 중복/역행, runId 혼합을 실패 처리.
-- [ ] 첫 `run_started`, 완료 run의 마지막 `run_finished`를 검증.
-- [ ] `run_finished.summary`와 별도 summary/재집계 결과의 핵심 필드 일치.
-- [ ] Web·Unity fixture 모두 같은 schema를 통과.
-- [ ] 알려지지 않은 v major는 조용히 읽지 않고 명시적으로 거부.
-- [ ] 미완료 run은 오류가 아니라 `complete=false` 경고와 부분 요약으로 출력.
-- [ ] CLI와 viewer가 같은 fixture에서 같은 핵심 summary를 출력.
-- [ ] viewer production build에서 로컬 파일 load·필터·2-run 비교가 동작.
+- [x] JSON 파싱 실패, schema 위반, seq 중복/역행, runId 혼합을 실패 처리.
+- [x] 첫 `run_started`, 완료 run의 마지막 `run_finished`를 검증.
+- [x] `run_finished.summary`와 별도 summary/재집계 결과의 핵심 필드 일치.
+- [x] Web·Unity fixture 모두 같은 schema를 통과.
+- [x] 알려지지 않은 v major는 조용히 읽지 않고 명시적으로 거부.
+- [x] 미완료 run은 오류가 아니라 `complete=false` 경고와 부분 요약으로 출력.
+- [x] CLI와 viewer가 같은 fixture에서 같은 핵심 summary를 출력.
+- [x] viewer production build에서 로컬 파일 load·필터·2-run 비교가 동작.
 
 ### 7.4 리포트 사용 절차
 
@@ -593,7 +596,7 @@ D1 모델:
 닫힌 것만으로 닫지 않고, Web/Unity 샘플을 분석 CLI 한 번에 넣어 결과가 생성되는 end-to-end
 검증 후 닫는다.
 
-P3 viewer와 P4는 현재 하위 이슈 본문에 없다. 구현 전에 #14의 viewer 완료 기준을 보강하고,
+P3 viewer 완료 기준은 이 문서의 7.2~7.3을 기준으로 검수하고 #14 종료 증거에 반영한다.
 P4-A/P4-B는 #12에 억지로 넣지 말고 별도 후속 이슈로 등록한다.
 
 ## 12. 문서 승격 규칙
