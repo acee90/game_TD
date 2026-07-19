@@ -582,7 +582,7 @@ function weightedIndex(weights: readonly number[], rand: () => number): number {
  * 스킬 개조 증강은 이미 그 스킬을 든 영웅에게만 뜨므로 보유 스킬 계열만큼 기운다.
  */
 export function rollAugmentChoices(hero: Hero, rand: () => number): AugmentCard[] {
-  const remaining = H.AUGMENTS.filter((augment) => augmentAllowed(hero, augment));
+  let remaining = H.AUGMENTS.filter((augment) => augmentAllowed(hero, augment));
   const heldByKind = new Map<H.AugmentKind, number>();
   for (const c of hero.augments) {
     heldByKind.set(c.augment.kind, (heldByKind.get(c.augment.kind) ?? 0) + 1);
@@ -591,6 +591,17 @@ export function rollAugmentChoices(hero: Hero, rand: () => number): AugmentCard[
     1 + H.ADAPTIVE_KIND_WEIGHT * (heldByKind.get(augment.kind) ?? 0);
 
   const cards: AugmentCard[] = [];
+  // 기본 강타는 시작 장비이지 드래프트에서 얻은 스킬이 아니다. 강타만 든 동안에는
+  // 전체 풀의 랜덤에 묻히지 않도록 스킬 획득 카드 한 장을 반드시 제안한다.
+  // 하나를 고른 뒤에는 skillGateAllows가 모든 추가 스킬 획득 카드를 막는다.
+  if (hero.skillId === K.DEFAULT_SKILL) {
+    const grants = remaining.filter((augment) => augment.grantsSkill !== undefined);
+    if (grants.length > 0) {
+      const grant = grants[weightedIndex(grants.map(weightOf), rand)];
+      cards.push(H.makeCard(grant, grant.fixedRarity ?? H.rollRarity(rand)));
+      remaining = remaining.filter((augment) => augment.grantsSkill === undefined);
+    }
+  }
   while (cards.length < H.AUGMENT_CHOICES && remaining.length > 0) {
     const index = weightedIndex(remaining.map(weightOf), rand);
     const augment = remaining[index];
