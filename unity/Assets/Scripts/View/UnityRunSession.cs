@@ -49,6 +49,9 @@ namespace GodTD.View
                 return new Game(SeededRandom.Create(seed));
             }
 
+            // catch에서 store?.Dispose()를 읽으므로 try 진입 전에 확정 대입이 필요하다
+            // (CS0269 — try 안에서만 대입하면 예외 경로에서 미대입 out 파라미터를 읽는다).
+            store = null;
             var context = CreateContext(seed);
             try
             {
