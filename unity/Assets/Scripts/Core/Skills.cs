@@ -177,8 +177,8 @@ namespace GodTD.Core
 
         // ───────── 마나 (TFT식, 2026-07-17 웹 동기화) ─────────
         // 평타를 칠 때와 맞을 때 찬다. 가득 차면 자동 시전 후 0으로.
-        public const float MANA_PER_ATTACK = 10f;
-        public const float MANA_ON_DAMAGED = 8f;
+        public const float MANA_PER_ATTACK = 6f;
+        public const float MANA_ON_DAMAGED = 14f;
         /// <summary>필요 마나 배수의 가산 폴드 하한 — 이보다 싸질 수 없다 (난사 폭주 방지)</summary>
         public const float MANA_MAX_FLOOR = 0.4f;
 

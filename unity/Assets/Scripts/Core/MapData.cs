@@ -214,7 +214,7 @@ namespace GodTD.Core
         // ───────── 영웅 클릭 지점 이동 (hero-point-movement.md, 2026-07-16) ← web/src/core/map.ts ─────────
 
         /// <summary>길의 보행 가능 반폭(px) — 경로 중심선에서 좌우로 이만큼까지 걸을 수 있다.</summary>
-        public const float WALKABLE_HALF_WIDTH = 12f;
+        public const float WALKABLE_HALF_WIDTH = 20f;
 
         /// <summary>
         /// 코너 블렌딩 반경(px). 90도 코너에서 법선이 급변하므로 코너 근처에서 횡오프셋을

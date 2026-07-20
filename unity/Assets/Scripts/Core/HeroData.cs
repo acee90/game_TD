@@ -53,12 +53,32 @@ namespace GodTD.Core
         public const int HERO_BASE_AGI = 8;
         public const int HERO_BASE_INT = 8;
 
-        /// <summary>힘 1당 공격력 — 레벨 배수 폐지의 보상으로 1 → 6 재척도 [프로토]</summary>
-        public const float DMG_PER_STR = 6f;
+        /// <summary>힘 1당 공격력 — 1 → 6 재척도, 7차 6 → 5 [프로토] ← web</summary>
+        public const float DMG_PER_STR = 5f;
         /// <summary>힘 1당 최대 체력 — 같은 이유로 18 → 70 [프로토]</summary>
         public const float HP_PER_STR = 70f;
-        /// <summary>민첩 1당 공격 속도 +4%</summary>
-        public const float AS_PER_AGI = 0.04f;
+
+        /// <summary>
+        /// 레벨과 무관한 기본 체력 (2026-07-14). 체력이 힘×70뿐이라 Lv1(힘 2) 영웅이 140이었다 —
+        /// 어그로 범위 안 몹이 뭉쳐 붙으면 8.8초에 죽었다(라운드는 22초). 기본값을 주면
+        /// **초반만** 두꺼워진다 — 레벨이 오를수록 힘 몫이 커져 후반 밸런스는 거의 그대로. ← web
+        /// </summary>
+        public const float HERO_BASE_HP = 260f;
+
+        /// <summary>
+        /// 민첩 1당 공격 속도 — **포화식** (2026-07-19, 사용자 지시).
+        /// 0.056×agi/(1+agi/23). 선형이면 민첩이 레벨에 초선형이라 Lv20~30에 공격 간격
+        /// 하한에 박혀 이후 성장이 전부 낭비됐다. 무증강 앵커: Lv1 1.67/초 · Lv40 3.0/초. ← web
+        /// </summary>
+        public const float AS_PER_AGI = 0.056f;
+        public const float AS_AGI_SOFT_CAP = 23f;
+
+        /// <summary>
+        /// 레벨업마다 오르는 **기본** 공격 속도 (2026-07-18) — 민첩과는 별개 축이고,
+        /// 증강의 AttackSpeedMult와는 가산이 아니라 **곱연산**으로 붙는다.
+        /// 레벨에 선형이다(복리 아님) — 복리면 Lv50에 공속만 +87%로 부푼다. ← web
+        /// </summary>
+        public const float LEVEL_ATTACK_SPEED_RATE = 0.005f;
         /// <summary>공격 간격 하한 — 민첩을 아무리 사도 이 밑으로는 안 내려간다</summary>
         public const float MIN_ATTACK_INTERVAL = 0.25f;
         /// <summary>지능 1당 스킬 피해 +3.5%</summary>
@@ -71,7 +91,11 @@ namespace GodTD.Core
         /// </summary>
         /// <summary>레벨업이 세 스탯에 나눠 주는 총 포인트 — 후반 레벨일수록 굵게</summary>
         // 2+L/10 → 1+L/7 → 1+L/6 (2026-07-17 4차): 백로딩 유지 + 후반 상향 (Lv38 +14%). ← web
-        public static int LevelStatPoints(int level) => 1 + level / 6;
+        // Lv19+ 추가 항 (2026-07-18): 후반부에 더 벌어지게 — Lv50 +64%. ← web
+        public const int HERO_LATE_GAME_FROM = 19;
+        public const int HERO_LATE_GAME_DIVISOR = 3;
+        public static int LevelStatPoints(int level) =>
+            1 + level / 6 + Math.Max(0, level - HERO_LATE_GAME_FROM) / HERO_LATE_GAME_DIVISOR;
 
         /// <summary>해당 레벨까지 각 스탯이 공통으로 받은 자연 성장치.</summary>
         public static float StatBonusByLevel(int level)
@@ -108,8 +132,8 @@ namespace GodTD.Core
         /// 1.10이면 골드 2배당 +7레벨 — 새 창: 수입 20%로 R45에 Lv~24, 실질 상한 ~Lv43. ← web
         /// </summary>
         public const float XP_BASE_COST = 14f;
-        // 1.12 → 1.10 (2026-07-17 4차): Lv30+ 비용 완화 — 후반 가치는 LevelStatPoints 상향과 세트. ← web
-        public const float XP_COST_GROWTH = 1.1f;
+        // 1.12 → 1.10 (2026-07-17 4차) → 1.08 (2026-07-18): Lv30+ 비용을 더 완화. ← web
+        public const float XP_COST_GROWTH = 1.08f;
         public static int XpToNext(int level) =>
             (int)MathF.Round(XP_BASE_COST * MathF.Pow(XP_COST_GROWTH, level));
 
@@ -146,7 +170,7 @@ namespace GodTD.Core
         /// <summary>보스는 같은 라운드 잡몹 여러 기 몫으로 때린다</summary>
         /// <summary>Lv3까지는 영웅·허수아비를 공격하지 않고 지나간다 — 위협은 누출 라이프뿐 ← web</summary>
         // 3 → 6 (2026-07-17 플레이테스트): 보스는 전 레벨 무해 — 위협은 누출 라이프뿐. ← web
-        public const int BOSS_HARMLESS_MAX_LEVEL = 7; // Lv7(5차)도 무해 — 전 레벨 불변 ← web
+        public const int BOSS_HARMLESS_MAX_LEVEL = 8; // Lv8(2026-07-18)도 무해 — 전 레벨 불변 ← web
         public static float BossDamage(int level, int round) =>
             level <= BOSS_HARMLESS_MAX_LEVEL ? 0f : EnemyDamage(round) * (1.5f + 0.5f * level);
 

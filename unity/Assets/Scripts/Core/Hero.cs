@@ -266,10 +266,12 @@ namespace GodTD.Core
             float agi = HeroData.StatValue(level, StatId.Agi);
             float intel = HeroData.StatValue(level, StatId.Int);
 
-            float maxHp = HeroData.HP_PER_STR * str;
+            float maxHp = HeroData.HERO_BASE_HP + HeroData.HP_PER_STR * str;
             float damage = HeroData.DMG_PER_STR * str;
             float range = HeroData.HERO_BASE_RANGE;
-            float attackSpeed = 1f + HeroData.AS_PER_AGI * agi;
+            // 민첩 공속은 포화식, 레벨 공속은 그 위에 곱연산 (2026-07-19). ← web
+            float attackSpeed = 1f + HeroData.AS_PER_AGI * agi / (1f + agi / HeroData.AS_AGI_SOFT_CAP);
+            attackSpeed *= 1f + HeroData.LEVEL_ATTACK_SPEED_RATE * level;
             float moveSpeed = HeroData.HERO_SPEED;
             float regen = 0f;
             float splashRadius = 0f;

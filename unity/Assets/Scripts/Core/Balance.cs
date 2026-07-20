@@ -42,16 +42,17 @@ namespace GodTD.Core
         /// <summary>보스 처치 보상 Lv1..Lv6 [프로토]</summary>
         // 원본은 { 5, 8, 13, 20, 29, 39 } (trigger #601~#606 [원본확정]).
         // 2026-07-11 [프로토] 대체 — 보스 HP ×2.5와 함께 리스크에 보상이 따라가게. ← web
-        public static readonly int[] BOSS_KILL_MINERAL = { 5, 10, 18, 32, 55, 90, 150 }; // Lv7 +150 (5차)
+        // Lv8 추가 (2026-07-18) — 같은 ×1.65 패턴 (150 × 1.65 ≈ 248). ← web
+        public static readonly int[] BOSS_KILL_MINERAL = { 5, 10, 18, 32, 55, 90, 150, 248 };
 
-        /// <summary>킬 마일스톤 보상. trigger #546~#566. 200킬 간격 [원본확정] — (킬 수, 미네랄)</summary>
-        public static readonly (int kills, int mineral)[] KILL_MILESTONES =
-        {
-            (200, 5), (400, 5), (600, 10), (800, 5), (1000, 10),
-            (1200, 6), (1400, 10), (1600, 6), (1800, 6), (2000, 15),
-            (2200, 6), (2400, 6), (2600, 15), (2800, 6), (3000, 15),
-            (3200, 6), (3400, 6), (3600, 15), (3800, 6), (4000, 15),
-        };
+        /// <summary>
+        /// 반복 킬 미션 — 20킬마다 +20골드 (2026-07-19, 사용자 지시).
+        /// 200킬 간격 마일스톤 표(trigger #546~#566 [원본확정])를 대체한다. 그 표는 4000킬에서
+        /// 끝나 후반 킬 수입이 0이 됐다. 원본의 반복 20킬 보상(trigger #544/#545, +10/+12)과
+        /// 같은 리듬으로 돌아간 셈 — 액수만 우리 것. ← web
+        /// </summary>
+        public const int KILL_MISSION_EVERY = 20;
+        public const int KILL_MISSION_REWARD = 20;
 
         /// <summary>
         /// 웨이브 클리어 보상.
@@ -60,9 +61,12 @@ namespace GodTD.Core
         /// 그러면 유닛 1기당 20킬을 모아야 해서 초반이 굶는다. 라운드마다 목돈이 들어오는 편이
         /// 타워를 세우는 리듬과 맞는다. [프로토]
         /// </summary>
-        // 4차 (2026-07-17): R35+ 이차항 — "R40부터 급격히 어려워지는데 보상은 선형". ← web
+        // 2026-07-19 (사용자 지시): **거의 평탄**하게 — 20 + 0.2×(라운드−5).
+        // 옛 곡선(10+3r+이차항)은 후반 보상이 보스 수입을 압도해(R60에 라운드 253 vs 보스 62)
+        // 보스 소환 실패의 리스크가 무의미했다. 라운드 보상을 깔아두는 기본기로 낮추고,
+        // 소득의 성장 축을 보스 사다리와 킬 미션으로 옮긴다. ← web
         public static int WaveReward(int round) =>
-            (int)MathF.Round(10 + 3 * round + 0.1f * MathF.Pow(MathF.Max(0, round - 35), 2));
+            (int)MathF.Round(20f + 0.2f * MathF.Max(0, round - 5));
 
         /// <summary>누출 시 라이프 -1 · 미네랄 +5. strings:358 'Life -1 ! ! ! ! !미네랄 +5' [원본확정]</summary>
         public const int LEAK_MINERAL = 5;
@@ -81,12 +85,14 @@ namespace GodTD.Core
 
         /// <summary>
         /// GOD 타워 타입 리롤 (7차) — 어떤 GOD가 나오는지는 순수 운이었다. 병과가 어긋나면
-        /// (가스 업그레이드는 병과별) 반쪽이 된다. 금화로 운을 교정한다. 지수 비용. ← web
+        /// (가스 업그레이드는 병과별) 반쪽이 된다. 금화로 운을 교정한다.
+        ///
+        /// 지수(×1.5) → 고정 150 (2026-07-18, 사용자 지시). 반복 리롤일수록 비싸지는 구조가
+        /// "운이 나쁠수록 교정이 더 비싸진다"는 역설을 만들었다 — 정작 교정이 필요한 상황에서
+        /// 가장 비싸다. 고정가는 그 역설을 없애고, 몇 번을 굴리든 비용이 예측 가능하다. ← web
         /// </summary>
         public const int GOD_REROLL_MINERAL = 150;
-        public const float GOD_REROLL_GROWTH = 1.5f;
-        public static int GodRerollCost(int rolled) =>
-            (int)MathF.Round(GOD_REROLL_MINERAL * MathF.Pow(GOD_REROLL_GROWTH, rolled));
+        public static int GodRerollCost(int rolled) => GOD_REROLL_MINERAL;
 
         /// <summary>
         /// 유닛 생성 비용 — 누적 생성 횟수에 선형으로 오른다. ← web/src/data/balance.ts
@@ -100,19 +106,24 @@ namespace GodTD.Core
         /// [프로토]
         /// </summary>
         public const int SPAWN_FREE_COUNT = 8;
-        public const float SPAWN_COST_GROWTH = 0.4f; // 0.35 → 0.4 (5차: GOD 페이스 -10~20%) ← web
+        // 0.40 → 0.30 (2026-07-17 7차): "R30~40에 성장에 드는 골드가 너무 늘어 크는 재미가 없다".
+        // 누적 40~120기 구간 총액 3,305 → 2,726(-18%). ← web
+        public const float SPAWN_COST_GROWTH = 0.3f;
         public static int SpawnUnitCost(int spawned) =>
             (int)System.Math.Round(
                 SPAWN_UNIT_MINERAL + SPAWN_COST_GROWTH * System.Math.Max(0, spawned - SPAWN_FREE_COUNT),
                 System.MidpointRounding.AwayFromZero);
 
         /// <summary>
-        /// [프로토] 프로브 비용은 지수로 오른다 — "지금 전력이냐 미래 경제냐"의 일꾼 딜레마.
-        /// 8기 고정 상한이던 시절에는 GA가 전 세대 7~8로 수렴하는 무뇌 투자였다.
+        /// [프로토] 프로브 비용 — **선형 증가** (2026-07-19, 사용자 지시).
+        ///
+        /// 지수(×1.5)는 10기째가 2,300을 넘어 가스 엔진이 중반에 봉인됐다 — 파워 사슬이
+        /// "가스 → 업그레이드(선형) → 보드 피해(선형)"인데 그 시작이 지수로 잠기면
+        /// 후반 구매 파워가 죽는다. 선형이면 광부 확장이 게임 내내 열려 있는 결정으로 남는다.
+        /// 첫 두 기(60·90)는 지수 시절과 같아 초반 앵커는 불변. ← web
         /// </summary>
-        public const float PROBE_COST_GROWTH = 1.5f;
-        public static int ProbeCost(int owned) =>
-            (int)MathF.Round(PROBE_MINERAL * MathF.Pow(PROBE_COST_GROWTH, owned));
+        public const int PROBE_COST_STEP = 30;
+        public static int ProbeCost(int owned) => PROBE_MINERAL + PROBE_COST_STEP * owned;
         public const int PROBE_MAX = 16;
         public const float GAS_PER_PROBE_SECOND = 0.4f; // 0.25 → 0.4 (4차: 가스가 보드 파워 주축) ← web
 
@@ -122,16 +133,23 @@ namespace GodTD.Core
         /// 비용 8+4L+L² → 선형 2+4L. 가산+선형만이 "레벨이 오를수록 효율 감소"를 만든다.
         /// 첫 업 2 = 시작 가스 6으로 3개 병과 1업. ← web/src/data/balance.ts
         /// </summary>
-        public const float UPGRADE_DAMAGE_PER_LEVEL = 0.45f; // 0.4 → 0.45 (4차) ← web
-        // 5차 2+6L → 6차 2+3L+0.2L²: 첫 스텝 2→8 점핑 해소 (2→5→9→13), 총예산 보존. ← web
-        public static int UpgradeGasCost(int level) =>
-            (int)MathF.Round(2f + 3f * level + 0.2f * level * level);
+        // 0.45 → 0.5 (2026-07-18, 사용자 지시): 병과 업그레이드 버프. 가스비 이차항 제거와
+        // 세트 — 사면 사는 만큼 세지는 쪽으로 더 민다. ← web
+        public const float UPGRADE_DAMAGE_PER_LEVEL = 0.5f;
+        // 2+3L+0.2L² → 2+3L (2026-07-18, 사용자 지시): 이차항 제거, 순수 등차 3.
+        // L15 누적이 640 → 405로 가벼워진다 — 몰빵 페이스가 빨라진다. ← web
+        public static int UpgradeGasCost(int level) => (int)MathF.Round(2f + 3f * level);
 
         // ───────── 보스 소환 ─────────
         // 소환은 라운드 진행과 무관한 상시 액션이고 쿨타임만 있다. 비용 없음.
         // Lv N은 Lv N-1을 처치해야 열린다. (원본 감지 로직·쿨타임은 EUD로 미확인 — §11.1)
-        public const int BOSS_MAX_LEVEL = 7; // 6 → 7 (5차: 종반 적장 신설 — 원본은 Lv6까지) ← web
-        public const float BOSS_COOLDOWN_SECONDS = 45f; // [프로토]
+        // Lv8 추가 (2026-07-18, 사용자 지시) — 사다리 꼭대기를 한 단 더. ← web
+        public const int BOSS_MAX_LEVEL = 8;
+        /// <summary>보스 한 바퀴의 80% — 상수가 아니라 경로 길이에서 유도한다 ← web</summary>
+        public const float BOSS_COOLDOWN_RATIO = 0.8f;
+        public static readonly float BOSS_LAP_SECONDS = MapData.PATH_LENGTH / BOSS_SPEED;
+        public static readonly float BOSS_COOLDOWN_SECONDS =
+            MathF.Round(BOSS_LAP_SECONDS * BOSS_COOLDOWN_RATIO);
 
         /// <summary>
         /// 보스 HP·장갑. 원본 UNIx는 Lv1~Lv6 전부 hp=100000이라 밸런스 근거로 못 쓴다(§4.6). [프로토]
@@ -148,7 +166,8 @@ namespace GodTD.Core
         // Lv1~2 앵커 유지, 상위만 가팔라진다: Lv6 = 170k (GOD 1기 시대 종료). ← web
         // 4차: base 550(기본공 3 동행)·성장 3.4 — GOD 다수 체제에서 사다리 재조정. ← web
         // 7차: 꼭대기 두 단만 완만하게 (Lv6 -24% · Lv7 -42%) — 아래 단 리듬은 불변. ← web
-        public const float BOSS_HP_BASE = 800f;
+        // 700 → 640 (2026-07-19): 영웅 직접 캐리 차단으로 준 초반 영웅 딜만큼 Lv1 앵커 보정. ← web
+        public const float BOSS_HP_BASE = 640f;
         public const float BOSS_HP_GROWTH = 3.4f;
         public const int BOSS_HP_TOP_FROM = 5;
         public const float BOSS_HP_TOP_GROWTH = 2.6f;
@@ -182,38 +201,53 @@ namespace GodTD.Core
         public static int CycleOf(int round) => (round - 1) / CYCLE_ROUNDS;
         public static int PosInCycle(int round) => (round - 1) % CYCLE_ROUNDS;
 
-        // ── 2026-07-11 재설계: 웨이브 총 체력 = 목표 clear(초) × 기대 유효 DPS ← web/src/data/balance.ts
-        // 시뮬(48판)로 측정한 기대 유효 DPS(장갑 감산 반영, P50)의 구분지수 근사.
-        // 벽은 지수 — 선형이면 지수로 크는 보드가 결국 이긴다. 보정 5회 이력은 웹 주석 참조.
-        // 2026-07-16 재적합: 기본공 7→4 + 가산 가스 업그레이드로 곡선 전면 갱신 (후반 성장 7.1%/R).
-        // 2026-07-17 4차 재적합: 기본공 3·가스 0.4/s·보상 가속 — 후반 성장 8.8%/R. ← web
-        public static float ExpectedBoardDps(int round)
+        // ── 2026-07-19 재설계 3차 (사용자 지시): 웨이브 총체력은 **성장률 직접 지정** —
+        // 수입 모델과 완전히 분리한다. 보상 구조를 아무리 바꿔도 난이도가 흔들리지 않고,
+        // 시트의 growthPct 열이 곧 설계 상수다.
+        //
+        // 옛 모델(ExpectedBoardDps × TargetClearSeconds)은 시뮬 적합이라 상수 하나를 바꿀
+        // 때마다 재적합이 필요했다. 1차(수입 비례)는 중반 성장률이 수입을 따라 4~7%까지
+        // 내려가 "너무 쉬워졌다" — 보드 파워는 수입에 곱으로 붙어 수입보다 빨리 크기 때문.
+        // ← web/src/data/balance.ts
+
+        /// <summary>클리어 라인 — 이 라운드를 넘기면 승리. 이후는 무한 모드.</summary>
+        // 주: Unity에는 아직 클리어 판정(ResolveClear)이 없다 — 상수만 미러한다.
+        public const int CLEAR_ROUND = 60;
+
+        /// <summary>R1 웨이브 총체력 = 기대 보드 DPS 실측 28 × 목표 clear 18초 — 초반 앵커의 유래</summary>
+        public const float WAVE_HP_R1 = 504f;
+
+        /// <summary>
+        /// 구간별 라운드당 총체력 성장률. from 라운드부터 다음 구간 직전까지 이 배율로 큰다.
+        /// 마지막 구간은 상한 없이 이어진다 — 무한 모드의 벽이다.
+        /// </summary>
+        public static readonly (int from, float rate)[] WAVE_RATE_SEGMENTS =
         {
-            if (round <= 13) return 28f * MathF.Pow(1.195f, round - 1);
-            if (round <= 31) return 237f * MathF.Pow(1.116f, round - 13);
-            return 1705f * MathF.Pow(1.088f, round - 31);
+            (2, 0.227f),  // R2~14 — 옛 수입 모델 초반 곡선의 기하평균
+            (15, 0.17f),  // R15~40
+            (41, 0.19f),  // R41~50
+            (51, 0.15f),  // R51+ — 무한 모드의 벽
+        };
+
+        /// <summary>그 라운드로 넘어올 때 적용된 성장률 (R1은 앵커라 없다)</summary>
+        public static float WaveGrowthRate(int round)
+        {
+            float rate = WAVE_RATE_SEGMENTS[0].rate;
+            foreach (var (from, r) in WAVE_RATE_SEGMENTS) if (round >= from) rate = r;
+            return rate;
         }
 
-        // 6차 (2026-07-16): 킥 있는 벽 폐지 → 성장률 연속 램프 (R30~48에 1.4%→20% 선형,
-        // 이후 유지). 최종 보스 없음 — R60도 그냥 강한 웨이브라 "갑자기 벽"이 없어야 한다.
-        // 목표: R60 도달 ≤10% · 클리어 ≤5%. ← web/src/data/balance.ts
-        public const int WAVE_RAMP_START = 26; // 30 → 26 (6차: 중반 R30~40 강화) ← web
-        public const int WAVE_RAMP_END = 52; // 48 → 52 (4차: R40 절벽 완화) ← web
-        public const float WAVE_BASE_RATE = 0.014f;
-        public const float WAVE_MAX_RATE = 0.24f; // 0.27 → 0.24 (6차: 후반 완화 + 동시 몹 상한 세트) ← web
-        public static float TargetClearSeconds(int round)
+        /// <summary>웨이브 총 체력 — 구간별 순수 지수. 수입·시뮬과 무관한 설계 상수다.</summary>
+        public static float WaveTotalHp(int round)
         {
-            if (round <= WAVE_RAMP_START) return 18f + 0.45f * (round - 1);
-            float slope = (WAVE_MAX_RATE - WAVE_BASE_RATE) / (WAVE_RAMP_END - WAVE_RAMP_START);
-            float clearAtStart = 18f + 0.45f * (WAVE_RAMP_START - 1);
-            float t = MathF.Min(round, WAVE_RAMP_END) - WAVE_RAMP_START;
-            float ramp = MathF.Exp(WAVE_BASE_RATE * t + slope * t * t / 2f);
-            float tail = round > WAVE_RAMP_END ? MathF.Exp(WAVE_MAX_RATE * (round - WAVE_RAMP_END)) : 1f;
-            return clearAtStart * ramp * tail;
+            float hp = WAVE_HP_R1;
+            for (int r = 2; r <= round; r++) hp *= 1f + WaveGrowthRate(r);
+            return hp;
         }
 
+        /// <summary>웨이브 총 체력 → 몹 1기 체력. 사이클마다 몹이 굵어지는 리듬은 count 리셋이 만든다</summary>
         public static float EnemyHP(int round) =>
-            MathF.Max(1f, MathF.Round(ExpectedBoardDps(round) * TargetClearSeconds(round) / EnemyCount(round)));
+            MathF.Max(1f, MathF.Round(WaveTotalHp(round) / EnemyCount(round)));
 
         /// <summary>
         /// 적 장갑은 계단식이다. 선형으로 매 라운드 오르면 저티어 유닛이 매 라운드 조금씩
@@ -229,9 +263,14 @@ namespace GodTD.Core
         /// 웨이브당 잡몹 수. 사이클 안에서 라운드마다 COUNT_STEP만큼 늘어난다.
         /// 원본은 스폰 로직이 EUD라 몹 수를 읽을 수 없다(§9.2, §11.1). [프로토]
         /// </summary>
-        public const int ENEMY_BASE_COUNT = 20; // 12~24 → 20~36 (밀도)
-        public const int ENEMY_COUNT_STEP = 4;
-        public static int EnemyCount(int round) => ENEMY_BASE_COUNT + ENEMY_COUNT_STEP * PosInCycle(round);
+        // 20 → 16 · 4 → 3.2 (2026-07-18, 사용자 지시): 몹 수 -20% 전체. 초반에 뜨는 성장
+        // 증강(막타 스택형)이 낮은 라운드에서부터 너무 많은 처치 기회를 얻어 고점이 치솟는
+        // 문제 — 밀도를 낮춰 초반 막타 기회 자체를 줄인다. 총 체력(EnemyHP가 총량÷count로
+        // 역산)은 그대로 — 개체가 굵어질 뿐 라운드 난이도 곡선은 안 바뀐다. ← web
+        public const int ENEMY_BASE_COUNT = 16;
+        public const float ENEMY_COUNT_STEP = 3.2f;
+        public static int EnemyCount(int round) =>
+            (int)MathF.Round(ENEMY_BASE_COUNT + ENEMY_COUNT_STEP * PosInCycle(round));
 
         /// <summary>웨이브 내 스폰 간격(초) [프로토]</summary>
         public const float SPAWN_INTERVAL = 0.18f;
@@ -256,7 +295,7 @@ namespace GodTD.Core
         }
 
         public static readonly WaveType WAVE_NORMAL = new WaveType(WaveTypeId.Normal, "일반", 1f, "#9aa2c0");
-        public static readonly WaveType WAVE_HUNTER = new WaveType(WaveTypeId.Hunter, "사냥꾼", 6f, "#ff5a3c");
+        public static readonly WaveType WAVE_HUNTER = new WaveType(WaveTypeId.Hunter, "사냥꾼", 6f, "#c14a2c");
 
         /// <summary>R10부터 5의 배수 라운드는 사냥꾼 웨이브</summary>
         public static WaveType WaveTypeOf(int round) =>
@@ -270,7 +309,7 @@ namespace GodTD.Core
         /// 수학적 불변이 아니라 튜닝 대상 — 시드 시뮬로 초반 난이도를 맞춘다. [프로토]
         /// ← web/src/data/balance.ts earlyTempo
         /// </summary>
-        public static float EarlyTempo(int round) => MathF.Min(1f, 0.5f + 0.1f * round);
+        public static float EarlyTempo(int round) => MathF.Min(1f, 0.5f + 0.1f * Math.Max(1, round));
 
         // ───────── 전투 (전부 [프로토]) ─────────
         // 원본은 무기슬롯→유닛 바인딩 정보가 없어 실제 공격력을 읽을 수 없다(§11.3).
