@@ -20,6 +20,7 @@
     { "$ref": "#/$defs/probeBoughtEvent" },
     { "$ref": "#/$defs/raceUpgradedEvent" },
     { "$ref": "#/$defs/godRerolledEvent" },
+    { "$ref": "#/$defs/skillRerolledEvent" },
     { "$ref": "#/$defs/gasSkillUpgradedEvent" },
     { "$ref": "#/$defs/towerCopyMarkedEvent" },
     { "$ref": "#/$defs/gameClearedEvent" },
@@ -43,7 +44,7 @@
             "run_started", "round_started", "round_cleared", "tower_spawned", "tower_merged",
             "tower_sold", "boss_summoned", "boss_killed", "augment_offered", "augment_rerolled",
             "augment_chosen", "hero_xp_bought", "hero_leveled", "probe_bought", "race_upgraded",
-            "god_rerolled", "gas_skill_upgraded", "tower_copy_marked", "game_cleared", "game_over",
+            "god_rerolled", "skill_rerolled", "gas_skill_upgraded", "tower_copy_marked", "game_cleared", "game_over",
             "run_finished"
           ]
         },
@@ -148,6 +149,7 @@
         "merges": { "type": "integer", "minimum": 0 },
         "towersSold": { "type": "integer", "minimum": 0 },
         "godRerolls": { "type": "integer", "minimum": 0 },
+        "skillRerolls": { "type": "integer", "minimum": 0 },
         "firstSeq": { "const": 1 },
         "lastSeq": { "type": "integer", "minimum": 1 }
       },
@@ -262,9 +264,10 @@
     },
     "augmentRerolledData": {
       "type": "object",
-      "required": ["offerId", "rerollCount", "cost", "choices"],
+      "required": ["offerId", "choiceIndex", "rerollCount", "cost", "choices"],
       "properties": {
         "offerId": { "type": "integer", "minimum": 1 },
+        "choiceIndex": { "type": "integer", "minimum": 0, "maximum": 2 },
         "rerollCount": { "type": "integer", "minimum": 1 },
         "cost": { "type": "integer", "minimum": 0 },
         "choices": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/augmentRef" } }
@@ -334,6 +337,18 @@
         "cost": { "type": "integer", "minimum": 0 },
         "before": { "$ref": "#/$defs/towerRef" },
         "after": { "$ref": "#/$defs/towerRef" },
+        "rerollCount": { "type": "integer", "minimum": 1 }
+      },
+      "additionalProperties": false
+    },
+    "skillRerolledData": {
+      "type": "object",
+      "required": ["before", "after", "afterRole", "cost", "rerollCount"],
+      "properties": {
+        "before": { "type": "string", "minLength": 1, "maxLength": 32 },
+        "after": { "type": "string", "minLength": 1, "maxLength": 32 },
+        "afterRole": { "enum": ["boss", "mob", "utility"] },
+        "cost": { "type": "integer", "minimum": 0 },
         "rerollCount": { "type": "integer", "minimum": 1 }
       },
       "additionalProperties": false
@@ -416,6 +431,7 @@
     "probeBoughtEvent": { "allOf": [{ "$ref": "#/$defs/eventBase" }, { "type": "object", "properties": { "type": { "const": "probe_bought" }, "data": { "$ref": "#/$defs/probeBoughtData" } } }] },
     "raceUpgradedEvent": { "allOf": [{ "$ref": "#/$defs/eventBase" }, { "type": "object", "properties": { "type": { "const": "race_upgraded" }, "data": { "$ref": "#/$defs/raceUpgradedData" } } }] },
     "godRerolledEvent": { "allOf": [{ "$ref": "#/$defs/eventBase" }, { "type": "object", "properties": { "type": { "const": "god_rerolled" }, "data": { "$ref": "#/$defs/godRerolledData" } } }] },
+    "skillRerolledEvent": { "allOf": [{ "$ref": "#/$defs/eventBase" }, { "type": "object", "properties": { "type": { "const": "skill_rerolled" }, "data": { "$ref": "#/$defs/skillRerolledData" } } }] },
     "gasSkillUpgradedEvent": { "allOf": [{ "$ref": "#/$defs/eventBase" }, { "type": "object", "properties": { "type": { "const": "gas_skill_upgraded" }, "data": { "$ref": "#/$defs/gasSkillUpgradedData" } } }] },
     "towerCopyMarkedEvent": { "allOf": [{ "$ref": "#/$defs/eventBase" }, { "type": "object", "properties": { "type": { "const": "tower_copy_marked" }, "data": { "$ref": "#/$defs/towerCopyMarkedData" } } }] },
     "gameClearedEvent": { "allOf": [{ "$ref": "#/$defs/eventBase" }, { "type": "object", "properties": { "type": { "const": "game_cleared" }, "data": { "$ref": "#/$defs/gameClearedData" } } }] },

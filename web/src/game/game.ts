@@ -8,7 +8,6 @@ import * as S from '../data/score';
 import {
   PATH_LENGTH,
   SLOT_POS,
-  WALKABLE_HALF_WIDTH,
   pathPos,
   type PathProjection,
 } from '../core/map';
@@ -16,7 +15,7 @@ import { GOD_TIER, RACES, RACE_COLOR, tagLabel, type Race } from '../data/units'
 import type { AugmentCard } from '../data/hero';
 import { attackInterval, damage, isSplash, range, slowFactor, type UpgradeLevels } from './combat';
 import { bossKillMineral, killIncome } from './economy';
-import { Hero, rollAugmentChoices, type HeroStats } from './hero';
+import { Hero, rerollAugmentChoice, rollAugmentChoices, type HeroStats } from './hero';
 import {
   GAME_LOG_VERSION,
   type AugmentLogRef,
@@ -80,8 +79,9 @@ export class Game {
   readonly hero: Hero;
   /** 증강 선택지가 떠 있으면 게임이 멈춘다 */
   augmentChoices: AugmentCard[] = [];
-  /** 이번 증강 선택에서 쓴 리롤 수 — 새 선택지가 뜰 때 0으로 돌아간다 */
-  rerollsUsed = 0;
+
+  /** 후보별 리롤 사용 횟수 — 카드마다 1회 */
+  augmentChoiceRerolls: number[] = [];
 
   /**
    * 높은 등급 증강을 고른 대가. 몹 체력에 영구히 곱해진다.
@@ -141,7 +141,7 @@ export class Game {
 
   constructor(rand: Rand = Math.random, logging?: GameLoggingSession) {
     this.rand = rand;
-    this.hero = new Hero();
+    this.hero = new Hero(); // 시작 스킬은 '강한 일격' 고정 (Hero 필드 기본값)
     this.runContext = logging?.context ?? null;
     this.eventSink = logging?.sink ?? null;
     if (this.runContext && this.eventSink) {
@@ -240,6 +240,7 @@ export class Game {
       merges: this.mergeCount,
       towersSold: this.towersSoldCount,
       godRerolls: this.godRerolls,
+      skillRerolls: this.skillRerolls,
       firstSeq: 1,
       lastSeq,
     };
@@ -263,7 +264,8 @@ export class Game {
 
   /** 증강 선택·클리어 오버레이 중에는 시간이 흐르지 않는다. */
   get paused(): boolean {
-    return this.augmentChoices.length > 0 || this.clearPending;
+    // 스킬 드래프트(Lv9)도 증강 선택과 똑같이 게임을 멈춘다
+    return this.augmentChoices.length > 0 || this.skillChoices.length > 0 || this.clearPending;
   }
 
   /** 클리어 오버레이에서 "무한 모드 계속"을 누른다 */
@@ -541,11 +543,25 @@ export class Game {
     enemy.hp -= dealt;
     this.heroDamageDealt += dealt;
     enemy.lastHitByHero = true;
-    if (skill.mods.slowFactor < 1) {
-      enemy.slowFactor = skill.mods.slowFactor;
-      enemy.slowTimer = skill.mods.slowSeconds;
-    }
+    this.applySlow(enemy, skill.mods.slowFactor, skill.mods.slowSeconds);
     this.triggerExplosion(enemy, raw);
+  }
+
+  /**
+   * 감속을 건다 — **보스는 면역이다** (2026-07-20, 사용자 지시).
+   *
+   * 보스는 저지도 안 되고(§보스 저지 불가) 이제 느려지지도 않는다 — 소환한 보스는
+   * 정해진 시간 안에 **화력으로** 잡는 수밖에 없다. 감속으로 시간을 버는 우회로가
+   * 막히면서 보스 소환이 순수한 화력 시험이 된다.
+   *
+   * 여기서 막으므로 HUD의 감속 칩도 보스에는 안 뜬다 — 상태 표시가 거짓말을 하지 않는다.
+   * 타워의 위치 기반 감속(slowAt)만은 enemy에 저장되지 않아 이동 계산에서 따로 건너뛴다.
+   */
+  private applySlow(enemy: Enemy, factor: number, seconds: number): void {
+    if (enemy.kind === 'boss' || factor >= 1) return;
+    // 이미 더 센 감속이 걸려 있으면 덮어쓰지 않는다
+    if (enemy.slowFactor === undefined || factor < enemy.slowFactor) enemy.slowFactor = factor;
+    enemy.slowTimer = Math.max(enemy.slowTimer ?? 0, seconds);
   }
 
   /**
@@ -660,6 +676,7 @@ export class Game {
     const augment = this.augmentLogRef(card);
     this.hero.addAugment(card);
     this.augmentChoices = [];
+    this.augmentChoiceRerolls = [];
     this.record('augment_chosen', { offerId, choiceIndex: index, augment });
     this.chosenAugments.push({
       augment,
@@ -675,9 +692,15 @@ export class Game {
 
   private offerAugmentIfPending(): void {
     const hero = this.hero;
+    // 스킬 드래프트(Lv9)가 밀려 있으면 그쪽이 먼저다 — 스킬을 정하고 나서
+    // 증강을 고르는 순서라야 "무엇에 답할지"가 정해진 채로 고르게 된다
+    if (hero.pendingSkillDraft > 0) {
+      this.offerSkillDraftIfPending();
+      return;
+    }
     if (hero.pendingAugmentPicks <= 0) return;
     this.augmentChoices = rollAugmentChoices(hero, this.rand);
-    this.rerollsUsed = 0;
+    this.augmentChoiceRerolls = this.augmentChoices.map(() => 0);
     if (this.augmentChoices.length === 0) {
       hero.pendingAugmentPicks = 0;
       return;
@@ -690,26 +713,110 @@ export class Game {
     });
   }
 
-  // ── 증강 리롤 — 무료 (2026-07-18, 사용자 지시) ──
-  get canReroll(): boolean {
-    return this.augmentChoices.length > 0 && this.rerollsUsed < H.AUGMENT_REROLL_MAX;
+  // ── 증강 리롤 — 카드마다 무료 1회 (2026-07-20, 사용자 지시) ──
+  get rerollsUsed(): number {
+    return this.augmentChoiceRerolls.reduce((sum, used) => sum + used, 0);
   }
 
-  /** 선택지 3장을 다시 뽑는다 — 무료, 한 선택당 최대 AUGMENT_REROLL_MAX회 */
-  rerollAugments(): boolean {
-    if (this.augmentChoices.length === 0) return false;
-    if (this.rerollsUsed >= H.AUGMENT_REROLL_MAX) {
-      this.message = `리롤은 선택당 ${H.AUGMENT_REROLL_MAX}회까지입니다.`;
+  canRerollAugmentChoice(index: number): boolean {
+    return (
+      this.augmentChoices[index] !== undefined &&
+      (this.augmentChoiceRerolls[index] ?? 0) < H.AUGMENT_CARD_REROLLS
+    );
+  }
+
+  /** 선택지 한 장만 다시 뽑는다 — 다른 카드는 유지된다 */
+  rerollAugmentChoice(index: number): boolean {
+    if (!this.canRerollAugmentChoice(index)) {
+      if (this.augmentChoices[index] !== undefined) {
+        this.message = `이 카드는 이미 다시 뽑았습니다 (카드당 ${H.AUGMENT_CARD_REROLLS}회).`;
+      }
       return false;
     }
-    this.rerollsUsed++;
-    this.augmentChoices = rollAugmentChoices(this.hero, this.rand);
+    const next = rerollAugmentChoice(this.hero, this.augmentChoices, index, this.rand);
+    if (!next) {
+      this.message = '바꿀 만한 다른 증강이 없습니다.';
+      return false;
+    }
+    this.augmentChoiceRerolls[index]++;
+    this.augmentChoices[index] = next;
     this.record('augment_rerolled', {
       offerId: this.currentOfferId,
-      rerollCount: this.rerollsUsed,
+      choiceIndex: index,
+      rerollCount: this.augmentChoiceRerolls[index] ?? 0,
       cost: 0,
       choices: this.augmentChoices.map((choice) => this.augmentLogRef(choice)),
     });
+    return true;
+  }
+
+  // ── Lv9 스킬 드래프트 — 처음으로 '제대로된 스킬'을 고른다 (2026-07-20) ──
+  /** 지금 띄운 스킬 후보. 비어 있으면 드래프트 중이 아니다 */
+  skillChoices: K.SkillId[] = [];
+  /** 후보별 리롤 사용 횟수 — 카드마다 1회 */
+  skillChoiceRerolls: number[] = [];
+
+  private offerSkillDraftIfPending(): void {
+    if (this.hero.pendingSkillDraft <= 0 || this.skillChoices.length > 0) return;
+    this.skillChoices = K.rollSkillChoices(this.rand, H.SKILL_DRAFT_CHOICES);
+    this.skillChoiceRerolls = this.skillChoices.map(() => 0);
+    if (this.skillChoices.length === 0) this.hero.pendingSkillDraft = 0;
+  }
+
+  /** 후보 하나를 골라 장착한다 — 시작 장비 '강한 일격'을 여기서 벗는다 */
+  chooseSkill(index: number): boolean {
+    const picked = this.skillChoices[index];
+    if (picked === undefined) return false;
+
+    const before = this.hero.skill.def;
+    this.hero.skillId = picked;
+    const after = this.hero.skill;
+    // 시작 장비보다 비싼 스킬로 갈아타면 마나가 넘칠 수 있다 — 즉시 시전을 막는다
+    this.hero.mana = Math.min(this.hero.mana, after.manaMax);
+
+    this.skillChoices = [];
+    this.skillChoiceRerolls = [];
+    this.hero.pendingSkillDraft--;
+
+    this.record('skill_rerolled', {
+      before: before.id,
+      after: after.def.id,
+      afterRole: after.def.role,
+      cost: 0,
+      rerollCount: 0,
+    });
+    this.message = `${after.def.name}: ${after.def.description}`;
+    this.float(this.hero.x, this.hero.y, `${after.def.name}!`, '#7fd1ff');
+    // 스킬을 정한 뒤에 증강을 고르게 된다 — 무엇에 답할지가 정해진 채로 고른다
+    this.offerAugmentIfPending();
+    return true;
+  }
+
+  /**
+   * 후보 한 장만 다시 뽑는다 (카드당 1회). 마음에 드는 카드는 남으므로
+   * "무엇을 지키고 무엇을 바꿀지"가 선택이 된다.
+   */
+  canRerollSkillChoice(index: number): boolean {
+    return (
+      this.skillChoices[index] !== undefined &&
+      (this.skillChoiceRerolls[index] ?? 0) < H.SKILL_DRAFT_CARD_REROLLS
+    );
+  }
+
+  rerollSkillChoice(index: number): boolean {
+    if (!this.canRerollSkillChoice(index)) {
+      if (this.skillChoices[index] !== undefined) {
+        this.message = `이 카드는 이미 다시 뽑았습니다 (카드당 ${H.SKILL_DRAFT_CARD_REROLLS}회).`;
+      }
+      return false;
+    }
+    const next = K.rerollSkillChoice(this.skillChoices, this.rand);
+    if (!next) {
+      this.message = '바꿀 만한 다른 스킬이 없습니다.';
+      return false;
+    }
+    this.skillChoiceRerolls[index]++;
+    this.skillChoices[index] = next;
     return true;
   }
 
@@ -719,15 +826,11 @@ export class Game {
   }
 
   canBuyGasSkill(track: 'damage' | 'cdr'): boolean {
-    return !this.over && this.hero.skillId !== null && this.gas >= this.gasSkillCost(track);
+    return !this.over && this.gas >= this.gasSkillCost(track);
   }
 
   /** 마정석로 스킬을 개조한다 — 종족 업그레이드와 같은 지갑을 두고 경쟁한다 */
   buyGasSkill(track: 'damage' | 'cdr'): boolean {
-    if (this.hero.skillId === null) {
-      this.message = '개조할 스킬이 없습니다 — 스킬 증강을 먼저 얻으세요.';
-      return false;
-    }
     const cost = this.gasSkillCost(track);
     if (this.gas < cost) {
       this.message = `마정석 부족 — 개조 ${cost} 필요.`;
@@ -1033,6 +1136,76 @@ export class Game {
     return true;
   }
 
+  // ── 스킬 리롤 (2026-07-20) — 판이 낸 문제에 다시 답한다 ──
+  /** 지금까지 스킬을 몇 번 다시 뽑았나 — 첫 회는 무료다 */
+  skillRerolls = 0;
+  /** 마지막으로 굴린 라운드. 라운드당 1회 — 없으면 금화로 연타해 원하는 걸 낚는다 */
+  skillRerollRound = -1;
+
+  get skillRerollCost(): number {
+    return B.skillRerollCost(this.skillRerolls, this.round);
+  }
+
+  get skillRerollUsedThisRound(): boolean {
+    return this.skillRerollRound === this.round;
+  }
+
+  get canRerollSkill(): boolean {
+    return (
+      !this.over &&
+      // 시작 장비를 든 동안에는 못 굴린다 — 제대로된 스킬은 Lv9 드래프트가 처음 준다.
+      // (여기서 굴리게 두면 Lv9 드래프트를 돈으로 앞당기는 우회로가 된다.)
+      !K.isStarterSkill(this.hero.skillId) &&
+      !this.skillRerollUsedThisRound &&
+      // 빔은 시전 시점의 스킬 스냅샷을 들고 돌아간다 — 도중에 갈면 그 빔의 정체가 모호해진다
+      this.beam === null &&
+      this.mineral >= this.skillRerollCost
+    );
+  }
+
+  /** 스킬을 다시 뽑는다 — 지금 든 것을 제외하므로 반드시 바뀐다 */
+  rerollSkill(): boolean {
+    if (this.over) return false;
+    if (K.isStarterSkill(this.hero.skillId)) {
+      this.message = `첫 스킬은 영웅 Lv${H.SKILL_DRAFT_LEVEL} 선택에서 얻습니다.`;
+      return false;
+    }
+    if (this.skillRerollUsedThisRound) {
+      this.message = '스킬 리롤은 라운드당 한 번입니다.';
+      return false;
+    }
+    if (this.beam !== null) {
+      this.message = '레이저가 나가는 중에는 스킬을 바꿀 수 없습니다.';
+      return false;
+    }
+    const cost = this.skillRerollCost;
+    if (this.mineral < cost) {
+      this.message = `금화 부족 — 스킬 리롤 ${cost} 필요.`;
+      return false;
+    }
+    this.mineral -= cost;
+    this.skillRerolls++;
+    this.skillRerollRound = this.round;
+
+    const before = this.hero.skill.def;
+    this.hero.skillId = K.rerollSkillId(this.hero.skillId, this.rand);
+    const after = this.hero.skill;
+    // 새 스킬이 더 싸면 넘치는 마나는 버린다 — 리롤이 곧 즉시 시전이 되면 안 된다
+    this.hero.mana = Math.min(this.hero.mana, after.manaMax);
+
+    this.record('skill_rerolled', {
+      before: before.id,
+      after: after.def.id,
+      afterRole: after.def.role,
+      cost,
+      rerollCount: this.skillRerolls,
+    });
+    this.float(this.hero.x, this.hero.y, `⟳ ${after.def.name}`, '#7fd1ff');
+    this.message =
+      `${before.name} → ${after.def.name} · 다음 리롤 ${this.skillRerollCost}금화 (라운드당 1회).`;
+    return true;
+  }
+
   sellSelected(): boolean {
     const slot = this.selected;
     if (!slot?.tower) return false;
@@ -1236,8 +1409,12 @@ export class Game {
 
     if (enemy.kind === 'boss') {
       const level = enemy.bossLevel ?? 1;
-      const reward = bossKillMineral(level);
+      const base = bossKillMineral(level);
       const unlocked = level > this.bossCleared;
+      // 첫 돌파 보너스 (2026-07-20) — 그 레벨을 처음 잡으면 같은 금액을 한 번 더.
+      // 사다리를 **오르는 행위 자체**에 값을 매겨 "언제 도전할까"의 저울을 기울인다.
+      const bonus = unlocked && B.BOSS_FIRST_CLEAR_BONUS ? base : 0;
+      const reward = base + bonus;
       this.mineral += reward;
       this.bossesKilled++;
       this.bossCleared = Math.max(this.bossCleared, level);
@@ -1246,12 +1423,13 @@ export class Game {
       this.record('boss_killed', { level, reward, unlocked, maxBossLevel: this.maxBossLevel });
       this.grantXp(H.xpPerBoss(level), 'boss_kill');
 
+      const firstNote = bonus > 0 ? ` (첫 돌파 보너스 +${bonus})` : '';
       const suffix = !unlocked
         ? ''
         : this.bossCleared >= B.BOSS_MAX_LEVEL
           ? ' · 모든 보스를 잡았습니다.'
           : ` · Lv${level + 1} 소환이 열렸습니다.`;
-      this.message = `Lv${level} BOSS 처치! +${reward} 금화${suffix}`;
+      this.message = `Lv${level} BOSS 처치! +${reward} 금화${firstNote}${suffix}`;
       return;
     }
 
@@ -1332,7 +1510,9 @@ export class Game {
         source,
       });
     }
-    if (this.augmentChoices.length === 0) this.offerAugmentIfPending();
+    if (this.augmentChoices.length === 0 && this.skillChoices.length === 0) {
+      this.offerAugmentIfPending();
+    }
   }
 
   float(x: number, y: number, text: string, color: string): void {
@@ -1342,7 +1522,9 @@ export class Game {
   // ── 프레임 ──
   update(dt: number): void {
     // 밀린 증강 선택이 있으면 먼저 띄운다 — 그래야 아래에서 일시정지된다
-    if (this.augmentChoices.length === 0) this.offerAugmentIfPending();
+    if (this.augmentChoices.length === 0 && this.skillChoices.length === 0) {
+      this.offerAugmentIfPending();
+    }
     if (this.over || this.paused) return;
 
     this.elapsedSeconds += dt;
@@ -1480,8 +1662,9 @@ export class Game {
         enemy.slowTimer -= dt;
         if (enemy.slowTimer <= 0) enemy.slowFactor = undefined;
       }
-      const debuff = enemy.slowFactor ?? 1;
-      const speed = enemy.speed * this.slowAt(enemy.distance) * debuff;
+      // 보스는 감속 면역 — 저장된 디버프는 applySlow가 막고, 타워의 위치 감속은 여기서 건너뛴다
+      const towerSlow = enemy.kind === 'boss' ? 1 : this.slowAt(enemy.distance);
+      const speed = enemy.speed * towerSlow * (enemy.slowFactor ?? 1);
 
       // 허수아비가 먼저 붙잡는다 — 보스는 도발 인형만 잡는다
       if (decoy && this.isDecoyAggroed(enemy, decoy) && (enemy.kind !== 'boss' || decoy.taunts)) {
@@ -1529,7 +1712,8 @@ export class Game {
     live.sort((a, b) => a.distance - b.distance);
 
     const relax = Math.min(1, B.MOB_SEPARATION_RATE * dt);
-    const maxLateral = WALKABLE_HALF_WIDTH;
+    // 1열 종대 (2026-07-20) — 몹 대열의 횡 폭만 좁힌다. 경로 자체는 그대로다.
+    const maxLateral = B.MOB_MAX_LATERAL;
 
     for (let i = 0; i < live.length; i++) {
       const a = live[i];
@@ -1635,6 +1819,9 @@ export class Game {
 
   /** 몹 앞쪽 시야 안에 살아있는 영웅이 있는가 */
   private isAggroed(enemy: Enemy, hero: Hero): boolean {
+    // 어그로는 증강이 켠다 (2026-07-20) — 범위 0이면 아무도 안 붙잡는다.
+    // aggroCap이 최소 1을 보장하므로 여기서 막지 않으면 한 기가 새어 붙는다.
+    if (hero.stats.aggroRange <= 0) return false;
     const gap = hero.distance - enemy.distance;
     if (gap < -H.ENEMY_TOUCH_RANGE) return false; // 이미 지나쳤다
     // '도발' 계열이 어그로 범위를 넓힌다 — 더 많이 붙잡는다
@@ -1797,10 +1984,7 @@ export class Game {
     // 평타는 불을 붙이지 않는다 (2026-07-14) — 화상은 스킬·도트의 것이다.
     if (stats.armorShred > 0) this.shredArmor(enemy, stats.armorShred);
     if (stats.slowOnHit > 0) {
-      const factor = 1 - stats.slowOnHit;
-      // 이미 더 센 감속이 걸려 있으면 덮어쓰지 않는다
-      if (enemy.slowFactor === undefined || factor < enemy.slowFactor) enemy.slowFactor = factor;
-      enemy.slowTimer = Math.max(enemy.slowTimer ?? 0, H.SLOW_ON_HIT_SECONDS);
+      this.applySlow(enemy, 1 - stats.slowOnHit, H.SLOW_ON_HIT_SECONDS);
     }
     // 처형 — 보스는 예외다. 보스에 걸면 소환 즉시 증발한다.
     if (stats.executeBelow > 0 && enemy.hp > 0 && enemy.kind !== 'boss') {
@@ -1917,13 +2101,8 @@ export class Game {
           enemy.lastHitByHero = true;
           if (burnTick) this.applyBurn(enemy, stats);
         }
-        if (zone.slow < 1) {
-          // 장판 안에 있는 동안만 느리다 — 나가면 곧 풀린다
-          if (enemy.slowFactor === undefined || zone.slow < enemy.slowFactor) {
-            enemy.slowFactor = zone.slow;
-          }
-          enemy.slowTimer = Math.max(enemy.slowTimer ?? 0, 0.3);
-        }
+        // 장판 안에 있는 동안만 느리다 — 나가면 곧 풀린다
+        this.applySlow(enemy, zone.slow, 0.3);
       }
     }
     this.zones = this.zones.filter((z) => z.remaining > 0);

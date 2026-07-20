@@ -74,18 +74,28 @@ describe('밸런스 CSV — 코드와 일치해야 한다', () => {
 
   test('액티브 스킬이 전부 들어있다', () => {
     const rows = read('skills.csv').slice(1);
-    expect(rows).toHaveLength(K.SKILL_IDS.length);
-    for (const id of K.SKILL_IDS) {
+    // 시작 장비(강한 일격)도 시트에는 실린다 — 뽑기 풀(SKILL_IDS)에만 없다
+    expect(rows).toHaveLength(K.ALL_SKILL_IDS.length);
+    for (const id of K.ALL_SKILL_IDS) {
       expect(rows.some((r) => r.startsWith(`${id},`))).toBe(true);
     }
   });
 
-  test('스킬 증강과 개조 증강이 열로 표시된다', () => {
+  test('개조 증강이 열로 표시된다 — 획득 증강은 없다 (2026-07-20 스킬 독립)', () => {
     const rows = read('augments.csv');
-    expect(rows[0]).toContain('grantsSkill');
     expect(rows[0]).toContain('requiresSkill');
-    expect(rows.some((r) => r.includes('skill_volley'))).toBe(true);
+    expect(rows[0]).not.toContain('grantsSkill');
+    expect(rows.some((r) => r.includes('skill_volley'))).toBe(false);
     expect(rows.some((r) => r.includes('explosion'))).toBe(true);
+  });
+
+  test('스킬 시트에 성향이 실린다 — 보드 편중에 대한 답이 무엇인지가 시트에서 읽혀야 한다', () => {
+    const rows = read('skills.csv');
+    expect(rows[0]).toContain('role');
+    for (const id of K.ALL_SKILL_IDS) {
+      const row = rows.find((r) => r.startsWith(`${id},`))!;
+      expect(row.split(',')[2]).toBe(K.SKILLS[id].role);
+    }
   });
 
   test('파워 커브에 무증강과 특화 빌드가 둘 다 있다', () => {

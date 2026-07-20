@@ -54,25 +54,66 @@ export const OPENING_SECONDS = 5;
 // 부풀어 GOD 1기 도달이 R11까지 당겨졌다(측정: 유닛 52기 · 910골드 = 그 시점 누적수입).
 // 보스 비중을 올리는 목적은 라운드 보상을 평탄하게 낮춘 것(아래 waveReward)만으로도
 // 달성된다 — 총량은 그대로 두고 **비중만** 바꾸는 쪽이 GOD 페이스를 안 흔든다.
-export const BOSS_KILL_MINERAL = [5, 10, 18, 32, 55, 90, 150, 248] as const;
+// 2026-07-20 (사용자 지시: "보상 ×2") — 성장률을 1.75 → **2.0**으로 올리고 기준값 5는 유지.
+// 옛 표 5/10/18/32/55/90/150/248은 한 칸당 ~1.8배라 체력 성장(×3.2)에 못 미쳤다 —
+// **오를수록 손해**라 사다리가 안 돌았다(측정: 도전 정책이 안주 정책보다 7R 먼저 사망).
+// ×2도 체력 ×3.2보다는 느리지만, 아래 '첫 돌파 보너스'가 그 격차를 메운다.
+export const BOSS_KILL_MINERAL = [5, 10, 20, 40, 80, 160, 320, 640] as const;
 
 /**
- * 반복 킬 미션 — 20킬마다 +20골드 (2026-07-19, 사용자 지시).
- * 200킬 간격 마일스톤 표(trigger #546~#566 [원본확정])를 대체한다. 원본의 반복
- * 20킬 보상(trigger #544/#545, +10/+12)과 같은 리듬으로 돌아간 셈 — 액수만 우리 것.
+ * **첫 돌파 보너스** (2026-07-20, 사용자 지시) — 그 레벨을 처음 잡을 때만 처치 보상과
+ * 같은 금액을 한 번 더 준다(즉 첫 처치는 2배).
+ *
+ * 사다리를 **오르는 행위 자체**에 값을 매기는 장치다. 반복 처치는 안정적 벌이,
+ * 첫 돌파는 일회성 목돈 — "몇 번 벌고 언제 올라갈까"의 저울에서 도전 쪽에 무게를 얹는다.
+ */
+export const BOSS_FIRST_CLEAR_BONUS = true;
+
+/**
+ * 반복 킬 미션 — **20킬마다** +20골드 (2026-07-19 신설 / 2026-07-20 20→30→**20**, 사용자 지시).
+ * 200킬 간격 마일스톤 표(trigger #546~#566 [원본확정])를 대체한다.
+ *
+ * 20 → 30으로 올렸던 근거는 "이게 초반 수입의 52%"였다. 그런데 같은 날 **웨이브 보상을
+ * 폐지**하면서 전제가 바뀌었다 — 비교 대상이던 라운드 보상이 사라져 킬 미션이 초반의
+ * 사실상 유일한 수입원이 됐고, 30킬 문턱에서는 그게 돌지 않아 봇이 R12~22에 죽었다
+ * (측정 2026-07-20: 금화가 14라운드 내내 1~12를 벗어나지 못함). **20으로 되돌린다.**
+ *
+ * 몹 수도 같은 날 라운드당 11~15기로 줄어서, 20킬 문턱은 이제 대략 **1.5라운드에 1회**다.
  */
 export const KILL_MISSION_EVERY = 20;
+
+/**
+ * **일회성 초반 마일스톤** (2026-07-20, 사용자 지시: "초반에 죽는 문제 해결을 위해").
+ *
+ * 반복 20킬 미션(위)과 별개로, 누적 킬이 이 문턱을 **처음** 넘을 때 한 번만 준다.
+ * 초반 수입이 라운드당 13골드뿐이라 보드가 못 자라는 구간을 메우는 목돈이다 —
+ * R4~8쯤에 150골드가 들어와 타워 몇 기를 한 번에 세울 수 있다.
+ *
+ * 원본에도 200킬 간격 마일스톤 표(trigger #546~#566 [원본확정])가 있었다 — 그 자리를
+ * 초반 두 칸으로 되살린 셈이다.
+ */
+export const KILL_MILESTONES: readonly (readonly [kills: number, reward: number])[] = [
+  [50, 50],
+  [100, 100],
+];
 export const KILL_MISSION_REWARD = 20;
 
 /**
- * 웨이브 클리어 보상 — **거의 평탄** (2026-07-19, 사용자 지시: "라운드당 20 + 0.2×(라운드−5)").
+ * 웨이브 클리어 보상 — **폐지** (2026-07-20, 사용자 지시: "웨이브 보상 삭제").
  *
- * 옛 곡선(10+3r+이차항)은 후반 보상이 보스 수입을 압도해(R60에 라운드 253 vs 보스 62)
- * 보스 소환 실패의 리스크가 무의미했다. 라운드 보상을 깔아두는 기본기로 낮추고,
- * 소득의 성장 축을 보스 사다리(위 BOSS_KILL_MINERAL ×2~4)와 킬 미션으로 옮긴다.
+ * 이력: 10+3r+이차항 → 20+0.2×(r−5) 평탄화(2026-07-19) → **0**(폐지).
+ *
+ * 평탄화만으로는 "가만히 있어도 들어오는 돈"이 남아 있었다. 0으로 두면 수입이
+ * **전부 행동에 걸린다** — 몹을 잡거나(킬 미션) 보스를 부르거나(처치 보상) 둘뿐이다.
+ * 라운드를 흘려보내는 것으로는 아무것도 안 쌓인다.
+ *
+ * 함수는 남긴다 — 수입 모델(incomeAt)·시트·`waveRewardMult` 증강이 이 값을 참조하므로
+ * 상수 하나로 되돌릴 수 있어야 한다.
+ *
+ * **주의**: `waveRewardMult` 계열 증강 5종(탐욕·수확·전리품·상인·대부호)이 0에 곱해져
+ * **죽은 카드**가 된다. 경제 계열 재설계가 뒤따라야 한다 — 미해결.
  */
-export const waveReward = (round: number): number =>
-  Math.round(20 + 0.2 * Math.max(0, round - 5));
+export const waveReward = (_round: number): number => 0;
 
 /** 누출 시 라이프 -1 · 미네랄 +5. strings:358 'Life -1 ! ! ! ! !미네랄 +5' [원본확정] */
 export const LEAK_MINERAL = 5;
@@ -81,7 +122,9 @@ export const START_LIVES = 20;
 
 // ───────── 지출 — 원본에는 트리거상 자원 차감이 없다(§8.3). 아래는 전부 [프로토] ─────────
 // 원본에서는 SC 네이티브 빌드 코스트로 처리되었을 것으로 보이나 수치를 읽을 수 없다.
-export const SPAWN_UNIT_MINERAL = 12; // 소용돌이 클릭 → Lv1 생성 (strings:412)
+// 12 → 10 (2026-07-20, 사용자 지시) — 초반 수입이 1/3로 줄어(웨이브 보상 폐지) 보드가
+// 자라지 못하는 것에 대한 대응. 값을 내리면 시작 미네랄 55로 **4기 → 5기**를 산다.
+export const SPAWN_UNIT_MINERAL = 10; // 소용돌이 클릭 → Lv1 생성 (strings:412)
 
 /**
  * 유닛 생성 비용 — **누적 생성 횟수에 선형으로 오른다.**
@@ -111,7 +154,10 @@ export const SPAWN_FREE_COUNT = 8;
 // 0.40 → 0.30 (7차): "R30~40에 성장에 드는 골드가 너무 늘어 크는 재미가 없다".
 // 그 구간(누적 40~120기)의 총액이 3,305 → 2,726(-18%)이 된다. 웨이브는 **안 올린다** —
 // R50+ 벽이 이미 가파르다는 체감이라, 성장만 풀고 난이도는 다음 플레이테스트로 판정.
-export const SPAWN_COST_GROWTH = 0.3;
+// 0.3 → 0.25 (기본값 12→10에 비율 유지) → **0.15** (2026-07-20, 사용자 지시:
+// "상승률 더 완만하게"). 8기까지는 10골드 그대로고, 그 뒤 100기째가 24골드다
+// (0.25일 땐 33). 후반 타일 포화 억제는 유지하되 중반 확장 부담을 덜어낸다.
+export const SPAWN_COST_GROWTH = 0.15;
 export const spawnUnitCost = (spawned: number): number =>
   Math.round(SPAWN_UNIT_MINERAL + SPAWN_COST_GROWTH * Math.max(0, spawned - SPAWN_FREE_COUNT));
 /**
@@ -119,7 +165,8 @@ export const spawnUnitCost = (spawned: number): number =>
  * (10+3r)의 3배를 넘어서 시뮬·플레이 모두 프로브 0~1기로 끝났다 — 가스 엔진이
  * 아예 시동이 안 걸렸다. (성장 방식은 아래 probeCost — 2026-07-19부터 선형.)
  */
-export const PROBE_MINERAL = 60;
+// 60 → 100 (2026-07-20, 사용자 지시) — 초반에 광부로 새는 돈을 줄인다.
+export const PROBE_MINERAL = 100;
 
 /**
  * GOD 타워 타입 리롤 (2026-07-17 7차, 플레이테스트 요청).
@@ -134,6 +181,29 @@ export const PROBE_MINERAL = 60;
  */
 export const GOD_REROLL_MINERAL = 150;
 export const godRerollCost = (_rolled: number): number => GOD_REROLL_MINERAL;
+
+/**
+ * 스킬 리롤 (2026-07-20, 사용자 지시).
+ *
+ * 판이 낸 '문제'(보드 태그 편중)에 스킬로 '답'하게 하는 레버다.
+ *
+ * **첫 회 무료를 폐지했다** (같은 날, 사용자 지시) — Lv9 스킬 전용 드래프트가 생기면서
+ * "시작 스킬이 보드와 안 맞는 판"의 구제책이 이미 하나 있다. 무료 리롤까지 있으면
+ * 구제가 이중이라 R1에 무조건 한 번 굴리는 무의미한 정답 수순이 된다.
+ *
+ * 값이 **사용 횟수가 아니라 라운드**에 걸린 것이 핵심이다. GOD 리롤에서 폐기한
+ * "운이 나쁠수록 교정이 비싸진다" 역설을 피하면서도, 후반의 정밀 교정에는 값을 매긴다.
+ * 라운드 안에서는 가격이 같아 금화만 쌓아두면 연타로 원하는 스킬을 낚을 수 있으므로
+ * **라운드당 1회**로 막는다 (Game.canRerollSkill).
+ *
+ * 화폐는 미네랄 — 타워 증축과 같은 지갑을 두고 경쟁해야 "타워 vs 영웅" 저울에 얹힌다.
+ * 값은 4단계에서 income-curve.csv 기준으로 재산정한다 (지금은 형태만 확정).
+ */
+export const SKILL_REROLL_FREE_COUNT = 0;
+export const SKILL_REROLL_BASE = 100;
+export const SKILL_REROLL_PER_ROUND = 10;
+export const skillRerollCost = (used: number, round: number): number =>
+  used < SKILL_REROLL_FREE_COUNT ? 0 : SKILL_REROLL_BASE + SKILL_REROLL_PER_ROUND * round;
 
 // ── 타워 복제 ('복제 장치' 증강) ──
 // 복제 가능 티어 상한은 라운드와 영웅 레벨 중 **더 빠른 쪽**을 따라 오른다.
@@ -159,7 +229,8 @@ export const COPY_TIER_MAX = GOD_TIER - 1;
  * 첫 두 기(60·90)는 지수 시절과 같아 초반 앵커는 불변. 16기 총액 4,560
  * (지수 시절 R40 기준 사실상 도달 불가 → 이제 후반의 실질 선택지).
  */
-export const PROBE_COST_STEP = 30;
+// 30 → 50 (2026-07-20, 사용자 지시) — 증가폭도 함께 올려 광부 몰빵을 막는다.
+export const PROBE_COST_STEP = 50;
 export const probeCost = (owned: number): number => PROBE_MINERAL + PROBE_COST_STEP * owned;
 export const PROBE_MAX = 16;
 // 0.25 → 0.4 (2026-07-17 4차): 기본공을 3으로 더 깎은 몫을 가스 축이 받는다 —
@@ -214,9 +285,10 @@ export const BOSS_LAP_SECONDS = PATH_LENGTH / BOSS_SPEED;
  * 이전에는 45라는 고정 상수였다 — 우연히 한 바퀴(56.2초)의 80%와 같았지만, 경로 길이나
  * 보스 속도를 건드리면 그 관계가 조용히 깨진다. 유도값으로 바꿔 **"직전 보스가 한 바퀴를
  * 거의 돌 무렵 다음 보스를 부를 수 있다"**는 의미를 코드가 스스로 지키게 한다.
- * 80%라 소환은 항상 조금씩 겹친다 — 앞 보스를 빨리 못 잡으면 두 마리가 함께 걷는다.
+ * 0.8 → **0.889** (2026-07-20, 사용자 지시: "보스 소환 쿨타임 50초로 증가") — 45 → 50초.
+ * 겹침 여지가 11%로 줄어 앞 보스를 못 잡았을 때의 시간 대가가 커진다.
  */
-export const BOSS_COOLDOWN_RATIO = 0.8;
+export const BOSS_COOLDOWN_RATIO = 0.889;
 export const BOSS_COOLDOWN_SECONDS = Math.round(BOSS_LAP_SECONDS * BOSS_COOLDOWN_RATIO);
 
 /**
@@ -251,17 +323,33 @@ export const BOSS_COOLDOWN_SECONDS = Math.round(BOSS_LAP_SECONDS * BOSS_COOLDOWN
 // 700 → 640 (2026-07-19): 영웅 캐리 축 임시 차단(HERO_CARRY_BLOCKLIST)으로 초반 영웅
 // 딜 기대값이 줄어 Lv1 앵커(75미네랄 6기 처치율 ≥0.85)가 0.825로 미달 — 보스 쪽을
 // 내려 앵커를 지킨다. 영웅이 보조 역할인 체제에서는 보스도 보드 화력 기준으로 잰다.
-export const BOSS_HP_BASE = 640;
-export const BOSS_HP_GROWTH = 3.4;
+// 640 → 620 (2026-07-20, 사용자 지시): 같은 앵커가 다시 0.825로 미달했다. 이번 원인은
+// 영웅 공속 0.7/초 너프와 저티어 타워 공속 -20% — 초반 보드 화력이 또 줄었다.
+// 사다리 위쪽은 BOSS_HP_GROWTH가 정하므로 기준값 인하의 영향은 Lv1~2에 몰린다.
+export const BOSS_HP_BASE = 620;
+// 3.4 → 3.2 (2026-07-20, 사용자 지시). 스윕에서 체력만 낮추는 건 효과가 거의 없었고
+// (도달 Lv 3.0 → 4.0, 생존은 그대로) 사다리를 돌린 건 **보상 크기**였다 — 아래 표 참고.
+export const BOSS_HP_GROWTH = 3.2;
 /** 이 레벨을 넘으면 완만한 성장으로 갈아탄다 (사다리 꼭대기) */
 export const BOSS_HP_TOP_FROM = 5;
 export const BOSS_HP_TOP_GROWTH = 2.6;
+/**
+ * 사다리 아래쪽 완화 — **Lv1~3만 체력 15% 감소** (2026-07-20, 사용자 지시).
+ *
+ * 같은 날 영웅 공속을 0.7/초로 크게 내리면서 초반 보스 처치율이 앵커(0.85) 밑으로
+ * 떨어졌다(측정: 0.85 → 0.65, 원인은 공속 단독). 사다리 위쪽은 그대로 두고 **입구만**
+ * 넓혀 초반 보스 소환이 여전히 성립하게 한다.
+ */
+export const BOSS_LOW_LEVEL_HP_CUT = 0.85;
+export const BOSS_LOW_LEVEL_UNTIL = 3;
+
 export const bossHP = (level: number): number => {
   const capped = Math.min(level, BOSS_HP_TOP_FROM);
   const base = BOSS_HP_BASE * Math.pow(BOSS_HP_GROWTH, capped - 1);
-  return level <= BOSS_HP_TOP_FROM
+  const full = level <= BOSS_HP_TOP_FROM
     ? base
     : base * Math.pow(BOSS_HP_TOP_GROWTH, level - BOSS_HP_TOP_FROM);
+  return level <= BOSS_LOW_LEVEL_UNTIL ? full * BOSS_LOW_LEVEL_HP_CUT : full;
 };
 export const bossArmor = (level: number): number => 1.1 * level; // 기본공 3 동행
 // BOSS_SPEED는 위 '보스 소환' 절로 옮겼다 — 쿨타임이 이 값에서 유도되기 때문이다.
@@ -375,33 +463,55 @@ export const expectedBoardDps = (round: number): number =>
 // 실제 보드 파워는 수입에 곱(타워 수 × 업그레이드)으로 붙어 수입보다 빨리 크기 때문.
 /** 클리어 라인 — 이 라운드를 넘기면 승리. 이후는 무한 모드. */
 export const CLEAR_ROUND = 60;
-/** R1 웨이브 총체력 = 기대 보드 DPS 실측 28 × 목표 clear 18초 — 초반 앵커의 유래 */
-export const WAVE_HP_R1 = 504;
+/**
+ * R1 웨이브 총체력 — **곡선 전체의 앵커**. 원래 유래는
+ * "기대 보드 DPS 실측 28 × 목표 clear 18초 = 504".
+ *
+ * 504 → **572** (2026-07-20, 사용자 지시 네 건을 곱해서 반영):
+ * ①"체력 20% 늘리기" ②"r1 1.5배" ③"r1 30% 감소" ④"r1 10% 감소"
+ * → 504 × 1.2 × 1.5 × 0.7 × 0.9 = 572.
+ *
+ * ③④는 ①②를 올린 뒤 실측에서 초반이 무너져 되돌린 몫이다 — 단순 봇이 R5~12에
+ * 죽고 영웅이 Lv4를 못 넘겼다("일반 몬스터가 너무 강해져서 잡질 못한다", 2026-07-20).
+ *
+ * 앵커가 곱셈이므로 여기만 올리면 **성장률을 따라 전 구간이 같이 올라간다** —
+ * 라운드 구간별 보정 같은 건 필요 없다. WAVE_RATE_SEGMENTS는 한 글자도 안 바뀌므로
+ * 곡선의 모양은 그대로고 높이만 올라간다.
+ */
+export const WAVE_HP_R1 = 572;
 
 /**
  * 구간별 라운드당 총체력 성장률. `from` 라운드부터 다음 구간 직전까지 이 배율로 큰다.
  * 마지막 구간은 상한 없이 이어진다 — 무한 모드의 벽이다.
  *
- * 이력: R15~50 10% · R51+ 12% (2026-07-19 2차) → **R15~40을 12%로 상향**(3차, 사용자
- * 지시: "R40까지 상승률 2% 올려줘"). R41~50이 10%로 남아 성장률이 잠시 완만해지는
- * 골짜기가 생긴다 — 총체력은 계속 오르되(단조) 가속만 쉬어가는 구간이고, R60 총체력은
- * 68.8만 → 111만이 된다.
+ * 2026-07-20 (사용자 지시) — 전 구간 완화 후 **10라운드 단위로 잘게 재지정**.
+ *
+ * 이력: 초반 22.7%/중반 17%/후반 19%(3구간) → 전 구간 완화(15/15/17/13) →
+ * **10라운드 계단으로 다시 세분**(14/16/17/18/19). 라운드가 갈수록 조금씩 가팔라지는
+ * 단조 증가형이라, 시트의 growthPct 열만 봐도 "언제부터 빡세지는가"가 읽힌다.
+ *
+ * R51+만 13%로 **뒤 구간이 앞 구간보다 완만하다** — 무한 모드의 벽은 절대 난이도가
+ * 아니라 "보드 실성장(~5~7%/R 추정)을 앞서는가"로 정해지기 때문이다.
  */
 export const WAVE_RATE_SEGMENTS: readonly (readonly [from: number, rate: number])[] = [
-  [2, 0.227], // R2~14 — 옛 수입 모델 초반 곡선의 기하평균
-  [15, 0.17], // R15~40 (사용자 지시: 10% → 12% → 14% → +3%p → 17%)
-  [41, 0.19], // R41~50 (사용자 지시: 10% → 16% → +3%p → 19%)
-  [51, 0.15], // R51+ — 무한 모드의 벽. 보드 실성장(~5~7%/R 추정)을 앞서야 영생이 없다
+  [2, 0.14],  // R2~10
+  [11, 0.16], // R11~20
+  [21, 0.17], // R21~30
+  [31, 0.18], // R31~40
+  [41, 0.19], // R41~50
+  [51, 0.13], // R51+ — 무한 모드의 벽. 보드 실성장을 앞서야 영생이 없다
 ];
 
-/** 하위 호환·가독용 별칭 — 테스트와 문서가 이 이름으로 구간을 가리킨다 */
+/**
+ * 하위 호환·가독용 별칭 — 테스트와 문서가 이 이름으로 구간을 가리킨다.
+ * 구간이 3개에서 6개로 늘어(2026-07-20) 인덱스 고정이 위험해졌으므로 **끝에서** 센다.
+ */
 export const WAVE_EARLY_RATE = WAVE_RATE_SEGMENTS[0][1];
-export const WAVE_MID_FROM = WAVE_RATE_SEGMENTS[1][0];
-export const WAVE_MID_RATE = WAVE_RATE_SEGMENTS[1][1];
-export const WAVE_LATEMID_FROM = WAVE_RATE_SEGMENTS[2][0];
-export const WAVE_LATEMID_RATE = WAVE_RATE_SEGMENTS[2][1];
-export const WAVE_WALL_FROM = WAVE_RATE_SEGMENTS[3][0];
-export const WAVE_WALL_RATE = WAVE_RATE_SEGMENTS[3][1];
+export const WAVE_WALL_FROM = WAVE_RATE_SEGMENTS[WAVE_RATE_SEGMENTS.length - 1][0];
+export const WAVE_WALL_RATE = WAVE_RATE_SEGMENTS[WAVE_RATE_SEGMENTS.length - 1][1];
+/** 벽 직전 구간 (R41~50) — 곡선에서 가장 가파른 곳 */
+export const WAVE_LATEMID_FROM = WAVE_RATE_SEGMENTS[WAVE_RATE_SEGMENTS.length - 2][0];
+export const WAVE_LATEMID_RATE = WAVE_RATE_SEGMENTS[WAVE_RATE_SEGMENTS.length - 2][1];
 
 /** 그 라운드로 넘어올 때 적용된 성장률 (R1은 앵커라 없다) */
 export const waveGrowthRate = (round: number): number => {
@@ -410,7 +520,7 @@ export const waveGrowthRate = (round: number): number => {
   return rate;
 };
 
-/** 웨이브 총 체력 — 구간별 순수 지수. 수입·시뮬과 무관한 설계 상수다. */
+/** 웨이브 총 체력 — 앵커 × 구간별 순수 지수. 수입·시뮬과 무관한 설계 상수다. */
 export const waveTotalHp = (round: number): number => {
   let hp = WAVE_HP_R1;
   for (let r = 2; r <= round; r++) hp *= 1 + waveGrowthRate(r);
@@ -446,10 +556,31 @@ export const enemyArmor = (round: number): number =>
 // 문제 — 밀도를 낮춰 초반 막타 기회 자체를 줄인다. 총 체력(enemyHP가 총량÷count로
 // 역산)과 개체당 접촉 공격력(enemyDamage, count와 무관)은 그대로 — 개체가 굵어질 뿐
 // 라운드 난이도 곡선 자체는 안 바뀐다.
-export const ENEMY_BASE_COUNT = 16;
-export const ENEMY_COUNT_STEP = 3.2;
+/**
+ * 사이클 위치별 몹 수 — **표로 직접 지정** (2026-07-20, 사용자 지시:
+ * "16/19/22/26/29 → 15/16/17/18/20" → 다시 "11/12/13/14/15").
+ *
+ * 전에는 `기본 16 + 3.2 × 사이클위치`라는 식이었다. 새 값은 등간격이 아니라
+ * (+1·+1·+1·+2) 식으로 못 쓴다 — 표가 곧 설계다.
+ *
+ * 총체력(waveTotalHp)은 이 표와 무관하므로 **개당 체력이 그만큼 굵어진다**.
+ * 수가 줄면 처치 수도 줄어 킬 미션 수입과 영웅 경험치도 함께 내려간다.
+ */
+export const ENEMY_COUNT_BY_CYCLE_POS = [11, 12, 13, 14, 15] as const;
+/** 하위 호환·가독용 별칭 — 사이클 첫 라운드의 몹 수 */
+export const ENEMY_BASE_COUNT = ENEMY_COUNT_BY_CYCLE_POS[0];
+
+/**
+ * R50부터는 사이클과 무관하게 **20기 고정** (2026-07-20, 사용자 지시).
+ * 후반에는 밀도가 아니라 개체 굵기로만 어려워진다 — 화면이 몹으로 덮이지 않는다.
+ */
+export const ENEMY_COUNT_FLAT_FROM = 50;
+export const ENEMY_COUNT_FLAT = 20;
+
 export const enemyCount = (round: number): number =>
-  Math.round(ENEMY_BASE_COUNT + ENEMY_COUNT_STEP * posInCycle(round));
+  round >= ENEMY_COUNT_FLAT_FROM
+    ? ENEMY_COUNT_FLAT
+    : ENEMY_COUNT_BY_CYCLE_POS[posInCycle(round)];
 
 /** 웨이브 내 스폰 간격(초). 36기 × 0.18 = 6.5초 스폰 창 [프로토] */
 export const SPAWN_INTERVAL = 0.18;
@@ -480,8 +611,22 @@ export const ENEMY_SPEED = 42;
  */
 export const earlyTempo = (round: number): number => Math.min(1, 0.5 + 0.1 * Math.max(1, round));
 
-/** 스폰 시 몹의 초기 횡오프셋(px) — 좌/우 교대로 벌려서 시작한다. [프로토] */
-export const MOB_LANE_OFFSET = 8;
+/**
+ * 스폰 시 몹의 초기 횡오프셋(px). **0 = 1열 종대** (2026-07-20, 사용자 지시:
+ * "2열로 나오던거 1열로").
+ *
+ * 8이던 시절엔 좌/우 교대로 벌려 시작해 두 줄로 걸었다. 0이면 전부 경로 중앙에서
+ * 출발하고, 겹침 분리(separateEnemies)가 **횡이 아니라 앞뒤로** 밀어내
+ * 한 줄로 늘어선다 — MOB_MAX_LATERAL이 그 횡 이동을 막는다.
+ */
+export const MOB_LANE_OFFSET = 0;
+
+/**
+ * 겹침 분리가 몹을 옆으로 밀 수 있는 최대치(px). 0이면 완전한 1열 종대다 —
+ * 밀림이 전부 앞뒤(진행도)로만 간다. 경로 폭(WALKABLE_HALF_WIDTH)은 그대로 두고
+ * **몹의 대열만** 좁힌다 — 영웅·타워 배치는 넓은 길을 그대로 쓴다.
+ */
+export const MOB_MAX_LATERAL = 0;
 
 // ── 몹 겹침 분리 (2026-07-19, 사용자 지시: "어그로 시 몹이 완전히 겹친다") ──
 // 몹은 (경로 진행도, 횡오프셋) 2D에서 원으로 취급하고, 겹치면 서로 밀어낸다.
@@ -534,9 +679,39 @@ export const waveTypeOf = (round: number): WaveType =>
  * (플레이테스트). 장갑도 비율 유지를 위해 1.5 → 1.1로 동행 (장갑/기본공 ≈ 0.375).
  */
 export const BASE_DAMAGE = 3;
-export const TIER_DAMAGE = [1, 3, 9, 28, 95] as const;
-export const TIER_RANGE = [120, 140, 160, 185, 225] as const;
+// T1~T3만 +25% (2026-07-20, 사용자 지시) — 저티어가 오래 쓸모 있게.
+// 같은 날 저티어 공속을 -20% 했으므로 순 효과는 DPS ±0에 가깝고, **한 방이 커진다** —
+// 몹 체력이 오르는 초중반에 "몇 대 때려야 죽는가"를 늦춘다.
+export const TIER_DAMAGE = [1.25, 3.75, 11.25, 28, 95] as const;
+/**
+ * 티어별 사거리 — **전면 압축** (2026-07-20, 사용자 지시: "god 사거리 줄이자").
+ *
+ * 120/140/160/185/**225**였다. GOD 225는 경로의 **73%(최적 타일 100%)**를 덮어서
+ * 1기가 입구부터 출구까지 전부 사격했다 — 실측: 마법대 GOD 1기만으로 R30~45까지
+ * 몹을 하나도 안 놓쳤고, 이는 41칸을 다 채운 보드의 사망 라운드(R45)와 같다.
+ *
+ * 커버가 100%면 **어디에 짓든 똑같아서 배치가 선택이 아니게 된다.** 압축 후 GOD는
+ * 37%(최대 54%)를 덮어, 경로를 가리려면 여러 기를 나눠 놓아야 한다.
+ *
+ * **티어 간 격차를 거의 없앴다** (130~140). 사거리는 이제 **티어가 아니라 태그**가
+ * 정한다 — 티어를 올리면 피해가 커지고, 태그가 사정거리를 정하는 분업이다.
+ *
+ * 처음엔 100/110/120/130/140으로 잡았다가 되돌렸다: 저티어까지 깎이면서 Lv1 보스
+ * 앵커(75미네랄 6기 처치율 ≥0.85)가 0.75로 깨졌다. 태그 배수를 크게 벌린 것(speed 0.7)이
+ * 저티어에도 곱해져 Lv1 speed 타워가 108 → 80까지 내려간 게 컸다.
+ */
+export const TIER_RANGE = [130, 132, 134, 136, 140] as const;
 export const BASE_ATTACK_INTERVAL = 0.9;
+
+/**
+ * 티어별 공격 간격 배수 — **T1·T2만 20% 느리다** (2026-07-20, 사용자 지시).
+ *
+ * 그전에는 티어가 공격력(TIER_DAMAGE)만 키우고 공속은 전 티어가 같았다. 저티어를
+ * 느리게 하면 **조합의 값어치가 DPS 양쪽(피해 × 속도)으로 커진다** — 저티어를 깔아두고
+ * 버티는 플레이가 약해지고 위로 올리는 압력이 생긴다.
+ * 간격 배수라 1.25가 곧 공속 -20%다 (1/1.25 = 0.8).
+ */
+export const TIER_ATTACK_INTERVAL_MULT = [1.25, 1.25, 1, 1, 1] as const;
 
 /**
  * 크리쳐는 보조 타워다. 딜은 40% 깎이는 대신 사거리 안 몹을 늦춘다.
@@ -560,10 +735,22 @@ export const CREATURE_SLOW = [0.9, 0.84, 0.76, 0.66, 0.5] as const;
  * 꽂는 동안 나머지가 출구로 걸어간다 = **일반 몹을 놓칠 위험**.
  * 보스는 체력이 커서 오버킬이 없으므로 한 방 상향분을 그대로 받는다.
  */
+/**
+ * 태그 효과. 사거리 배수를 **크게 벌렸다** (2026-07-20, 사용자 지시: "타입별 사거리 다르게").
+ * 1.15 / 1.0 / 0.9 → **1.35 / 0.85 / 0.7**.
+ *
+ * 사거리가 곧 태그의 정체성이 된다:
+ * - `power` 느린 한 방 + **장거리** — 뒤에 놓고 길게 때린다 (포병다움)
+ * - `splash` 광역 + **근거리** — 길목에 바짝 붙여야 뭉친 무리를 잡는다
+ * - `speed` 연사 + **초근거리** — 몹이 지나가는 그 순간에만 쏟아붓는다
+ *
+ * 복합 태그는 곱해지므로 splash+speed는 0.6배까지 내려간다 — 가장 센 축(원소 군주)이
+ * 가장 짧은 사거리를 갖는 교환이다.
+ */
 export const TAG_EFFECT: Record<Tag, { damage: number; interval: number; range: number }> = {
-  power: { damage: 2.2, interval: 1.5, range: 1.15 },
-  splash: { damage: 0.9, interval: 1.0, range: 1.0 },
-  speed: { damage: 1.0, interval: 0.5, range: 0.9 },
+  power: { damage: 2.2, interval: 1.5, range: 1.35 },
+  splash: { damage: 0.9, interval: 1.0, range: 0.85 },
+  speed: { damage: 1.0, interval: 0.5, range: 0.7 },
 };
 
 /**

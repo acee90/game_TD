@@ -1,4 +1,5 @@
 import type { Race } from '../data/units';
+import type { SkillId, SkillRole } from '../data/skills';
 
 export const GAME_LOG_VERSION = 1 as const;
 
@@ -74,6 +75,7 @@ export interface RunSummary {
   readonly merges: number;
   readonly towersSold: number;
   readonly godRerolls: number;
+  readonly skillRerolls: number;
   readonly firstSeq: 1;
   readonly lastSeq: number;
 }
@@ -125,6 +127,7 @@ export interface GameEventDataMap {
   };
   readonly augment_rerolled: {
     readonly offerId: number;
+    readonly choiceIndex: number;
     readonly rerollCount: number;
     readonly cost: number;
     readonly choices: readonly AugmentLogRef[];
@@ -161,6 +164,15 @@ export interface GameEventDataMap {
     readonly cost: number;
     readonly before: TowerLogRef;
     readonly after: TowerLogRef;
+    readonly rerollCount: number;
+  };
+  /** 스킬을 다시 뽑았다 (2026-07-20 스킬 독립) — 판이 낸 문제에 다시 답한 순간 */
+  readonly skill_rerolled: {
+    readonly before: SkillId;
+    readonly after: SkillId;
+    /** 새 스킬의 성향 — 보드 편중과 교차해 "답이 맞았는가"를 본다 */
+    readonly afterRole: SkillRole;
+    readonly cost: number;
     readonly rerollCount: number;
   };
   readonly gas_skill_upgraded: {

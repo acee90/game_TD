@@ -13,7 +13,8 @@
     "gen:balance": "vite-node tools/gen-balance-csv.ts",
     "gen:log-fixture": "vite-node tools/gen-run-log-fixtures.ts",
     "sim:ga": "vite-node tools/ga-sim.ts",
-    "logs:analyze": "vite-node tools/analyze-run-logs.ts"
+    "logs:analyze": "vite-node tools/analyze-run-logs.ts",
+    "model:survival": "npx tsx tools/survival-model.ts"
   },
   "devDependencies": {
     "@sveltejs/vite-plugin-svelte": "^5.1.1",

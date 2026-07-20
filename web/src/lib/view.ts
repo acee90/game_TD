@@ -6,6 +6,7 @@ import { GOD_TIER, RACES, RACE_COLOR, TIER_LABEL, tagLabel, type Race } from '..
 import { attackInterval, damage, range } from '../game/combat';
 import { bossKillMineral, nextMilestone } from '../game/economy';
 import * as HD from '../data/hero';
+import { SKILLS, isStarterSkill, type SkillRole } from '../data/skills';
 import type { Game } from '../game/game';
 import type * as hallOfFame from '../ui/hall-of-fame';
 
@@ -281,6 +282,8 @@ export function augmentCardsHtml(game: Game, locked: boolean): string {
       const actualLine = actual
         ? `<div class="d" style="color:${rarity.color}">→ 실제: ${actual}</div>`
         : '';
+      const used = !game.canRerollAugmentChoice(i);
+      const badgeStyle = locked || used ? 'opacity:.45' : 'cursor:pointer';
       const lockStyle = locked ? ';opacity:.45;pointer-events:none' : '';
       return `<button class="augcard" data-index="${i}" style="border-color:${rarity.color}${lockStyle}">
         <div class="k">
@@ -291,10 +294,48 @@ export function augmentCardsHtml(game: Game, locked: boolean): string {
         <div class="n">${card.augment.name}</div>
         <div class="d">${card.augment.description}</div>
         ${actualLine}
+        <span class="cardReroll" data-reroll="${i}" style="${badgeStyle}">${
+          used ? '⟳ 사용함' : '⟳ 이 카드만 다시'
+        }</span>
       </button>`;
     })
     .join('');
 }
+
+/**
+ * Lv9 스킬 드래프트 카드 HTML — 증강이 아니라 **액티브 스킬**을 고르는 화면.
+ *
+ * 성향(role)을 앞세운다: 지금 보드가 잡몹을 놓치는지 보스를 못 녹이는지에 따라
+ * 무엇을 골라야 하는지가 갈리기 때문이다. 카드마다 리롤 배지가 붙는데,
+ * **버튼 안의 버튼은 무효 HTML**이라 span으로 두고 클릭은 오버레이가 가려낸다.
+ */
+export function skillChoiceCardsHtml(game: Game, locked: boolean): string {
+  return game.skillChoices
+    .map((id, i) => {
+      const def = SKILLS[id];
+      const role = SKILL_ROLE_LABEL[def.role];
+      const used = !game.canRerollSkillChoice(i);
+      const badgeStyle = locked || used ? 'opacity:.45' : 'cursor:pointer';
+      const lockStyle = locked ? ';opacity:.45;pointer-events:none' : '';
+      return `<button class="augcard" data-index="${i}" style="border-color:${role.color}${lockStyle}">
+        <div class="k"><span style="color:${role.color}">${role.label}</span></div>
+        <div class="n">${def.name}</div>
+        <div class="d">${def.description}</div>
+        <div class="d">필요 마나 ${def.manaMax}</div>
+        <span class="cardReroll" data-reroll="${i}" style="${badgeStyle}">${
+          used ? '⟳ 사용함' : '⟳ 이 카드만 다시'
+        }</span>
+      </button>`;
+    })
+    .join('');
+}
+
+/** 성향 표시 — 무엇을 구제하는 스킬인지 한눈에 */
+export const SKILL_ROLE_LABEL: Record<SkillRole, { label: string; color: string }> = {
+  mob: { label: '잡몹 처리', color: '#6fdc8c' },
+  boss: { label: '보스 특화', color: '#ff8a3c' },
+  utility: { label: '유틸', color: '#7ce7ff' },
+};
 
 /** 명예의 전당 목록 HTML */
 export function hallOfFameHtml(records: readonly hallOfFame.Record[], myRank: number | null): string {
@@ -314,6 +355,22 @@ export function hallOfFameHtml(records: readonly hallOfFame.Record[], myRank: nu
 /** GOD 리롤 버튼이 보일 조건 */
 export function isGodSelected(game: Game): boolean {
   return game.selected?.tower?.tier === GOD_TIER;
+}
+
+/**
+ * 스킬 리롤 툴팁 — 왜 지금 못 누르는지가 버튼에서 읽혀야 한다.
+ * 스킬은 판이 낸 문제에 대한 답이라, 못 고르는 이유를 모르면 선택이 성립하지 않는다.
+ */
+export function skillRerollTitle(game: Game): string {
+  const held = `지금 든 스킬: ${game.hero.skill.def.name}`;
+  if (isStarterSkill(game.hero.skillId)) {
+    return `${held} — 영웅 Lv${HD.SKILL_DRAFT_LEVEL}에 첫 스킬을 고른 뒤부터 다시 뽑을 수 있습니다.`;
+  }
+  if (game.skillRerollUsedThisRound) return `${held} — 스킬 리롤은 라운드당 한 번입니다.`;
+  if (game.beam !== null) return `${held} — 레이저가 나가는 중에는 바꿀 수 없습니다.`;
+  const cost = game.skillRerollCost;
+  if (game.mineral < cost) return `${held} — 금화 ${cost} 필요.`;
+  return `${held}. 지금과 다른 스킬로 반드시 바뀝니다 (라운드당 1회).`;
 }
 
 /** 업그레이드 버튼 라벨 · 툴팁 (병과별) */

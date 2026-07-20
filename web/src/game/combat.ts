@@ -37,7 +37,11 @@ export const slowFactor = (tower: Tower): number =>
   isCreature(tower) ? B.CREATURE_SLOW[tower.tier] : 1;
 
 export function attackInterval(tower: Tower): number {
-  return B.BASE_ATTACK_INTERVAL * combine(tower.def.tags, 'interval');
+  return (
+    B.BASE_ATTACK_INTERVAL *
+    B.TIER_ATTACK_INTERVAL_MULT[tower.tier] *
+    combine(tower.def.tags, 'interval')
+  );
 }
 
 export function range(tower: Tower): number {

@@ -3,6 +3,7 @@
 // 기반 지표다. 집계가 어긋나면 모든 시뮬레이션 결론이 어긋난다.
 
 import { describe, expect, test } from 'vitest';
+import * as H from '../src/data/hero';
 import { Game } from '../src/game/game';
 import { pathPos } from '../src/core/map';
 import type { Enemy } from '../src/game/types';
@@ -26,7 +27,9 @@ describe('피해 기여 집계', () => {
 
   test('붙잡힌 몹에게 타워가 넣은 피해는 탱킹 어시스트로도 집계된다', () => {
     const game = new Game(() => 0.5);
-    const enemy = dummyEnemy(game.hero.distance - 30); // 어그로 범위(110) 안 → held
+    // 어그로는 증강이 켠다 (2026-07-20) — 탱킹 어시스트를 재려면 도발을 들려야 한다
+    game.hero.addAugment(H.makeCard(H.AUGMENTS.find((a) => a.id === 'provoke')!, 'silver'));
+    const enemy = dummyEnemy(game.hero.distance - 30); // 어그로 범위 안 → held
     game.enemies.push(enemy);
 
     // 몹 좌표에서 사거리가 닿는 타일에 타워를 세운다 (사거리는 티어가 정한다 — GOD 티어로)

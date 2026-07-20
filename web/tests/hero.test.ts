@@ -161,9 +161,12 @@ describe('어그로 — 몹이 영웅을 보면 멈춘다', () => {
     expect(game.enemies[0].distance).toBeGreaterThan(blocked);
   });
 
-  test('어그로는 몹을 한곳에 모은다', () => {
+  // 어그로는 이제 **증강을 들어야 열린다** (2026-07-20, 사용자 지시) — 기본 영웅은
+  // 몹을 못 붙잡는다. 그 계약은 아래 별도 테스트가 지키고, 여기서는 켜진 뒤의 동작을 본다.
+  test('어그로는 몹을 한곳에 모은다 (도발 증강 보유)', () => {
     const game = new Game();
     const hero = game.hero;
+    hero.addAugment(H.makeCard(H.AUGMENTS.find((a) => a.id === 'provoke')!, 'silver'));
 
     for (let i = 0; i < 5; i++) game.enemies.push(mob(hero.distance - 60 + i * 8));
     for (let i = 0; i < 30; i++) game.update(0.05);
@@ -171,6 +174,24 @@ describe('어그로 — 몹이 영웅을 보면 멈춘다', () => {
     const spread = Math.max(...game.enemies.map((e) => e.distance)) -
       Math.min(...game.enemies.map((e) => e.distance));
     expect(spread).toBeLessThan(20); // 접촉 지점에 뭉친다
+  });
+
+  test('증강이 없으면 어그로가 없다 — 몹이 영웅을 지나쳐 간다 (2026-07-20)', () => {
+    expect(H.HERO_AGGRO_RANGE).toBe(0);
+
+    const game = new Game();
+    const hero = game.hero;
+    expect(hero.stats.aggroRange).toBe(0);
+
+    for (let i = 0; i < 5; i++) game.enemies.push(mob(hero.distance - 60 + i * 8));
+    for (let i = 0; i < 30; i++) game.update(0.05);
+
+    expect(game.enemies.every((e) => !e.held)).toBe(true);
+
+    // 도발을 들면 켜진다 — 배수 증강이 0에 곱해져 죽지 않는지 확인
+    const withProvoke = new Game();
+    withProvoke.hero.addAugment(H.makeCard(H.AUGMENTS.find((a) => a.id === 'provoke')!, 'silver'));
+    expect(withProvoke.hero.stats.aggroRange).toBeGreaterThan(H.AGGRO_RANGE_BASE);
   });
 });
 

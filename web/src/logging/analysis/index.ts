@@ -46,6 +46,7 @@ export interface RunProjection {
   readonly merges: number;
   readonly towersSold: number;
   readonly godRerolls: number;
+  readonly skillRerolls: number;
   readonly lastSeq: number;
   readonly source: 'recorded' | 'partial' | 'summary_only';
 }
@@ -117,6 +118,7 @@ function emptyProjection(runId = 'unknown'): RunProjection {
     merges: 0,
     towersSold: 0,
     godRerolls: 0,
+    skillRerolls: 0,
     lastSeq: 0,
     source: 'partial',
   };
@@ -171,6 +173,8 @@ function projectionFromSummary(summary: RunSummary, source: 'recorded' | 'summar
     merges: summary.merges,
     towersSold: summary.towersSold,
     godRerolls: summary.godRerolls,
+    // 2026-07-20에 생긴 필드 — 그전 로그에는 없다 (스키마 v1 유지, 가산 변경)
+    skillRerolls: summary.skillRerolls ?? 0,
     lastSeq: summary.lastSeq,
     source,
   };
@@ -211,6 +215,7 @@ function partialProjection(events: readonly GameRunEvent[]): RunProjection {
     merges: events.filter((event) => event.type === 'tower_merged').length,
     towersSold: events.filter((event) => event.type === 'tower_sold').length,
     godRerolls: events.filter((event) => event.type === 'god_rerolled').length,
+    skillRerolls: events.filter((event) => event.type === 'skill_rerolled').length,
     lastSeq: last?.seq ?? 0,
   };
 }
@@ -233,6 +238,7 @@ function compareSummary(
     [summary.merges === count('tower_merged'), 'merges'],
     [summary.towersSold === count('tower_sold'), 'towersSold'],
     [summary.godRerolls === count('god_rerolled'), 'godRerolls'],
+    [(summary.skillRerolls ?? 0) === count('skill_rerolled'), 'skillRerolls'],
     [summary.heroXpPurchases === count('hero_xp_bought'), 'heroXpPurchases'],
     [summary.bossesKilled === count('boss_killed'), 'bossesKilled'],
   ];

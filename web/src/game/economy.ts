@@ -20,24 +20,45 @@ export interface KillIncome {
 export function killIncome(before: number, after: number): KillIncome {
   if (after <= before) return { mineral: 0, notes: [] };
 
+  let mineral = 0;
+  const notes: string[] = [];
+
+  // 반복 미션 — 20킬마다
   const crossings =
     Math.floor(after / B.KILL_MISSION_EVERY) - Math.floor(before / B.KILL_MISSION_EVERY);
-  if (crossings <= 0) return { mineral: 0, notes: [] };
-  const mineral = crossings * B.KILL_MISSION_REWARD;
-  return {
-    mineral,
-    notes: [`[${B.KILL_MISSION_EVERY}킬 미션] +${mineral}`],
-  };
+  if (crossings > 0) {
+    const repeat = crossings * B.KILL_MISSION_REWARD;
+    mineral += repeat;
+    notes.push(`[${B.KILL_MISSION_EVERY}킬 미션] +${repeat}`);
+  }
+
+  // 일회성 마일스톤 (2026-07-20) — 문턱을 **처음** 넘을 때만.
+  // before < 문턱 <= after 조건이라 누적 킬로 자연히 한 번만 걸린다.
+  for (const [kills, reward] of B.KILL_MILESTONES) {
+    if (before < kills && after >= kills) {
+      mineral += reward;
+      notes.push(`[누적 ${kills}킬 달성] +${reward}`);
+    }
+  }
+
+  return { mineral, notes };
 }
 
 /** 보스 처치 보상. trigger #601~#606 */
 export const bossKillMineral = (level: number): number =>
   B.BOSS_KILL_MINERAL[Math.min(level, B.BOSS_MAX_LEVEL) - 1] ?? 0;
 
-/** 다음 킬 미션 문턱 — 20킬 미션은 무한 반복이라 항상 존재한다 */
+/**
+ * 다음 킬 미션 문턱 — 반복 미션과 일회성 마일스톤 중 **먼저 오는 쪽**을 보여준다.
+ * 20킬 미션은 무한 반복이라 항상 존재하므로 null이 나오지 않는다.
+ */
 export function nextMilestone(kills: number): { kills: number; reward: number } | null {
-  return {
+  const repeat = {
     kills: (Math.floor(kills / B.KILL_MISSION_EVERY) + 1) * B.KILL_MISSION_EVERY,
     reward: B.KILL_MISSION_REWARD,
   };
+  const pending = B.KILL_MILESTONES.filter(([k]) => k > kills);
+  if (pending.length === 0) return repeat;
+  const [k, reward] = pending[0];
+  return k <= repeat.kills ? { kills: k, reward } : repeat;
 }
