@@ -620,3 +620,36 @@ export function rollAugmentChoices(hero: Hero, rand: () => number): AugmentCard[
   }
   return cards;
 }
+
+/**
+ * 띄워 둔 증강 카드 한 장만 다시 뽑는다.
+ *
+ * 다른 카드는 유지되므로, 현재 보이는 나머지 카드와 중복되는 증강은 제외한다.
+ */
+export function rerollAugmentChoice(
+  hero: Hero,
+  shown: readonly AugmentCard[],
+  index: number,
+  rand: () => number,
+): AugmentCard | null {
+  const current = shown[index];
+  if (!current) return null;
+
+  const blocked = new Set(
+    shown
+      .filter((_, i) => i !== index)
+      .map((card) => card.augment.id),
+  );
+  const pool = draftPool(hero).filter((augment) => !blocked.has(augment.id) && augment.id !== current.augment.id);
+  if (pool.length === 0) return null;
+
+  const heldByKind = new Map<H.AugmentKind, number>();
+  for (const c of hero.augments) {
+    heldByKind.set(c.augment.kind, (heldByKind.get(c.augment.kind) ?? 0) + 1);
+  }
+  const weightOf = (augment: H.Augment): number =>
+    1 + H.ADAPTIVE_KIND_WEIGHT * (heldByKind.get(augment.kind) ?? 0);
+
+  const picked = pool[weightedIndex(pool.map(weightOf), rand)];
+  return H.makeCard(picked, picked.fixedRarity ?? H.rollRarity(rand));
+}

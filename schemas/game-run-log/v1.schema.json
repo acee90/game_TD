@@ -264,9 +264,10 @@
     },
     "augmentRerolledData": {
       "type": "object",
-      "required": ["offerId", "rerollCount", "cost", "choices"],
+      "required": ["offerId", "choiceIndex", "rerollCount", "cost", "choices"],
       "properties": {
         "offerId": { "type": "integer", "minimum": 1 },
+        "choiceIndex": { "type": "integer", "minimum": 0, "maximum": 2 },
         "rerollCount": { "type": "integer", "minimum": 1 },
         "cost": { "type": "integer", "minimum": 0 },
         "choices": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/augmentRef" } }

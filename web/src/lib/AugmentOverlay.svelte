@@ -10,7 +10,7 @@
 
   // F1 — 증강 오클릭 방지: 새 선택 화면마다 1초 입력 잠금.
   // XP 연타 중 카드가 포인터 밑에 나타나 같은 클릭 흐름에 눌리는 사고를 막는다.
-  // 리롤(rerollsUsed 증가)로 바뀐 선택지는 의도된 클릭이라 잠그지 않는다.
+  // 카드별 리롤(rerollsUsed 증가)로 바뀐 선택지는 의도된 클릭이라 잠그지 않는다.
   const AUGMENT_LOCK_MS = 1000;
   let lockUntil = $state(0);
   let lastChoices: unknown = null;
@@ -33,7 +33,6 @@
     const skillDraft = game.skillChoices.length > 0;
     const open = game.augmentChoices.length > 0 || skillDraft;
     const locked = performance.now() < lockUntil;
-    const left = HD.AUGMENT_REROLL_MAX - game.rerollsUsed;
     return {
       open,
       locked,
@@ -41,15 +40,12 @@
       title: skillDraft ? '스킬 선택' : '증강 선택',
       sub: skillDraft
         ? `영웅 Lv${game.hero.level} — 첫 스킬을 고르세요 · 카드마다 ${HD.SKILL_DRAFT_CARD_REROLLS}번 다시 뽑을 수 있습니다`
-        : `영웅 Lv${game.hero.level} — 하나를 고르세요`,
+        : `영웅 Lv${game.hero.level} — 하나를 고르세요 · 카드마다 ${HD.AUGMENT_CARD_REROLLS}번 다시 뽑을 수 있습니다`,
       cards: skillDraft
         ? skillChoiceCardsHtml(game, locked)
         : open
           ? augmentCardsHtml(game, locked)
           : '',
-      rerollText: left > 0 ? `무료 리롤 · ${left}회 남음` : '리롤 소진',
-      rerollDisabled: !game.canReroll || locked,
-      showFullReroll: !skillDraft,
       augCount: game.hero.augments.length,
       currentAugs: heroAugsHtml(game),
     };
@@ -60,7 +56,9 @@
     // 카드별 리롤 배지가 먼저다 — 카드 안에 있으므로 선택보다 앞서 가려낸다
     const rerollBadge = (event.target as HTMLElement).closest<HTMLElement>('.cardReroll');
     if (rerollBadge?.dataset.reroll) {
-      game.rerollSkillChoice(Number(rerollBadge.dataset.reroll));
+      const index = Number(rerollBadge.dataset.reroll);
+      if (v.skillDraft) game.rerollSkillChoice(index);
+      else game.rerollAugmentChoice(index);
       return;
     }
     const card = (event.target as HTMLElement).closest<HTMLElement>('.augcard');
@@ -68,11 +66,6 @@
     const index = Number(card.dataset.index);
     if (v.skillDraft) game.chooseSkill(index);
     else game.chooseAugment(index);
-  }
-
-  function onReroll(): void {
-    if (v.locked) return; // 등장 직후 1초 오클릭 방지
-    game.rerollAugments();
   }
 </script>
 
@@ -90,8 +83,5 @@
     {/if}
     <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_noninteractive_element_interactions -->
     <div class="augcards" id="augCards" role="group" onclick={onCardsClick}>{@html v.cards}</div>
-    {#if v.showFullReroll}
-      <button id="reroll" disabled={v.rerollDisabled} onclick={onReroll}>{v.rerollText}</button>
-    {/if}
   </div>
 {/if}

@@ -127,6 +127,7 @@ export interface GameEventDataMap {
   };
   readonly augment_rerolled: {
     readonly offerId: number;
+    readonly choiceIndex: number;
     readonly rerollCount: number;
     readonly cost: number;
     readonly choices: readonly AugmentLogRef[];

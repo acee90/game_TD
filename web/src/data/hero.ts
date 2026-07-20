@@ -310,8 +310,8 @@ export const grantsSkillDraft = (level: number): boolean => level === SKILL_DRAF
 export const SKILL_DRAFT_CHOICES = 3;
 
 /**
- * 스킬 드래프트는 **카드마다 리롤 1회씩** (사용자 지시). 전체를 다시 굴리는 증강
- * 리롤(AUGMENT_REROLL_MAX)과 다르다 — 마음에 드는 한 장은 두고 나머지만 바꾸므로
+ * 스킬 드래프트는 **카드마다 리롤 1회씩** (사용자 지시). 증강 카드별 리롤과 같은 원리지만,
+ * 스킬은 "무엇을 지킬지"가 더 직접적이다 — 마음에 드는 한 장은 두고 나머지만 바꾸므로
  * "무엇을 지킬지"가 선택이 된다.
  */
 export const SKILL_DRAFT_CARD_REROLLS = 1;
@@ -1155,9 +1155,9 @@ export function skillGateAllows(augment: Augment, currentSkill: SkillId): boolea
  */
 export const ADAPTIVE_KIND_WEIGHT = 0.9;
 
-// ───────── 증강 리롤 — 무료 (2026-07-18, 사용자 지시) ─────────
-// 마정석 소비 폐지, 선택 하나당 무료 리롤 1회로 축소 (기존: 마정석 소비 · 최대 2회).
-export const AUGMENT_REROLL_MAX = 1;
+// ───────── 증강 리롤 — 카드마다 무료 1회 (2026-07-20, 사용자 지시) ─────────
+// 전체 3장을 갈아엎지 않고, 마음에 든 카드는 남긴 채 각 카드만 한 번씩 바꾼다.
+export const AUGMENT_CARD_REROLLS = 1;
 
 /** 같은 계열 증강이 이만큼 모이면 특화가 발동한다 */
 export const SYNERGY_THRESHOLD = 3;

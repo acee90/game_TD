@@ -15,7 +15,7 @@ import { GOD_TIER, RACES, RACE_COLOR, tagLabel, type Race } from '../data/units'
 import type { AugmentCard } from '../data/hero';
 import { attackInterval, damage, isSplash, range, slowFactor, type UpgradeLevels } from './combat';
 import { bossKillMineral, killIncome } from './economy';
-import { Hero, rollAugmentChoices, type HeroStats } from './hero';
+import { Hero, rerollAugmentChoice, rollAugmentChoices, type HeroStats } from './hero';
 import {
   GAME_LOG_VERSION,
   type AugmentLogRef,
@@ -80,8 +80,8 @@ export class Game {
   /** 증강 선택지가 떠 있으면 게임이 멈춘다 */
   augmentChoices: AugmentCard[] = [];
 
-  /** 이번 증강 선택에서 쓴 리롤 수 — 새 선택지가 뜰 때 0으로 돌아간다 */
-  rerollsUsed = 0;
+  /** 후보별 리롤 사용 횟수 — 카드마다 1회 */
+  augmentChoiceRerolls: number[] = [];
 
   /**
    * 높은 등급 증강을 고른 대가. 몹 체력에 영구히 곱해진다.
@@ -676,6 +676,7 @@ export class Game {
     const augment = this.augmentLogRef(card);
     this.hero.addAugment(card);
     this.augmentChoices = [];
+    this.augmentChoiceRerolls = [];
     this.record('augment_chosen', { offerId, choiceIndex: index, augment });
     this.chosenAugments.push({
       augment,
@@ -699,7 +700,7 @@ export class Game {
     }
     if (hero.pendingAugmentPicks <= 0) return;
     this.augmentChoices = rollAugmentChoices(hero, this.rand);
-    this.rerollsUsed = 0;
+    this.augmentChoiceRerolls = this.augmentChoices.map(() => 0);
     if (this.augmentChoices.length === 0) {
       hero.pendingAugmentPicks = 0;
       return;
@@ -712,23 +713,37 @@ export class Game {
     });
   }
 
-  // ── 증강 리롤 — 무료 (2026-07-18, 사용자 지시) ──
-  get canReroll(): boolean {
-    return this.augmentChoices.length > 0 && this.rerollsUsed < H.AUGMENT_REROLL_MAX;
+  // ── 증강 리롤 — 카드마다 무료 1회 (2026-07-20, 사용자 지시) ──
+  get rerollsUsed(): number {
+    return this.augmentChoiceRerolls.reduce((sum, used) => sum + used, 0);
   }
 
-  /** 선택지 3장을 다시 뽑는다 — 무료, 한 선택당 최대 AUGMENT_REROLL_MAX회 */
-  rerollAugments(): boolean {
-    if (this.augmentChoices.length === 0) return false;
-    if (this.rerollsUsed >= H.AUGMENT_REROLL_MAX) {
-      this.message = `리롤은 선택당 ${H.AUGMENT_REROLL_MAX}회까지입니다.`;
+  canRerollAugmentChoice(index: number): boolean {
+    return (
+      this.augmentChoices[index] !== undefined &&
+      (this.augmentChoiceRerolls[index] ?? 0) < H.AUGMENT_CARD_REROLLS
+    );
+  }
+
+  /** 선택지 한 장만 다시 뽑는다 — 다른 카드는 유지된다 */
+  rerollAugmentChoice(index: number): boolean {
+    if (!this.canRerollAugmentChoice(index)) {
+      if (this.augmentChoices[index] !== undefined) {
+        this.message = `이 카드는 이미 다시 뽑았습니다 (카드당 ${H.AUGMENT_CARD_REROLLS}회).`;
+      }
       return false;
     }
-    this.rerollsUsed++;
-    this.augmentChoices = rollAugmentChoices(this.hero, this.rand);
+    const next = rerollAugmentChoice(this.hero, this.augmentChoices, index, this.rand);
+    if (!next) {
+      this.message = '바꿀 만한 다른 증강이 없습니다.';
+      return false;
+    }
+    this.augmentChoiceRerolls[index]++;
+    this.augmentChoices[index] = next;
     this.record('augment_rerolled', {
       offerId: this.currentOfferId,
-      rerollCount: this.rerollsUsed,
+      choiceIndex: index,
+      rerollCount: this.augmentChoiceRerolls[index] ?? 0,
       cost: 0,
       choices: this.augmentChoices.map((choice) => this.augmentLogRef(choice)),
     });

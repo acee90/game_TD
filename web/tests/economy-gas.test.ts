@@ -27,8 +27,8 @@ describe('프로브 — 선형 비용 (2026-07-19, 지수 → 선형)', () => {
   });
 });
 
-// 무료 · 선택당 1회 (2026-07-18, 사용자 지시) — 예전엔 가스 소비 · 선택당 최대 2회였다.
-describe('증강 리롤 — 무료, 선택당 최대 1회', () => {
+// 무료 · 카드마다 1회 (2026-07-20, 사용자 지시) — 예전엔 3장을 통째로 다시 굴렸다.
+describe('증강 리롤 — 무료, 카드마다 최대 1회', () => {
   function gameWithChoices(): Game {
     const game = new Game(() => 0.5);
     game.gas = 0; // 가스가 없어도 리롤은 된다 — 더 이상 가스를 안 쓴다
@@ -38,28 +38,34 @@ describe('증강 리롤 — 무료, 선택당 최대 1회', () => {
     return game;
   }
 
-  test('리롤은 가스를 쓰지 않고 선택지를 다시 뽑는다', () => {
+  test('리롤은 가스를 쓰지 않고 해당 카드만 다시 뽑는다', () => {
     const game = gameWithChoices();
-    expect(game.rerollAugments()).toBe(true);
+    const before = [...game.augmentChoices];
+    expect(game.rerollAugmentChoice(0)).toBe(true);
     expect(game.gas).toBe(0);
     expect(game.augmentChoices.length).toBeGreaterThan(0);
+    expect(game.augmentChoices[0]).not.toBe(before[0]);
+    expect(game.augmentChoices[1]).toBe(before[1]);
+    expect(game.augmentChoices[2]).toBe(before[2]);
   });
 
-  test('한 선택당 1회뿐이다', () => {
+  test('각 카드는 1회뿐이고 다른 카드는 별개로 다시 뽑을 수 있다', () => {
     const game = gameWithChoices();
-    expect(game.canReroll).toBe(true);
-    game.rerollAugments();
-    expect(game.canReroll).toBe(false);
-    expect(game.rerollAugments()).toBe(false); // 상한 1회
+    expect(game.canRerollAugmentChoice(0)).toBe(true);
+    game.rerollAugmentChoice(0);
+    expect(game.canRerollAugmentChoice(0)).toBe(false);
+    expect(game.rerollAugmentChoice(0)).toBe(false); // 카드별 상한 1회
+    expect(game.canRerollAugmentChoice(1)).toBe(true);
   });
 
   test('카드를 고르고 다음 선택지가 뜨면 리롤 횟수가 돌아온다', () => {
     const game = gameWithChoices();
-    game.rerollAugments();
+    game.rerollAugmentChoice(0);
     game.hero.pendingAugmentPicks = 2; // 고르면 1이 소비되고 다음 선택이 이어진다
     game.chooseAugment(0);
     expect(game.rerollsUsed).toBe(0);
-    expect(game.canReroll).toBe(true);
+    expect(game.augmentChoiceRerolls).toEqual([0, 0, 0]);
+    expect(game.canRerollAugmentChoice(0)).toBe(true);
   });
 });
 

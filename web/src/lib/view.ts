@@ -282,6 +282,8 @@ export function augmentCardsHtml(game: Game, locked: boolean): string {
       const actualLine = actual
         ? `<div class="d" style="color:${rarity.color}">→ 실제: ${actual}</div>`
         : '';
+      const used = !game.canRerollAugmentChoice(i);
+      const badgeStyle = locked || used ? 'opacity:.45' : 'cursor:pointer';
       const lockStyle = locked ? ';opacity:.45;pointer-events:none' : '';
       return `<button class="augcard" data-index="${i}" style="border-color:${rarity.color}${lockStyle}">
         <div class="k">
@@ -292,6 +294,9 @@ export function augmentCardsHtml(game: Game, locked: boolean): string {
         <div class="n">${card.augment.name}</div>
         <div class="d">${card.augment.description}</div>
         ${actualLine}
+        <span class="cardReroll" data-reroll="${i}" style="${badgeStyle}">${
+          used ? '⟳ 사용함' : '⟳ 이 카드만 다시'
+        }</span>
       </button>`;
     })
     .join('');
