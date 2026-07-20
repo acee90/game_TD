@@ -11,7 +11,7 @@
 // 대신 스킬마다 "언제 쓰는 게 맞는지"가 다르므로 발동 조건을 데이터로 둔다.
 
 export type SkillId =
-  | 'smite'      // 기본 — 좁은 범위 강타 (시작 스킬, 스킬 증강이 교체한다)
+  | 'smite'      // 시작 장비 — 단일 대상 강한 일격. Lv9까지의 임시 무기다
   | 'whirlwind'  // 근접 — 광역
   | 'volley'     // 원거리 — 다중 사격
   | 'meteor'     // 마법 — 밀집 광역
@@ -23,11 +23,25 @@ export type SkillId =
   | 'chain';     // 원거리 — 튕기는 사격 (튕길수록 강해진다)
 
 /**
- * 시작 스킬 (2026-07-17 6차). 그전에는 스킬이 증강 전용이라 **가스 스킬 강화
- * (피해/필요 마나)가 스킬을 뽑기 전엔 죽은 버튼**이었다(플레이테스트). 기본 스킬이
- * 있으면 가스 트랙이 처음부터 유효하고, 스킬 증강은 이 스킬을 **교체**한다.
+ * 시작 스킬 — **'강한 일격'** (2026-07-20, 사용자 지시).
+ *
+ * 판마다 랜덤으로 뽑던 것을 되돌렸다. 시작 스킬은 이제 **약한 고정 장비**다:
+ * 단일 대상 3배 한 방뿐이라 광역도, 유틸도, 성향도 없다.
+ * 플레이어는 **Lv9에 처음으로 '제대로된 스킬'을 고른다**(SKILL_DRAFT_LEVEL).
+ *
+ * 이렇게 하면 초반이 조용해지는 대신 Lv9가 판의 분기점이 된다 — 그때쯤이면 보드에
+ * 어떤 태그가 떴는지가 드러나 있어서, "판이 낸 문제에 답한다"가 정보를 갖고 성립한다.
+ * (시작부터 랜덤이면 R1에 아무 정보 없이 답을 고르게 된다 — 옛 설계의 미해결 항목.)
  */
 export const DEFAULT_SKILL: SkillId = 'smite';
+export const STARTER_SKILL: SkillId = DEFAULT_SKILL;
+
+/**
+ * 스킬 성향 (2026-07-20). **운이 문제를 내고 플레이어가 답한다** —
+ * 보드 태그가 파워 편중이면 잡몹을 놓치니 `mob`을, 스플래시 편중이면 보스가 안 녹으니
+ * `boss`를 고르는 식이다. 리롤 결과가 성향까지 랜덤이라 "한 번 더 굴릴까"가 선택이 된다.
+ */
+export type SkillRole = 'boss' | 'mob' | 'utility';
 
 /**
  * 시전 방식 — **쿨감의 값어치가 여기서 갈린다.**
@@ -48,6 +62,8 @@ export interface SkillDef {
   readonly id: SkillId;
   readonly name: string;
   readonly description: string;
+  /** 어떤 판을 구제하는 스킬인가 — 보드 태그 편중에 대한 '답' */
+  readonly role: SkillRole;
   /**
    * 시전에 필요한 마나 (TFT식). **쿨타임은 없다.**
    *
@@ -110,22 +126,28 @@ export interface SkillDef {
 }
 
 export const SKILLS: Record<SkillId, SkillDef> = {
+  /**
+   * 강한 일격 — 시작 장비. **일부러 약하다.**
+   *
+   * 대상 3명 → **1기** (2026-07-20, 사용자 지시). 밀집도가 올라도 안 커지고,
+   * 광역도 유틸도 없다. Lv9 스킬 드래프트가 "처음으로 제대로된 스킬"이 되려면
+   * 그 전까지 손에 든 것이 확실히 초라해야 한다.
+   */
   smite: {
     id: 'smite',
+    role: 'boss',
     castType: 'burst',
-    name: '강타',
-    description: '가장 가까운 적 3명에게 각각 공격력 3배 피해',
+    name: '강한 일격',
+    description: '가장 가까운 적 1기에게 공격력 3배 피해',
     manaMax: 100,
     damageMult: 3,
     radius: 0, // 영웅 사거리를 쓴다
-    // 대상 수 상한이 곧 약함이다 (2026-07-17 7차): 반경형이던 시절엔 뭉친 줄을
-    // 통째로 쓸어 시작 스킬이 너무 셌다. 3명 고정이면 밀집도가 올라도 안 커진다 —
-    // 광역의 값어치는 소용돌이·유성이 가져간다.
-    targets: 3,
+    targets: 1,
     autoCastMinTargets: 1,
   },
   whirlwind: {
     id: 'whirlwind',
+    role: 'mob',
     castType: 'burst',
     name: '소용돌이',
     description: '주변의 적 전체에 공격력 3배 피해',
@@ -140,6 +162,7 @@ export const SKILLS: Record<SkillId, SkillDef> = {
   // 살짝 얌전하게 시작해 레벨을 타고 계속 자라는 빌드로 남는다.
   volley: {
     id: 'volley',
+    role: 'mob',
     castType: 'burst',
     name: '일제 사격',
     description: '사거리 안 적에게 각각 공격력 2배 (레벨업마다 대상 +1, Lv1 3발)',
@@ -152,6 +175,7 @@ export const SKILLS: Record<SkillId, SkillDef> = {
   },
   meteor: {
     id: 'meteor',
+    role: 'mob',
     castType: 'burst',
     name: '유성',
     description: '적이 가장 많은 곳에 공격력 6배 광역 피해',
@@ -163,6 +187,7 @@ export const SKILLS: Record<SkillId, SkillDef> = {
   },
   decoy: {
     id: 'decoy',
+    role: 'utility',
     castType: 'channel',
     channelSeconds: DECOY_LIFETIME_SECONDS, // 미끼가 살아 있는 동안은 다시 못 세운다
     name: '허수아비',
@@ -182,6 +207,7 @@ export const SKILLS: Record<SkillId, SkillDef> = {
    */
   laser: {
     id: 'laser',
+    role: 'boss',
     castType: 'channel',
     channelSeconds: 3, // 빔이 3초 나간다 — 쿨이 3초 밑으로 내려가도 이득이 없다
     name: '레이저',
@@ -202,6 +228,7 @@ export const SKILLS: Record<SkillId, SkillDef> = {
    */
   firearrow: {
     id: 'firearrow',
+    role: 'boss',
     castType: 'burst',
     name: '불화살',
     description: '적이 뭉친 곳에 불바다를 깐다 — 초당 공격력 1.2배, 6초',
@@ -220,6 +247,7 @@ export const SKILLS: Record<SkillId, SkillDef> = {
    */
   icearrow: {
     id: 'icearrow',
+    role: 'utility',
     castType: 'burst',
     name: '얼음화살',
     description: '적이 뭉친 곳에 빙판을 깐다 — 55% 감속, 7초',
@@ -244,6 +272,7 @@ export const SKILLS: Record<SkillId, SkillDef> = {
   // 실효 마나를 크게 깎으므로(고공속에서 ×0.3까지) 원가가 이만큼은 돼야 견제가 된다.
   execution: {
     id: 'execution',
+    role: 'mob',
     castType: 'burst',
     name: '처형자의 일격',
     description: '체력이 가장 낮은 적에게 공격력 6배 — 처치하면 쿨타임 초기화',
@@ -265,6 +294,7 @@ export const SKILLS: Record<SkillId, SkillDef> = {
    */
   chain: {
     id: 'chain',
+    role: 'mob',
     castType: 'burst',
     name: '튕기는 사격',
     description: '적을 맞히고 튕겨 나간다 — 튕길 때마다 피해 ×1.3 (기본 5회, 몹이 적으면 약하다)',
@@ -281,9 +311,57 @@ export const SKILLS: Record<SkillId, SkillDef> = {
   },
 };
 
+/**
+ * **제대로된 스킬** 풀 — Lv9 드래프트와 리롤이 여기서만 뽑는다.
+ * 시작 장비인 '강한 일격'(smite)은 들어 있지 않다 — 한 번 벗어나면 되돌아갈 수 없다.
+ */
 export const SKILL_IDS: readonly SkillId[] = [
-  'whirlwind', 'volley', 'meteor', 'decoy', 'laser', 'firearrow', 'icearrow', 'execution', 'chain',
+  'whirlwind', 'volley', 'meteor', 'decoy', 'laser', 'firearrow', 'icearrow',
+  'execution', 'chain',
 ];
+
+/** 시작 장비를 포함한 전체 목록 — 시트·문서용 (뽑기에는 SKILL_IDS를 쓴다) */
+export const ALL_SKILL_IDS: readonly SkillId[] = [STARTER_SKILL, ...SKILL_IDS];
+
+/** 아직 시작 장비를 들고 있는가 — Lv9 전이면 참 */
+export const isStarterSkill = (id: SkillId): boolean => id === STARTER_SKILL;
+
+/** 난수 소스 — Game의 시드 주입 rand과 같은 모양 */
+type Rand = () => number;
+
+const pick = (pool: readonly SkillId[], rand: Rand): SkillId =>
+  pool[Math.min(pool.length - 1, Math.floor(rand() * pool.length))];
+
+/**
+ * Lv9 스킬 드래프트의 후보 N종을 뽑는다 — **서로 겹치지 않게**.
+ * 고를 게 3장인데 같은 게 두 번 뜨면 선택이 아니라 표시 버그로 읽힌다.
+ */
+export function rollSkillChoices(rand: Rand, count: number): SkillId[] {
+  const pool = [...SKILL_IDS];
+  const out: SkillId[] = [];
+  while (out.length < count && pool.length > 0) {
+    const i = Math.min(pool.length - 1, Math.floor(rand() * pool.length));
+    out.push(pool[i]);
+    pool.splice(i, 1);
+  }
+  return out;
+}
+
+/** 드래프트 카드 한 장만 교체 — 화면의 다른 카드와 겹치지 않게 */
+export function rerollSkillChoice(shown: readonly SkillId[], rand: Rand): SkillId | null {
+  const pool = SKILL_IDS.filter((id) => !shown.includes(id));
+  if (pool.length === 0) return null;
+  return pick(pool, rand);
+}
+
+/**
+ * 스킬을 다시 뽑는다. `merge.ts`의 `rerollUnit`과 같은 원칙 —
+ * **지금 든 것을 제외**해서 굴릴 때마다 반드시 달라진다. 돈을 냈는데 그대로면
+ * 리롤이 선택이 아니라 도박이 된다.
+ */
+export function rerollSkillId(current: SkillId, rand: Rand): SkillId {
+  return pick(SKILL_IDS.filter((id) => id !== current), rand);
+}
 
 // ── 허수아비 ──
 /** 영웅 앞쪽 이 거리에 세운다 */

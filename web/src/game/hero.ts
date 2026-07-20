@@ -294,7 +294,12 @@ export function computeStats(
     gasPerWave,
     xpMult: Math.max(0.1, 1 + bonus.xp),
 
-    aggroRange: H.HERO_AGGRO_RANGE * Math.max(0.2, 1 + bonus.aggro),
+    // 어그로는 증강이 켜야 열린다 (2026-07-20, 사용자 지시) — 기본값이 0이라
+    // 배수만으로는 안 켜진다. 도발 계열을 한 장이라도 들면 기저값이 서고,
+    // 거기에 그 증강들의 배수가 곱해진다.
+    aggroRange:
+      (H.HERO_AGGRO_RANGE + (bonus.aggro > 0 ? H.AGGRO_RANGE_BASE : 0)) *
+      Math.max(0.2, 1 + bonus.aggro),
 
     skillDamageMult: Math.max(0.1, 1 + bonus.skillDamage) * compound.skillDamage,
     // 최대 마나 하한 — 모으면 스킬 난사가 성립한다
@@ -357,6 +362,8 @@ export class Hero {
   readonly augments: AugmentCard[] = [];
   /** 아직 고르지 않은 증강 선택 횟수 */
   pendingAugmentPicks = 0;
+  /** 스킬 드래프트가 몇 번 밀려 있나 (Lv9, 2026-07-20) — 액티브 스킬을 고른다 */
+  pendingSkillDraft = 0;
 
   constructor(readonly altarDistance: number = ALTAR_PATH_DISTANCE) {
     this.distance = altarDistance;
@@ -402,17 +409,18 @@ export class Hero {
     return this.stats.splashRadius > 0;
   }
 
-  /** 들고 있는 액티브 스킬. 스킬 증강을 안 골랐으면 null. */
-  get skillId(): SkillId | null {
-    // 기본 스킬 '강타' (6차) — 스킬 증강을 뽑으면 그쪽이 교체한다.
-    // 가스 스킬 강화가 게임 시작부터 유효해진다.
-    return this.augments.find((c) => c.augment.grantsSkill)?.augment.grantsSkill ?? K.DEFAULT_SKILL;
-  }
+  /**
+   * 지금 든 액티브 스킬. **증강이 아니라 독립 시스템이다** (2026-07-20) —
+   * 판 시작에 랜덤으로 정해지고 리롤로만 바뀐다. 그전에는 `grantsSkill` 증강을
+   * 스캔하는 파생값이라 저장할 자리가 없었다.
+   *
+   * 초기값은 폴백일 뿐이다 — Game이 생성 직후 `rollStartSkill`로 덮어쓴다.
+   */
+  skillId: SkillId = K.DEFAULT_SKILL;
 
   /** 개조가 반영된 스킬 수치 — 증강 개조와 가스 개조가 함께 접힌다 */
-  get skill(): ResolvedSkill | null {
+  get skill(): ResolvedSkill {
     const id = this.skillId;
-    if (!id) return null;
     const patches = this.augments
       .map((c) => c.augment.skillMod)
       .filter((m): m is NonNullable<typeof m> => m !== undefined);
@@ -433,16 +441,16 @@ export class Hero {
 
   /** 시전에 필요한 마나 (개조 반영) */
   get manaMax(): number {
-    return this.skill?.manaMax ?? Infinity;
+    return this.skill.manaMax;
   }
 
   get skillReady(): boolean {
-    return this.alive && this.skillId !== null && this.mana >= this.manaMax;
+    return this.alive && this.mana >= this.manaMax;
   }
 
-  /** 마나를 채운다. 스킬이 없으면 안 찬다. */
+  /** 마나를 채운다 */
   gainMana(amount: number): void {
-    if (!this.alive || this.skillId === null || amount <= 0) return;
+    if (!this.alive || amount <= 0) return;
     this.mana = Math.min(this.manaMax, this.mana + amount * this.stats.manaGainMult);
   }
 
@@ -475,6 +483,8 @@ export class Hero {
       this.level++;
       gained++;
       if (H.grantsAugment(this.level)) this.pendingAugmentPicks++;
+      // Lv9 스킬 드래프트 — 증강이 아니라 액티브 스킬을 고른다 (2026-07-20)
+      if (H.grantsSkillDraft(this.level)) this.pendingSkillDraft++;
     }
     if (gained > 0) this.hp = this.stats.maxHp; // 레벨업 시 완전 회복
     return gained;
@@ -564,6 +574,14 @@ export function augmentAllowed(hero: Hero, augment: H.Augment): boolean {
   return true;
 }
 
+/** 지금 이 영웅에게 뜰 수 있는 증강 목록 */
+export function draftPool(hero: Hero): H.Augment[] {
+  // 영웅 직접 캐리 축은 임시 차단 (2026-07-19, 사용자 지시 — data/hero.ts HERO_CARRY_BLOCKLIST)
+  return H.AUGMENTS.filter(
+    (augment) => augmentAllowed(hero, augment) && !H.HERO_CARRY_BLOCKLIST.has(augment.id),
+  );
+}
+
 /** 가중치를 따라 하나를 뽑아 인덱스를 돌려준다 */
 function weightedIndex(weights: readonly number[], rand: () => number): number {
   const total = weights.reduce((sum, w) => sum + w, 0);
@@ -583,10 +601,7 @@ function weightedIndex(weights: readonly number[], rand: () => number): number {
  * 스킬 개조 증강은 이미 그 스킬을 든 영웅에게만 뜨므로 보유 스킬 계열만큼 기운다.
  */
 export function rollAugmentChoices(hero: Hero, rand: () => number): AugmentCard[] {
-  // 영웅 직접 캐리 축은 임시 차단 (2026-07-19, 사용자 지시 — data/hero.ts HERO_CARRY_BLOCKLIST)
-  let remaining = H.AUGMENTS.filter(
-    (augment) => augmentAllowed(hero, augment) && !H.HERO_CARRY_BLOCKLIST.has(augment.id),
-  );
+  let remaining = draftPool(hero);
   const heldByKind = new Map<H.AugmentKind, number>();
   for (const c of hero.augments) {
     heldByKind.set(c.augment.kind, (heldByKind.get(c.augment.kind) ?? 0) + 1);
@@ -595,17 +610,8 @@ export function rollAugmentChoices(hero: Hero, rand: () => number): AugmentCard[
     1 + H.ADAPTIVE_KIND_WEIGHT * (heldByKind.get(augment.kind) ?? 0);
 
   const cards: AugmentCard[] = [];
-  // 기본 강타는 시작 장비이지 드래프트에서 얻은 스킬이 아니다. 강타만 든 동안에는
-  // 전체 풀의 랜덤에 묻히지 않도록 스킬 획득 카드 한 장을 반드시 제안한다.
-  // 하나를 고른 뒤에는 skillGateAllows가 모든 추가 스킬 획득 카드를 막는다.
-  if (hero.skillId === K.DEFAULT_SKILL) {
-    const grants = remaining.filter((augment) => augment.grantsSkill !== undefined);
-    if (grants.length > 0) {
-      const grant = grants[weightedIndex(grants.map(weightOf), rand)];
-      cards.push(H.makeCard(grant, grant.fixedRarity ?? H.rollRarity(rand)));
-      remaining = remaining.filter((augment) => augment.grantsSkill === undefined);
-    }
-  }
+  // 스킬 보장 카드가 있던 자리 (2026-07-20 제거) — 스킬이 증강 풀을 떠나 리롤로
+  // 얻는 독립 시스템이 됐으므로 드래프트가 스킬을 끼워 넣을 이유가 없다.
   while (cards.length < H.AUGMENT_CHOICES && remaining.length > 0) {
     const index = weightedIndex(remaining.map(weightOf), rand);
     const augment = remaining[index];

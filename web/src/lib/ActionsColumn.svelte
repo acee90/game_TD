@@ -8,6 +8,7 @@
     bossGridHtml,
     isGodSelected,
     upgradeLabel,
+    skillRerollTitle,
   } from './view';
 
   let {
@@ -30,7 +31,7 @@
       probeTitle: `광부 1기당 초당 마정석 +${B.GAS_PER_PROBE_SECOND}. 살수록 비싸진다 (현재 ${game.probes}기 = 초당 +${(game.probes * B.GAS_PER_PROBE_SECOND).toFixed(2)}).`,
       probeDisabled: game.probes >= B.PROBE_MAX || game.mineral < game.probeCost,
 
-      spawnText: `[P] 유닛 생성 ${game.spawnCost}`,
+      spawnText: `[P] 타워 생성 ${game.spawnCost}`,
       spawnDisabled: game.mineral < game.spawnCost,
 
       sellDisabled: !game.selected?.tower,
@@ -38,6 +39,13 @@
       godSel,
       godText: `★ GOD 다시 뽑기 — ${game.godRerollCost}금화`,
       godDisabled: !game.canRerollGod(game.selected),
+
+      skillName: game.hero.skill.def.name,
+      skillText: game.skillRerollCost === 0
+        ? '⟳ 스킬 다시 뽑기 — 무료'
+        : `⟳ 스킬 다시 뽑기 — ${game.skillRerollCost}금화`,
+      skillDisabled: !game.canRerollSkill,
+      skillTitle: skillRerollTitle(game),
 
       canCopy: game.canCopyTower,
       copyText: game.copyTarget?.tower
@@ -83,6 +91,7 @@
   {#if v.godSel}
     <button id="rerollGod" title="이 GOD 타워의 종류를 다시 뽑습니다 (지금과 다른 것으로). 보스를 6기 이상 잡았으면 확장 풀에서 나옵니다." disabled={v.godDisabled} onclick={() => game.rerollGod()}>{v.godText}</button>
   {/if}
+  <button id="rerollSkill" title={v.skillTitle} disabled={v.skillDisabled} onclick={() => game.rerollSkill()}>{v.skillText}</button>
   {#if v.canCopy}
     <button id="copyTower" disabled={v.copyDisabled} onclick={onCopyClick}>{v.copyText}</button>
   {/if}

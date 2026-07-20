@@ -1,4 +1,4 @@
-import { DEFAULT_SKILL, SKILLS, type SkillId, type SkillModPatch } from './skills';
+import { SKILLS, type SkillId, type SkillModPatch } from './skills';
 
 // ───────── 영웅 · 제단 · 증강 ─────────
 // 원본 갓타디에는 없는 신규 설계다. 근거 표기 대상이 아니다.
@@ -15,7 +15,13 @@ export const ALTAR_SLOT = 0;
 // 두 축뿐이다 — 레벨 배수는 폐지됐다. 초반 영웅은 Lv1 타워 몇 기 수준에서 시작한다.
 
 export const HERO_BASE_RANGE = 130;
-export const HERO_ATTACK_INTERVAL = 0.8;
+// 0.8 → 1.0 → **1.9034** (2026-07-20, 사용자 지시: "20% 낮추기" → "1레벨 기준 0.7/초").
+// 간격이 기준값이라 **모든 레벨이 균일하게** 내려간다 — 곡선 모양은 그대로고 높이만 낮아진다.
+// Lv1 공속 배수 1.3324를 0.7/초로 만드는 값이 1.3324/0.7 = 1.9034다.
+// 무증강 실측: Lv1 1.67 → **0.70**/초 · Lv40 3.02 → **1.27**/초 (원래의 42%).
+// 공속은 평타 DPS이자 **마나 회전**이라 스킬 시전 빈도도 같은 비율로 느려진다 —
+// 영웅 평타 축을 사실상 접고 타워를 주축으로 되돌리는 조정이다.
+export const HERO_ATTACK_INTERVAL = 1.9034;
 export const HERO_SPEED = 88;
 /** 이 거리 안이면 도착으로 본다 (경로 위 거리 기준) */
 export const HERO_ARRIVE_EPSILON = 2;
@@ -41,7 +47,11 @@ export const HERO_BASE_INT = 8;
 // 성장을 낮춰 총 DPS 곡선을 원래에 가깝게 맞춘다 (game/hero.ts computeStats에서
 // 레벨 공속과 곱연산으로 함께 적용).
 /** 힘 1당 공격력 — 레벨 배수 폐지의 보상으로 1 → 6 재척도, 7차 6 → 5 [프로토] */
-export const DMG_PER_STR = 5;
+// 5 → 6 (2026-07-20, 사용자 지시: "기본 영웅 공격력 20% 올려줘").
+// 같은 날 공속을 0.7/초로 크게 내린 뒤라, 한 방을 키워 평타 DPS 손실을 일부 되돌린다
+// (Lv1 DPS 7 → 8.4). 공속이 아니라 피해로 돌려주므로 **마나 회전은 안 빨라진다** —
+// 스킬 남발이 아니라 평타 자체만 회복된다.
+export const DMG_PER_STR = 6;
 /** 힘 1당 최대 체력 — 같은 이유로 18 → 70 [프로토] */
 export const HP_PER_STR = 70;
 /**
@@ -200,8 +210,23 @@ export const xpPerBoss = (level: number): number => 8 * level;
 /** 부활 대기시간. 죽으면 그동안 영웅 딜이 빠지는 것 자체가 패널티다. */
 export const HERO_RESPAWN_SECONDS = 12;
 
-/** 이 거리 안에 영웅이 보이면 몹이 멈춰서 영웅부터 친다 */
-export const HERO_AGGRO_RANGE = 110;
+/**
+ * 이 거리 안에 영웅이 보이면 몹이 멈춰서 영웅부터 친다.
+ *
+ * **기본값 0** (2026-07-20, 사용자 지시: "영웅 기본 어그로 기능 제거 — 증강 얻어야만
+ * 어그로 끌도록"). 어그로 탱킹은 이제 **선택한 빌드**지 영웅이 그냥 갖는 기능이 아니다.
+ * 아무것도 안 든 영웅 옆으로 몹이 그냥 지나간다.
+ *
+ * 도발 계열 증강은 배수(aggroRangeMult)라 0에 곱하면 영영 0이다 — 그래서 그 증강들이
+ * **기저값(AGGRO_RANGE_BASE)을 켜는** 방식으로 바뀌었다. computeStats 참고.
+ */
+export const HERO_AGGRO_RANGE = 0;
+
+/**
+ * 어그로 증강이 켜주는 기저 범위 — 옛 기본값이 여기로 옮겨왔다.
+ * 도발 1장이면 이 범위(× 그 증강의 배수)부터 시작한다.
+ */
+export const AGGRO_RANGE_BASE = 110;
 
 /**
  * 어그로 수 상한 (2026-07-19, 사용자 지시: "모든 몬스터가 어그로 끌릴 수는 없다").
@@ -258,6 +283,38 @@ export const bossDamage = (level: number, round: number): number =>
 // [9,16,...] → [5,10,...] (2026-07-17 5차): 첫 두 증강을 빠르게 — "증강을 보고
 // 빌드 방향을 정할 수 있도록"(사용자). 3번째부터는 그대로 — 중반 파워 스파이크 방지.
 export const AUGMENT_LEVELS: readonly number[] = [5, 10, 24, 30, 35, 42];
+
+/**
+ * **스킬 드래프트 레벨** (2026-07-20, 사용자 지시: "처음으로 제대로된 스킬을 얻는다").
+ *
+ * 여기서 고르는 것은 증강이 아니라 **액티브 스킬 그 자체**다. 그 전까지 영웅은
+ * 시작 장비 '강한 일격'(단일 대상 3배)만 들고 있다 — 일부러 초라하게 두어
+ * 이 순간이 판의 분기점이 되게 한다.
+ *
+ * 9 → **12** (같은 날, 사용자 지시). 두 가지가 근거다:
+ *
+ * ① **템포** — Lv9면 증강 Lv5·Lv10 사이에 결정 3개가 몰리고, 그 뒤 Lv10~24의
+ *    14레벨 공백이 그대로 남는다. Lv12는 결정을 고르게 펴면서 그 공백의 앞머리를 채운다.
+ * ② **방향성 먼저** — 증강 2장(Lv5·Lv10)으로 빌드 방향이 드러난 뒤에 스킬로 답한다.
+ *
+ * "스킬을 먼저 정해야 증강이 그에 답한다"는 반대 논리는 실측으로 기각했다:
+ * 46종 증강 중 스킬에 잠긴 것은 **3장뿐**이고(도발 인형·넓은 화선·맹렬한 불길)
+ * 그나마 허수아비·불화살에만 붙는다 — 순서를 뒤집어도 잃는 게 거의 없다.
+ */
+export const SKILL_DRAFT_LEVEL = 12;
+
+/** 이 레벨에 스킬 드래프트를 받는가 */
+export const grantsSkillDraft = (level: number): boolean => level === SKILL_DRAFT_LEVEL;
+
+/** 한 번에 보여주는 스킬 후보 수 */
+export const SKILL_DRAFT_CHOICES = 3;
+
+/**
+ * 스킬 드래프트는 **카드마다 리롤 1회씩** (사용자 지시). 전체를 다시 굴리는 증강
+ * 리롤(AUGMENT_REROLL_MAX)과 다르다 — 마음에 드는 한 장은 두고 나머지만 바꾸므로
+ * "무엇을 지킬지"가 선택이 된다.
+ */
+export const SKILL_DRAFT_CARD_REROLLS = 1;
 export const AUGMENT_TAIL_EVERY = 8;
 export const AUGMENT_CHOICES = 3;
 
@@ -499,8 +556,6 @@ export interface Augment {
    * 비례시키면 높은 등급이 뜬 게 오히려 손해인 경우가 생긴다.
    */
   readonly penalty?: AugmentEffect;
-  /** 이 증강을 고르면 액티브 스킬을 얻는다 (스킬이 없을 때만 등장) */
-  readonly grantsSkill?: SkillId;
   /** 스킬을 개조한다 */
   readonly skillMod?: SkillModPatch;
   /** 이 스킬을 든 영웅에게만 등장한다 */
@@ -760,8 +815,6 @@ export const HERO_CARRY_BLOCKLIST: ReadonlySet<string> = new Set([
   'might', 'marksman', 'rapid', 'longbow', 'vigor', 'arcane', 'goliath', 'glasscannon', 'duelist',
   // 평타 확장·치명·즉사·폭발 — 예측 불가 고점의 주범 (즉사는 사용자가 직접 지목)
   'novasmall', 'novabig', 'crit', 'deadeye', 'execute', 'ruthless', 'deathblast', 'berserk',
-  // 딜 스킬 획득 — 남는 스킬: 허수아비(탱킹)·불화살(화상 지원)·얼음화살(감속)
-  'skill_whirlwind', 'skill_volley', 'skill_meteor', 'skill_chain', 'skill_execution', 'skill_laser',
   // 스킬 딜 증폭·차단된 스킬 전용 개조 (마나·회전 개조는 남긴다 — 보조 스킬도 쓴다)
   'skill_amp', 'skill_overload', 'skill_focus', 'explosion',
   'multishot', 'cyclone', 'cataclysm', 'laser_range', 'laser_rapid', 'skill_barrage',
@@ -876,40 +929,9 @@ export const AUGMENTS: readonly Augment[] = [
     description: '사망·부활 시 반경 90 폭발 — 공격력 2배 + 최대 체력 40%', maxStacks: 2,
     effect: { deathNova: 2, reviveNova: 1.2, novaHpMult: 0.4, novaRadius: 90 } },
 
-  // ══ 스킬 (skill) — 획득과 개조. 영웅은 스킬을 하나만 든다.
-  //
-  // 등급 고정 (2026-07-18, 사용자 지시) — 스킬 획득 카드는 effect가 비어 있어 등급으로
-  // 강화가 안 된다("같은 스킬을 골드·플래티넘으로 올려도 강화가 안 된다"). 대신
-  // **어떤 스킬이 뜨는가**를 등급으로 가른다: 쉽고 무난한 스킬은 실버, 상황을 타는
-  // 중간급은 골드, 판을 바꾸는 강한 스킬은 플래티넘.
-  { id: 'skill_whirlwind', kind: 'skill', name: '소용돌이', maxStacks: 1,
-    description: '[스킬·실버] 주변 적 전체에 공격력 3배 · 쿨 8초',
-    effect: {}, grantsSkill: 'whirlwind', fixedRarity: 'silver' },
-  { id: 'skill_volley', kind: 'skill', name: '일제 사격', maxStacks: 1,
-    description: '[스킬·실버] 사거리 안 적에게 각각 공격력 2배 (레벨업마다 대상 +1, Lv1 3발) · 쿨 7초',
-    effect: {}, grantsSkill: 'volley', fixedRarity: 'silver' },
-  { id: 'skill_decoy', kind: 'skill', name: '허수아비', maxStacks: 1,
-    description: '[스킬·실버] 앞쪽에 미끼를 세워 몹을 붙잡는다 · 쿨 18초',
-    effect: {}, grantsSkill: 'decoy', fixedRarity: 'silver' },
-  { id: 'skill_meteor', kind: 'skill', name: '유성', maxStacks: 1,
-    description: '[스킬·골드] 적이 가장 많은 곳에 공격력 6배 광역 · 쿨 13초',
-    effect: {}, grantsSkill: 'meteor', fixedRarity: 'gold' },
-  { id: 'skill_firearrow', kind: 'skill', name: '불화살', maxStacks: 1,
-    description: '[스킬·골드] 바닥에 불바다를 깐다 — 초당 공격력 1.2배, 6초 · 쿨 12초',
-    effect: {}, grantsSkill: 'firearrow', fixedRarity: 'gold' },
-  { id: 'skill_icearrow', kind: 'skill', name: '얼음화살', maxStacks: 1,
-    description: '[스킬·골드] 바닥에 빙판을 깐다 — 55% 감속, 7초 · 쿨 14초',
-    effect: {}, grantsSkill: 'icearrow', fixedRarity: 'gold' },
-  { id: 'skill_chain', kind: 'skill', name: '튕기는 사격', maxStacks: 1,
-    description: '[스킬·골드] 적을 맞히고 튕겨 나간다 — 튕길 때마다 피해 ×1.45 (몹이 적으면 약하다) · 쿨 10초',
-    effect: {}, grantsSkill: 'chain', fixedRarity: 'gold' },
-  // 8배 → 6배, 필요 마나 110 → 140 (2026-07-18, 사용자 지시) — 너프.
-  { id: 'skill_execution', kind: 'skill', name: '처형자의 일격', maxStacks: 1,
-    description: '[스킬·플래티넘] 체력이 가장 낮은 적에게 공격력 6배 — 처치 시 쿨 초기화 · 쿨 9초',
-    effect: {}, grantsSkill: 'execution', fixedRarity: 'platinum' },
-  { id: 'skill_laser', kind: 'skill', name: '레이저', maxStacks: 1,
-    description: '[스킬·플래티넘] 몹이 더 많은 방향으로 관통해 0.5초마다 지속 피해 · 쿨 11초',
-    effect: {}, grantsSkill: 'laser', fixedRarity: 'platinum' },
+  // ══ 스킬 (skill) — **개조만 남았다.** 획득 카드 9종은 2026-07-20에 삭제됐다:
+  // 스킬은 판 시작 랜덤 + 리롤로 얻는 독립 시스템이 됐다(data/skills.ts). 증강은
+  // "어떤 스킬을 뽑았는가"에 답하는 보조 층이다.
 
   // ── 범용 개조 (표시상 "강화") — 특정 스킬 전용이 아니라 전투 전반(평타 포함)에
   // 걸리는 카드들. kind는 그대로 'skill'이라 각성(3)/초월 시전(5) 시너지 임계치
@@ -1106,22 +1128,17 @@ export const AUGMENTS: readonly Augment[] = [
 export const requiresSplash = (augment: Augment): boolean => augment.id === 'novabig';
 
 /**
- * 지금 든 스킬(없으면 null)로 이 증강을 뽑을 수 있는가.
+ * 지금 든 스킬로 이 증강을 뽑을 수 있는가.
  *
- * - 스킬 획득 증강은 스킬이 없을 때만 나온다 — 영웅은 스킬을 하나만 든다.
- * - 개조 증강은 그 스킬을 든 뒤에만 나온다. '폭발 화살'은 일제 사격을 쥔 다음에야 의미가 있다.
- *   이게 수치가 아니라 **관계**로 맺어지는 시너지다.
+ * 개조 증강은 그 스킬을 든 뒤에만 나온다. '폭발 화살'은 일제 사격을 쥔 다음에야 의미가 있다 —
+ * 이게 수치가 아니라 **관계**로 맺어지는 시너지다.
+ *
+ * 영웅은 항상 스킬을 하나 든다(2026-07-20) — 스킬 획득 분기는 사라졌다.
  */
-export function skillGateAllows(augment: Augment, currentSkill: SkillId | null): boolean {
-  // 스킬 획득 증강은 기본 스킬(강타)을 들고 있을 때만 뜬다 — 교체 제안이다.
-  // 증강으로 얻은 진짜 스킬이 있으면 더 안 나온다 (영웅은 스킬 하나).
-  if (augment.grantsSkill) return currentSkill === null || currentSkill === DEFAULT_SKILL;
+export function skillGateAllows(augment: Augment, currentSkill: SkillId): boolean {
   // 장판 개조는 장판을 까는 스킬을 든 뒤에만 — 즉발 스킬엔 붙일 데가 없다
-  if (augment.requiresZone) {
-    return currentSkill !== null && (SKILLS[currentSkill].zoneSeconds ?? 0) > 0;
-  }
+  if (augment.requiresZone) return (SKILLS[currentSkill].zoneSeconds ?? 0) > 0;
   if (!augment.requiresSkill) return true;
-  if (currentSkill === null) return false;
   return augment.requiresSkill === 'any' || augment.requiresSkill === currentSkill;
 }
 

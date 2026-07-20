@@ -4,12 +4,8 @@
 
 import { describe, expect, test } from 'vitest';
 import * as B from '../src/data/balance';
-import * as H from '../src/data/hero';
 import * as K from '../src/data/skills';
 import { Game } from '../src/game/game';
-
-const card = (id: string, r: H.Rarity = 'silver') =>
-  H.makeCard(H.AUGMENTS.find((a) => a.id === id)!, r);
 
 describe('프로브 — 선형 비용 (2026-07-19, 지수 → 선형)', () => {
   test('살수록 등차로 비싸진다 — 지수가 아니다', () => {
@@ -78,7 +74,7 @@ describe('가스 스킬 개조 — 업그레이드와 같은 지갑', () => {
   test('피해 개조는 스킬 피해를 곱으로 키운다', () => {
     const game = new Game(() => 0.5);
     game.gas = 1000;
-    game.hero.addAugment(card('skill_volley'));
+    game.hero.skillId = 'volley';
     const before = game.hero.skill!.damageMult;
     game.buyGasSkill('damage');
     expect(game.hero.skill!.damageMult).toBeCloseTo(before * K.GAS_SKILL_DAMAGE_MULT, 5);
@@ -87,7 +83,7 @@ describe('가스 스킬 개조 — 업그레이드와 같은 지갑', () => {
   test('가스 개조는 필요 마나를 줄이되 바닥 밑으로는 못 간다', () => {
     const game = new Game(() => 0.5);
     game.gas = 100000;
-    game.hero.addAugment(card('skill_volley'));
+    game.hero.skillId = 'volley';
     const before = game.hero.skill!.manaMax;
     game.buyGasSkill('cdr');
     expect(game.hero.skill!.manaMax).toBeCloseTo(before * K.GAS_SKILL_CDR_MULT, 5);
@@ -102,7 +98,7 @@ describe('가스 스킬 개조 — 업그레이드와 같은 지갑', () => {
   test('개조 가스는 업그레이드 가스와 같은 지갑에서 나간다', () => {
     const game = new Game(() => 0.5);
     game.gas = K.gasSkillCost(0); // 딱 개조 1회분
-    game.hero.addAugment(card('skill_volley'));
+    game.hero.skillId = 'volley';
     game.buyGasSkill('damage');
     expect(game.gas).toBe(0);
     expect(game.upgrade(0)).toBe(false); // 이제 업그레이드는 못 산다

@@ -9,7 +9,7 @@ export function analysesToCsv(analyses: readonly RunAnalysis[]): string {
   const header = [
     'runId', 'source', 'target', 'gitSha', 'seed', 'complete', 'finishReason', 'score', 'round',
     'elapsedSeconds', 'kills', 'bossCleared', 'bossesKilled', 'heroLevel', 'heroXpPurchases',
-    'unitsSpawned', 'merges', 'towersSold', 'godRerolls', 'errors', 'warnings',
+    'unitsSpawned', 'merges', 'towersSold', 'godRerolls', 'skillRerolls', 'errors', 'warnings',
   ];
   const rows = analyses.map(({ projection: run, issues, sourceName }) => [
     run.runId,
@@ -31,6 +31,7 @@ export function analysesToCsv(analyses: readonly RunAnalysis[]): string {
     run.merges,
     run.towersSold,
     run.godRerolls,
+    run.skillRerolls,
     issues.filter((entry) => entry.severity === 'error').length,
     issues.filter((entry) => entry.severity === 'warning').length,
   ]);

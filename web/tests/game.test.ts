@@ -157,16 +157,36 @@ describe('라운드 진행 — 고정 간격', () => {
   });
 
   test('사이클 안에서는 몹 수가 늘고, 사이클이 넘어가면 수가 리셋되며 개당 체력이 뛴다', () => {
-    // ENEMY_COUNT_STEP이 소수(반올림 적용)라 매 라운드 증가폭이 완전히 균일하진 않지만,
-    // 사이클 안에서는 단조 증가해야 한다.
+    // 표로 직접 지정 (2026-07-20, 사용자 지시): 15/16/17/18/20
+    expect(B.ENEMY_COUNT_BY_CYCLE_POS).toEqual([11, 12, 13, 14, 15]);
     for (let r = 1; r <= 4; r++) {
       expect(B.enemyCount(r + 1)).toBeGreaterThan(B.enemyCount(r));
     }
     expect(B.enemyCount(1)).toBe(B.ENEMY_BASE_COUNT);
-    expect(B.enemyCount(5)).toBe(Math.round(B.ENEMY_BASE_COUNT + 4 * B.ENEMY_COUNT_STEP));
+    expect(B.enemyCount(5)).toBe(B.ENEMY_COUNT_BY_CYCLE_POS[4]);
     // 사이클 경계: 수는 처음으로, 개당 체력은 크게 점프 — "새 몹은 적지만 굵다"
     expect(B.enemyCount(6)).toBe(B.ENEMY_BASE_COUNT);
     expect(B.enemyHP(6)).toBeGreaterThan(B.enemyHP(5) * 1.5);
+  });
+
+  test('R50부터는 사이클과 무관하게 20기 고정 (2026-07-20, 사용자 지시)', () => {
+    for (const r of [50, 51, 54, 55, 60, 77]) {
+      expect(B.enemyCount(r)).toBe(B.ENEMY_COUNT_FLAT);
+    }
+    // R49까지는 사이클이 돈다
+    expect(B.enemyCount(49)).toBe(B.ENEMY_COUNT_BY_CYCLE_POS[B.posInCycle(49)]);
+  });
+
+  test('몹은 1열 종대로 걷는다 (2026-07-20, 사용자 지시)', () => {
+    expect(B.MOB_LANE_OFFSET).toBe(0);
+    expect(B.MOB_MAX_LATERAL).toBe(0);
+
+    const game = new Game();
+    game.update(B.OPENING_SECONDS + 0.01);
+    for (let i = 0; i < 200; i++) game.update(0.05);
+    const mobs = game.enemies.filter((e) => e.kind !== 'boss');
+    expect(mobs.length).toBeGreaterThan(3);
+    for (const e of mobs) expect(Math.abs(e.lateral ?? 0)).toBeLessThan(0.001);
   });
 
   test('웨이브 타입 — R10부터 5의 배수는 사냥꾼(접촉 배수만 다르다)', () => {
@@ -189,18 +209,23 @@ describe('라운드 진행 — 고정 간격', () => {
       expect(waveHp(r)).toBeLessThan(target * 1.03);
     }
 
-    // R1 앵커 = 기대 보드 DPS 실측 28 × 목표 clear 18초
-    expect(B.WAVE_HP_R1).toBe(504);
-    // 성장률 직접 지정 (사용자 지시): R2~14 22.7% · R15~40 12% · R41~50 10% · R51+ 12%
+    // R1 앵커 — 504(보드 DPS 28 × clear 18초) → 572 (2026-07-20, ×1.2 ×1.5 ×0.7 ×0.9).
+    // 곱셈 앵커라 곡선 전체가 같이 올라가고 성장률은 안 바뀐다 — 구간 보정은 없다.
+    expect(B.WAVE_HP_R1).toBe(572);
+    // 성장률 직접 지정 (2026-07-20 완화): R2~14 15% · R15~40 15% · R41~50 17% · R51+ 13%
+    // 보정 구간(R41~50)만은 실효 성장률이 다르다 — 아래에서 따로 본다.
     for (const r of [3, 8, 14]) {
       expect(B.waveTotalHp(r) / B.waveTotalHp(r - 1)).toBeCloseTo(1 + B.WAVE_EARLY_RATE, 5);
     }
     for (const r of [16, 25, 35, 40]) {
       expect(B.waveTotalHp(r) / B.waveTotalHp(r - 1)).toBeCloseTo(1 + B.WAVE_MID_RATE, 5);
     }
+
+    // 앵커만 올렸으므로 **모든 구간이 표의 성장률 그대로**다 — 예외 구간이 없다
     for (const r of [41, 45, 50]) {
       expect(B.waveTotalHp(r) / B.waveTotalHp(r - 1)).toBeCloseTo(1 + B.WAVE_LATEMID_RATE, 5);
     }
+    expect(B.waveTotalHp(51) / B.waveTotalHp(50)).toBeCloseTo(1 + B.WAVE_WALL_RATE, 5);
     for (const r of [51, 55, 58, 65]) {
       expect(B.waveTotalHp(r) / B.waveTotalHp(r - 1)).toBeCloseTo(1 + B.WAVE_WALL_RATE, 5);
     }
@@ -491,27 +516,50 @@ describe('보스 소환 — 상시 액션, 쿨타임만, 순차 해금', () => {
 });
 
 describe('소득 — 차감 없는 누적형', () => {
-  test('킬 미션 — 20킬마다 +20골드 (2026-07-19, 마일스톤 표 대체)', () => {
+  // 20 → 30 → 20 (2026-07-20, 사용자 지시). 웨이브 보상 폐지로 킬 미션이 초반의
+  // 사실상 유일한 수입원이 되면서 30킬 문턱에서는 경제가 돌지 않았다.
+  test('킬 미션 — 20킬마다 +20골드', () => {
+    expect(B.KILL_MISSION_EVERY).toBe(20);
     expect(killIncome(0, 19).mineral).toBe(0); // 문턱 전에는 무소득
     expect(killIncome(19, 20).mineral).toBe(B.KILL_MISSION_REWARD);
-    expect(killIncome(0, 199).mineral).toBe(9 * B.KILL_MISSION_REWARD); // 문턱 9회
-    expect(killIncome(39, 61).mineral).toBe(2 * B.KILL_MISSION_REWARD); // 한 번에 두 문턱
+    // 40~60 구간은 일회성 마일스톤(50킬)이 안 겹치게 골랐다
+    expect(killIncome(20, 40).mineral).toBe(B.KILL_MISSION_REWARD);
+    expect(killIncome(100, 140).mineral).toBe(2 * B.KILL_MISSION_REWARD); // 한 번에 두 문턱
   });
 
-  test('웨이브를 넘기면 기본기 보상이 들어온다 — 거의 평탄 (2026-07-19)', () => {
-    expect(B.waveReward(1)).toBe(20);
-    expect(B.waveReward(60)).toBe(31); // 20 + 0.2×55
-    expect(B.waveReward(60) - B.waveReward(1)).toBeLessThan(B.BOSS_KILL_MINERAL[7] / 10);
+  // 일회성 초반 마일스톤 (2026-07-20, 사용자 지시) — 초반 수입 공백을 메우는 목돈
+  test('누적 50·100킬은 한 번만 준다 — 반복 미션과 별개로 얹힌다', () => {
+    expect(B.KILL_MILESTONES).toEqual([[50, 50], [100, 100]]);
+
+    // 49 → 50: 반복 미션(40·60은 안 걸림)은 없고 마일스톤만
+    expect(killIncome(49, 50).mineral).toBe(50);
+    // 같은 문턱을 다시 지나가지 않는다 — 누적값 기준이라 두 번 안 걸린다
+    expect(killIncome(50, 59).mineral).toBe(0);
+    expect(killIncome(99, 100).mineral).toBe(100 + B.KILL_MISSION_REWARD); // 100은 반복 문턱이기도
+    expect(killIncome(100, 199).mineral).toBe(4 * B.KILL_MISSION_REWARD); // 이후엔 반복만
+
+    // 0 → 199: 반복 9회 + 마일스톤 50 + 100
+    expect(killIncome(0, 199).mineral).toBe(9 * B.KILL_MISSION_REWARD + 150);
+  });
+
+  // 폐지 (2026-07-20, 사용자 지시: "웨이브 보상 삭제") — 라운드를 흘려보내는 것으로는
+  // 아무것도 안 쌓인다. 수입이 전부 행동(킬 미션·보스 처치)에 걸린다.
+  test('웨이브 클리어 보상은 없다 — 가만히 있으면 수입이 0이다', () => {
+    for (const r of [1, 5, 30, 60]) expect(B.waveReward(r)).toBe(0);
 
     const game = new Game();
-    game.update(B.OPENING_SECONDS + 0.01); // 라운드 1 시작 — 아직 보상 없음
-    const mineral = game.mineral;
+    game.update(B.OPENING_SECONDS + 0.01); // 라운드 1 시작
 
-    // 스폰이 끝나야 카운트다운이 흐른다 (2026-07-19) — 잘게 돌려 스폰 창을 소화한 뒤
+    // 몹을 아무도 안 잡고(킬 미션 없음) 보스도 안 부른 채 라운드만 넘긴다.
+    // 누출 미네랄(LEAK_MINERAL)은 들어오므로 그 몫만 인정한다.
+    const mineral = game.mineral;
+    const livesBefore = game.lives;
     for (let i = 0; i < 50; i++) game.update(0.1);
-    game.update(B.ROUND_SECONDS + 0.01); // 라운드 2 시작 — 라운드 1 클리어 보상
+    game.update(B.ROUND_SECONDS + 0.01);
     expect(game.round).toBe(2);
-    expect(game.mineral).toBeGreaterThanOrEqual(mineral + B.waveReward(1));
+
+    const leaked = livesBefore - game.lives;
+    expect(game.mineral).toBe(mineral + leaked * B.LEAK_MINERAL);
   });
 
   test('킬이 늘지 않으면 소득도 없다', () => {

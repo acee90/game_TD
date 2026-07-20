@@ -3,6 +3,7 @@
 
 import { describe, expect, test } from 'vitest';
 import * as H from '../src/data/hero';
+import * as B from '../src/data/balance';
 import * as K from '../src/data/skills';
 import { AUGMENTS } from '../src/data/hero';
 import { Game } from '../src/game/game';
@@ -11,7 +12,25 @@ import { PATH_LENGTH } from '../src/core/map';
 import type { Enemy } from '../src/game/types';
 
 const augment = (id: string) => AUGMENTS.find((a) => a.id === id)!;
+
+const lcg = (seed: number) => {
+  let s = seed >>> 0;
+  return () => ((s = (s * 1664525 + 1013904223) >>> 0) / 4294967296);
+};
 const card = (id: string, rarity: H.Rarity = 'silver') => H.makeCard(augment(id), rarity);
+
+/**
+ * 스킬 획득이 증강을 떠났으므로(2026-07-20) 목록의 `skill_<id>`는 증강이 아니라
+ * **든 스킬**을 뜻한다 — 나머지는 그대로 증강으로 붙인다.
+ */
+const applyLoadout = (hero: { skillId: K.SkillId; addAugment: (c: H.AugmentCard) => void }, ids: string[]) => {
+  for (const id of ids) {
+    const skill = id.startsWith('skill_') ? id.slice(6) : null;
+    if (skill && (K.SKILL_IDS as readonly string[]).includes(skill)) hero.skillId = skill as K.SkillId;
+    else hero.addAugment(card(id));
+  }
+};
+
 
 /** 영웅 사거리 안에 잡몹 하나 */
 /** 마나를 채우고 시전한다 — 마나 전환(TFT식) 후 스킬은 0마나로 시작한다 */
@@ -25,88 +44,265 @@ const mob = (distance: number, hp = 1e9, speed = 40): Enemy => ({
   speed, radius: 9, distance,
 });
 
-describe('스킬 획득 — 하나만 든다', () => {
-  test('처음부터 기본 스킬 강타를 든다 (6차) — 가스 스킬 강화가 시작부터 유효하다', () => {
-    const hero = new Hero();
-    expect(hero.skillId).toBe('smite');
-    expect(hero.skill?.def.name).toBe('강타');
-    expect(hero.skillReady).toBe(false); // 마나 0에서 시작
+describe('스킬 독립 — 판이 문제를 낸다 (2026-07-20)', () => {
+  // 시작 스킬은 **고정**이다 (2026-07-20, 사용자 지시) — 랜덤 시작을 되돌렸다.
+  test("시작 스킬은 '강한 일격' 고정 — 단일 대상이라 일부러 초라하다", () => {
+    for (const seed of [1, 7, 99]) {
+      expect(new Game(lcg(seed)).hero.skillId).toBe(K.STARTER_SKILL);
+    }
+    const def = K.SKILLS[K.STARTER_SKILL];
+    expect(def.name).toBe('강한 일격');
+    expect(def.targets).toBe(1); // 광역도 다중 대상도 아니다
+    expect(def.damageMult).toBe(3);
   });
 
-  test('스킬 증강을 고르면 스킬이 생긴다', () => {
+  test("'제대로된 스킬' 풀에 시작 장비는 없다 — 한 번 벗으면 못 돌아간다", () => {
+    expect(K.SKILL_IDS).not.toContain(K.STARTER_SKILL);
+    expect(K.isStarterSkill(K.STARTER_SKILL)).toBe(true);
+    expect(K.SKILL_IDS.every((id) => !K.isStarterSkill(id))).toBe(true);
+  });
+
+  test('갓 시작한 영웅은 마나가 0이라 아직 못 쓴다 (TFT식 마나 전환)', () => {
     const hero = new Hero();
-    hero.addAugment(card('skill_volley'));
-
-    expect(hero.skillId).toBe('volley');
-    expect(hero.skill!.def.name).toBe('일제 사격');
-
-    // 마나 전환(TFT식) — 갓 얻은 스킬은 0마나라 아직 못 쓴다. 평타로 채워야 나간다.
     expect(hero.skillReady).toBe(false);
     hero.gainMana(hero.manaMax);
     expect(hero.skillReady).toBe(true);
   });
 
-  test('스킬을 이미 들면 다른 스킬 증강은 안 나온다', () => {
-    const hero = new Hero();
-    hero.addAugment(card('skill_volley'));
-
+  test('리롤은 반드시 바뀐다 — 돈을 냈는데 그대로면 선택이 아니라 도박이다', () => {
+    const rand = lcg(3);
     for (const id of K.SKILL_IDS) {
-      const grant = AUGMENTS.find((a) => a.grantsSkill === id)!;
-      expect(H.skillGateAllows(grant, hero.skillId)).toBe(false);
+      for (let i = 0; i < 40; i++) expect(K.rerollSkillId(id, rand)).not.toBe(id);
     }
   });
 
-  test('스킬이 없으면 개조 증강은 안 나온다', () => {
-    const multi = augment('multishot'); // volley 전용
-    const cdr = augment('skill_cdr');
-
-    expect(H.skillGateAllows(multi, null)).toBe(false);
-    expect(H.skillGateAllows(cdr, null)).toBe(false);
+  test('리롤 결과는 성향까지 갈린다 — 잡몹 스킬만 나오면 답이 하나뿐이다', () => {
+    const rand = lcg(5);
+    const roles = new Set<K.SkillRole>();
+    for (let i = 0; i < 200; i++) roles.add(K.SKILLS[K.rerollSkillId('smite', rand)].role);
+    expect(roles).toEqual(new Set(['boss', 'mob', 'utility']));
   });
 
-  test("개조 증강은 그 스킬을 들어야만 나온다", () => {
+  test('모든 스킬에 성향이 있다', () => {
+    for (const id of K.SKILL_IDS) {
+      expect(['boss', 'mob', 'utility']).toContain(K.SKILLS[id].role);
+    }
+  });
+
+  test('스킬 획득 증강은 사라졌다 — 드래프트가 스킬을 주지 않는다', () => {
+    for (const id of K.SKILL_IDS) {
+      expect(AUGMENTS.some((a) => a.id === `skill_${id}`)).toBe(false);
+    }
+    // 남은 skill_* 증강은 전부 개조다 — 효과나 skillMod를 갖는다
+    for (const a of AUGMENTS.filter((x) => x.kind === 'skill')) {
+      expect(a.skillMod !== undefined || Object.keys(a.effect).length > 0).toBe(true);
+    }
+  });
+});
+
+describe('스킬 리롤 — 운을 자원으로 교정한다 (2026-07-20)', () => {
+  /** 리롤은 제대로된 스킬을 든 뒤에만 열린다 — 시작 장비 상태를 벗겨 둔다 */
+  const game = () => {
+    const g = new Game(lcg(9));
+    g.hero.skillId = 'volley';
+    return g;
+  };
+
+  // 첫 회 무료 폐지 (2026-07-20, 사용자 지시) — Lv9 스킬 전용 드래프트가 구제책을
+  // 이미 하나 주므로, 무료 리롤까지 있으면 R1에 무조건 굴리는 정답 수순이 된다.
+  test('시작 장비를 든 동안에는 못 굴린다 — 첫 스킬은 Lv9 드래프트가 준다', () => {
+    const g = new Game(lcg(9));
+    g.mineral = 1e6;
+    expect(K.isStarterSkill(g.hero.skillId)).toBe(true);
+    expect(g.canRerollSkill).toBe(false);
+    expect(g.rerollSkill()).toBe(false);
+    expect(g.hero.skillId).toBe(K.STARTER_SKILL);
+  });
+
+  test('첫 회부터 값을 낸다 — 무료 리롤은 없다', () => {
+    const g = game();
+    expect(B.SKILL_REROLL_FREE_COUNT).toBe(0);
+    expect(g.skillRerollCost).toBeGreaterThan(0);
+
+    g.mineral = g.skillRerollCost - 1;
+    expect(g.canRerollSkill).toBe(false); // 돈이 없으면 첫 회도 못 굴린다
+
+    const before = g.hero.skillId;
+    const cost = g.skillRerollCost;
+    g.mineral = cost;
+    expect(g.rerollSkill()).toBe(true);
+    expect(g.hero.skillId).not.toBe(before);
+    expect(g.mineral).toBe(0);
+  });
+
+  test('값은 라운드가 정한다 — 사용 횟수가 아니다', () => {
+    const g = game();
+    g.round = 20;
+
+    const cost = g.skillRerollCost;
+    expect(cost).toBe(B.SKILL_REROLL_BASE + B.SKILL_REROLL_PER_ROUND * 20);
+    // 사용 횟수가 아니라 라운드에 걸린다 — "운 나쁠수록 비싸진다" 역설을 피한다
+    g.round = 40;
+    expect(g.skillRerollCost).toBeGreaterThan(cost);
+
+    g.round = 20;
+    g.mineral = cost;
+    expect(g.rerollSkill()).toBe(true);
+    expect(g.mineral).toBe(0);
+  });
+
+  test('금화가 모자라면 못 굴린다', () => {
+    const g = game();
+    g.round = 10;
+    g.mineral = g.skillRerollCost - 1;
+
+    const before = g.hero.skillId;
+    expect(g.canRerollSkill).toBe(false);
+    expect(g.rerollSkill()).toBe(false);
+    expect(g.hero.skillId).toBe(before);
+  });
+
+  test('라운드당 1회 — 금화만 있으면 연타해서 원하는 스킬을 낚는 걸 막는다', () => {
+    const g = game();
+    g.mineral = 1e6;
+    expect(g.rerollSkill()).toBe(true);
+    expect(g.canRerollSkill).toBe(false);
+    expect(g.rerollSkill()).toBe(false);
+
+    g.round += 1; // 라운드가 넘어가면 다시 열린다
+    expect(g.canRerollSkill).toBe(true);
+  });
+
+  test('넘치는 마나는 버린다 — 리롤이 곧 즉시 시전이 되면 안 된다', () => {
+    const g = game();
+    g.hero.skillId = 'execution'; // 필요 마나 420 — 풀에서 가장 비싸다
+    g.hero.mana = g.hero.manaMax;
+    g.mineral = 1e6;
+
+    expect(g.rerollSkill()).toBe(true);
+    expect(g.hero.mana).toBeLessThanOrEqual(g.hero.manaMax);
+  });
+
+  test('빔이 나가는 중에는 못 바꾼다 — 빔은 시전 시점 스킬을 들고 돈다', () => {
+    const g = game();
+    g.hero.skillId = 'laser';
+    g.mineral = 1e6;
+    g.enemies.push(mob(g.hero.distance + 40), mob(g.hero.distance + 60));
+    castNow(g);
+    expect(g.beam).not.toBeNull();
+
+    expect(g.canRerollSkill).toBe(false);
+    expect(g.rerollSkill()).toBe(false);
+    expect(g.hero.skillId).toBe('laser');
+  });
+});
+
+describe('스킬 드래프트 — 처음으로 제대로된 스킬을 얻는다 (2026-07-20)', () => {
+  /** 드래프트 레벨까지 올려 스킬 선택을 띄운다 */
+  const atLevel9 = () => {
+    const g = new Game(lcg(21));
+    g.hero.level = H.SKILL_DRAFT_LEVEL - 1;
+    g.hero.gainXp(1e9); // 드래프트 레벨을 지나며 pendingSkillDraft가 선다
+    g.update(0);
+    return g;
+  };
+
+  // 9 → 12 (2026-07-20, 사용자 지시): 증강 2장으로 방향을 정한 뒤에 스킬로 답한다.
+  test('드래프트는 Lv12 — 증강 두 장을 받은 뒤다', () => {
+    expect(H.SKILL_DRAFT_LEVEL).toBe(12);
+    expect(H.grantsSkillDraft(12)).toBe(true);
+    expect(H.grantsSkillDraft(11)).toBe(false);
+    expect(H.grantsSkillDraft(13)).toBe(false);
+    // 증강 레벨과 겹치지 않는다 — 한 레벨에 두 선택이 몰리지 않게
+    expect(H.AUGMENT_LEVELS).not.toContain(H.SKILL_DRAFT_LEVEL);
+    // Lv5·Lv10 증강을 이미 받은 뒤여야 "방향성을 보고 답한다"가 성립한다
+    const before = H.AUGMENT_LEVELS.filter((l) => l < H.SKILL_DRAFT_LEVEL);
+    expect(before).toEqual([5, 10]);
+  });
+
+  test('후보는 전부 제대로된 스킬이고 서로 겹치지 않는다', () => {
+    const g = atLevel9();
+    expect(g.skillChoices).toHaveLength(H.SKILL_DRAFT_CHOICES);
+    for (const id of g.skillChoices) expect(K.SKILL_IDS).toContain(id);
+    expect(new Set(g.skillChoices).size).toBe(g.skillChoices.length);
+  });
+
+  test('드래프트 중에는 게임이 멈춘다 — 증강 선택과 같다', () => {
+    expect(atLevel9().paused).toBe(true);
+  });
+
+  test('고르면 시작 장비를 벗는다', () => {
+    const g = atLevel9();
+    expect(g.hero.skillId).toBe(K.STARTER_SKILL);
+
+    const picked = g.skillChoices[0];
+    expect(g.chooseSkill(0)).toBe(true);
+    expect(g.hero.skillId).toBe(picked);
+    expect(K.isStarterSkill(g.hero.skillId)).toBe(false);
+    expect(g.skillChoices).toHaveLength(0);
+    expect(g.hero.pendingSkillDraft).toBe(0);
+  });
+
+  test('카드마다 리롤 1회씩 — 고른 한 장은 남고 나머지만 바뀐다', () => {
+    const g = atLevel9();
+    const before = [...g.skillChoices];
+
+    expect(g.canRerollSkillChoice(0)).toBe(true);
+    expect(g.rerollSkillChoice(0)).toBe(true);
+    expect(g.skillChoices[0]).not.toBe(before[0]);
+    expect(g.skillChoices[1]).toBe(before[1]);
+    expect(g.skillChoices[2]).toBe(before[2]);
+    expect(new Set(g.skillChoices).size).toBe(3); // 여전히 안 겹친다
+
+    expect(g.canRerollSkillChoice(0)).toBe(false); // 같은 카드는 두 번 못 굴린다
+    expect(g.rerollSkillChoice(0)).toBe(false);
+    expect(g.canRerollSkillChoice(1)).toBe(true); // 다른 카드 몫은 남아 있다
+  });
+
+  test('스킬을 정한 뒤에 증강 선택이 온다 — 무엇에 답할지가 정해진 채로 고른다', () => {
+    const g = atLevel9();
+    expect(g.augmentChoices).toHaveLength(0); // 스킬이 먼저
+    g.chooseSkill(0);
+    // Lv9까지 오며 밀린 일반 증강(Lv5)이 이제 뜬다
+    expect(g.augmentChoices.length).toBeGreaterThan(0);
+  });
+});
+
+describe('스킬 개조 게이트 — 수치가 아니라 관계다', () => {
+  test('개조 증강은 그 스킬을 들어야만 나온다', () => {
     const multi = augment('multishot'); // volley 전용
     expect(H.skillGateAllows(multi, 'volley')).toBe(true);
     expect(H.skillGateAllows(multi, 'meteor')).toBe(false);
   });
 
-  test("'any' 개조는 아무 스킬이나 있으면 나온다", () => {
+  test("'any' 개조는 아무 스킬에나 붙는다 — 영웅은 항상 스킬을 든다", () => {
     const cdr = augment('skill_cdr');
     for (const id of K.SKILL_IDS) expect(H.skillGateAllows(cdr, id)).toBe(true);
   });
 
+  test('장판 개조는 장판 스킬에만 — 즉발 스킬엔 붙일 데가 없다', () => {
+    const zoneMod = AUGMENTS.find((a) => a.requiresZone)!;
+    expect(H.skillGateAllows(zoneMod, 'firearrow')).toBe(true);
+    expect(H.skillGateAllows(zoneMod, 'smite')).toBe(false);
+  });
+
   test('실제 뽑기가 게이트를 지킨다', () => {
     const hero = new Hero();
-    let seed = 7;
-    const rand = () => {
-      seed = (seed * 1664525 + 1013904223) >>> 0;
-      return seed / 4294967296;
-    };
-
-    // 기본 스킬(강타)만 든 동안에는 스킬 획득 카드가 정확히 한 장 보장된다.
-    // 공용('any') 개조는 나올 수 있지만 특정 스킬 전용 개조는 나오지 않는다.
+    hero.skillId = 'smite'; // 장판 없음 · 전용 개조 없음
+    const rand = lcg(7);
     for (let i = 0; i < 200; i++) {
-      const choices = rollAugmentChoices(hero, rand);
-      expect(choices.filter((c) => c.augment.grantsSkill !== undefined)).toHaveLength(1);
-      for (const c of choices) {
-        if (c.augment.skillMod) {
-          expect(
-            c.augment.requiresSkill === 'any' || c.augment.requiresZone === true,
-          ).toBe(true);
-          expect(c.augment.requiresZone ?? false).toBe(false); // 강타는 장판이 없다
-        }
+      for (const c of rollAugmentChoices(hero, rand)) {
+        if (!c.augment.skillMod) continue;
+        expect(c.augment.requiresSkill).toBe('any');
+        expect(c.augment.requiresZone ?? false).toBe(false);
       }
     }
 
-    hero.addAugment(card('skill_decoy'));
-
-    // 스킬을 들면 다른 스킬 증강은 사라지고, 그 스킬 전용 개조가 등장한다
+    // 허수아비를 들면 그 전용 개조(도발 인형)가 등장한다
+    hero.skillId = 'decoy';
     let sawTaunt = false;
     for (let i = 0; i < 400; i++) {
-      const choices = rollAugmentChoices(hero, rand);
-      expect(choices.filter((c) => c.augment.grantsSkill !== undefined)).toHaveLength(0);
-      for (const c of choices) {
-        expect(c.augment.grantsSkill).toBeUndefined();
+      for (const c of rollAugmentChoices(hero, rand)) {
         expect(c.augment.id).not.toBe('explosive_arrow'); // volley 전용
         if (c.augment.id === 'taunt_dummy') sawTaunt = true;
       }
@@ -118,7 +314,7 @@ describe('스킬 획득 — 하나만 든다', () => {
 describe('스킬 개조 — 수치가 아니라 관계다', () => {
   test('집중 수련은 필요 마나를 줄이되 바닥이 있다', () => {
     const hero = new Hero();
-    hero.addAugment(card('skill_volley'));
+    hero.skillId = 'volley';
     const base = hero.skill!.manaMax;
 
     hero.addAugment(card('skill_cdr'));
@@ -132,7 +328,7 @@ describe('스킬 개조 — 수치가 아니라 관계다', () => {
 
   test('증폭은 스킬 피해를 곱한다', () => {
     const hero = new Hero();
-    hero.addAugment(card('skill_meteor'));
+    hero.skillId = 'meteor';
     const base = hero.skill!.damageMult;
 
     hero.addAugment(card('skill_amp'));
@@ -141,7 +337,7 @@ describe('스킬 개조 — 수치가 아니라 관계다', () => {
 
   test('연사는 화살 수를 늘린다', () => {
     const hero = new Hero();
-    hero.addAugment(card('skill_volley'));
+    hero.skillId = 'volley';
     expect(hero.skill!.targets).toBe(K.SKILLS.volley.targets);
 
     hero.addAugment(card('multishot'));
@@ -161,7 +357,7 @@ describe('스킬 개조 — 수치가 아니라 관계다', () => {
 
   test('일제 사격은 레벨을 타고 대상이 늘어난다 (Lv1 기준치, targetsLevelStep마다 +1)', () => {
     const hero = new Hero();
-    hero.addAugment(card('skill_volley'));
+    hero.skillId = 'volley';
     expect(hero.skill!.targets).toBe(K.SKILLS.volley.targets);
 
     hero.level = 1 + K.SKILLS.volley.targetsLevelStep!;
@@ -170,7 +366,7 @@ describe('스킬 개조 — 수치가 아니라 관계다', () => {
 
   test('회오리는 소용돌이에 반경과 감속을 붙인다', () => {
     const hero = new Hero();
-    hero.addAugment(card('skill_whirlwind'));
+    hero.skillId = 'whirlwind';
     const base = hero.skill!.radius;
 
     hero.addAugment(card('cyclone'));
@@ -199,7 +395,7 @@ describe('스킬 시전', () => {
 
   test('쓰면 마나가 비고, 평타로 다시 찬다 (TFT식)', () => {
     const game = new Game();
-    game.hero.addAugment(card('skill_whirlwind'));
+    game.hero.skillId = 'whirlwind';
     game.hero.mana = game.hero.manaMax; // 가득 채워 시전 가능 상태로
     game.enemies.push(mob(game.hero.distance));
 
@@ -207,14 +403,18 @@ describe('스킬 시전', () => {
     expect(game.hero.mana).toBe(0); // 시전하면 마나가 빈다
     expect(game.canUseSkill).toBe(false);
 
-    // 평타를 치면 마나가 다시 찬다 — 공속이 곧 스킬 회전이다
-    for (let i = 0; i < 600 && !game.canUseSkill; i++) game.update(1 / 60);
-    expect(game.canUseSkill).toBe(true);
+    // 평타를 치면 마나가 다시 찬다 — 공속이 곧 스킬 회전이다.
+    // `canUseSkill`로는 못 잰다: 마나가 차는 순간 자동 시전이 먼저 써버려서 항상 false로
+    // 읽힌다. 차오르는 것 자체를 본다. (2026-07-20 공속 0.7/초 이후로는 채우는 데
+    // 수십 초가 걸려 그 사이 웨이브가 돌면서 자동 시전이 끼어든다.)
+    const before = game.hero.mana;
+    for (let i = 0; i < 600; i++) game.update(1 / 60);
+    expect(game.hero.mana).toBeGreaterThan(before);
   });
 
   test('죽어 있으면 못 쓴다', () => {
     const game = new Game();
-    game.hero.addAugment(card('skill_whirlwind'));
+    game.hero.skillId = 'whirlwind';
     game.hero.takeDamage(1e9);
 
     expect(game.canUseSkill).toBe(false);
@@ -223,7 +423,7 @@ describe('스킬 시전', () => {
 
   test('소용돌이는 주변 적 전체를 때린다', () => {
     const game = new Game();
-    game.hero.addAugment(card('skill_whirlwind'));
+    game.hero.skillId = 'whirlwind';
     const d = game.hero.distance;
 
     game.enemies.push(mob(d - 20), mob(d + 20), mob(d + 500));
@@ -238,7 +438,7 @@ describe('스킬 시전', () => {
   test('회오리를 쥐면 소용돌이가 적을 늦춘다', () => {
     const game = new Game();
     game.round = 5; // 완전 템포(초반 슬로우 배제)에서 감속 지속시간 자체를 검증
-    game.hero.addAugment(card('skill_whirlwind'));
+    game.hero.skillId = 'whirlwind';
     game.hero.addAugment(card('cyclone'));
     const enemy = mob(game.hero.distance - 20);
     game.enemies.push(enemy);
@@ -254,7 +454,7 @@ describe('스킬 시전', () => {
 
   test('일제 사격은 지정된 수만큼만 때린다', () => {
     const game = new Game();
-    game.hero.addAugment(card('skill_volley'));
+    game.hero.skillId = 'volley';
     const d = game.hero.distance;
     for (let i = 0; i < 8; i++) game.enemies.push(mob(d + i * 2));
 
@@ -265,9 +465,9 @@ describe('스킬 시전', () => {
 
   test('폭발은 맞은 적 주변까지 번진다 (스킬 전용이 아니다)', () => {
     const plain = new Game();
-    plain.hero.addAugment(card('skill_volley'));
+    plain.hero.skillId = 'volley';
     const explosive = new Game();
-    explosive.hero.addAugment(card('skill_volley'));
+    explosive.hero.skillId = 'volley';
     explosive.hero.addAugment(card('explosion'));
 
     for (const game of [plain, explosive]) {
@@ -282,7 +482,7 @@ describe('스킬 시전', () => {
 
   test('유성은 적이 가장 많이 몰린 곳에 떨어진다', () => {
     const game = new Game();
-    game.hero.addAugment(card('skill_meteor'));
+    game.hero.skillId = 'meteor';
 
     // 영웅 근처에 1기, 멀리 뭉친 곳에 5기
     const near = mob(game.hero.distance);
@@ -296,7 +496,7 @@ describe('스킬 시전', () => {
 
   test('적이 없으면 유성은 헛돌지 않는다', () => {
     const game = new Game();
-    game.hero.addAugment(card('skill_meteor'));
+    game.hero.skillId = 'meteor';
     expect(() => castNow(game)).not.toThrow();
   });
 });
@@ -304,7 +504,7 @@ describe('스킬 시전', () => {
 describe('허수아비 — 원거리 영웅의 탱커', () => {
   test('영웅 앞쪽(몹이 오는 쪽)에 선다', () => {
     const game = new Game();
-    game.hero.addAugment(card('skill_decoy'));
+    game.hero.skillId = 'decoy';
     castNow(game);
 
     expect(game.decoy).not.toBeNull();
@@ -313,7 +513,7 @@ describe('허수아비 — 원거리 영웅의 탱커', () => {
 
   test('몹이 허수아비에 붙잡힌다', () => {
     const game = new Game();
-    game.hero.addAugment(card('skill_decoy'));
+    game.hero.skillId = 'decoy';
     castNow(game);
 
     const decoy = game.decoy!;
@@ -326,7 +526,7 @@ describe('허수아비 — 원거리 영웅의 탱커', () => {
 
   test('허수아비에 붙은 몹은 영웅을 때리지 않는다', () => {
     const game = new Game();
-    game.hero.addAugment(card('skill_decoy'));
+    game.hero.skillId = 'decoy';
     castNow(game);
 
     // 허수아비 자리에 몹을 둔다 — 영웅과도 가깝다
@@ -342,7 +542,7 @@ describe('허수아비 — 원거리 영웅의 탱커', () => {
 
   test('체력이 다하면 사라진다', () => {
     const game = new Game();
-    game.hero.addAugment(card('skill_decoy'));
+    game.hero.skillId = 'decoy';
     castNow(game);
     game.decoy!.hp = 1;
 
@@ -356,7 +556,7 @@ describe('허수아비 — 원거리 영웅의 탱커', () => {
   test('수명이 다하면 사라진다', () => {
     const game = new Game();
     game.round = 5; // 완전 템포(초반 슬로우 배제)에서 허수아비 수명 자체를 검증
-    game.hero.addAugment(card('skill_decoy'));
+    game.hero.skillId = 'decoy';
     castNow(game);
 
     game.update(K.DECOY_LIFETIME + 0.1);
@@ -365,11 +565,11 @@ describe('허수아비 — 원거리 영웅의 탱커', () => {
 
   test('도발 인형은 체력이 두 배다', () => {
     const plain = new Game();
-    plain.hero.addAugment(card('skill_decoy'));
+    plain.hero.skillId = 'decoy';
     castNow(plain);
 
     const taunting = new Game();
-    taunting.hero.addAugment(card('skill_decoy'));
+    taunting.hero.skillId = 'decoy';
     taunting.hero.addAugment(card('taunt_dummy'));
     castNow(taunting);
 
@@ -382,7 +582,7 @@ describe('허수아비 — 원거리 영웅의 탱커', () => {
   // 영웅을 죽여 허수아비만 남긴 뒤 비교한다.
   const decoyOnly = (augments: string[]) => {
     const game = new Game();
-    for (const id of augments) game.hero.addAugment(card(id));
+    applyLoadout(game.hero, augments);
     castNow(game);
     game.hero.takeDamage(1e9);
     return game;
@@ -422,7 +622,7 @@ describe('자동 시전 — 플레이어는 무엇을 들지만 고른다', () =
 
   test('마나가 차도 조건을 못 채우면 안 쏜다', () => {
     const game = new Game();
-    game.hero.addAugment(card('skill_whirlwind')); // 최소 2기 필요
+    game.hero.skillId = 'whirlwind'; // 최소 2기 필요
     charged(game);
 
     expect(game.canUseSkill).toBe(true);
@@ -437,7 +637,7 @@ describe('자동 시전 — 플레이어는 무엇을 들지만 고른다', () =
 
   test('조건을 채우면 update가 알아서 쏜다', () => {
     const game = new Game();
-    game.hero.addAugment(card('skill_whirlwind'));
+    game.hero.skillId = 'whirlwind';
     charged(game);
     const a = mob(game.hero.distance, 1e9, 0);
     const b = mob(game.hero.distance + 10, 1e9, 0);
@@ -452,7 +652,7 @@ describe('자동 시전 — 플레이어는 무엇을 들지만 고른다', () =
 
   test('유성은 뭉쳤을 때만 떨어진다', () => {
     const game = new Game();
-    game.hero.addAugment(card('skill_meteor')); // 최소 3기
+    game.hero.skillId = 'meteor'; // 최소 3기
     charged(game);
 
     game.enemies.push(mob(500, 1e9, 0), mob(900, 1e9, 0));
@@ -464,7 +664,7 @@ describe('자동 시전 — 플레이어는 무엇을 들지만 고른다', () =
 
   test('일제 사격은 한 기만 있어도 쏜다', () => {
     const game = new Game();
-    game.hero.addAugment(card('skill_volley'));
+    game.hero.skillId = 'volley';
     charged(game);
     expect(game.shouldAutoCastSkill).toBe(false);
 
@@ -474,7 +674,7 @@ describe('자동 시전 — 플레이어는 무엇을 들지만 고른다', () =
 
   test('허수아비는 이미 서 있으면 다시 안 세운다', () => {
     const game = new Game();
-    game.hero.addAugment(card('skill_decoy'));
+    game.hero.skillId = 'decoy';
     charged(game);
     game.enemies.push(mob(game.hero.distance - 40, 1e9, 0), mob(game.hero.distance - 60, 1e9, 0));
 
@@ -488,7 +688,7 @@ describe('자동 시전 — 플레이어는 무엇을 들지만 고른다', () =
 
   test('허수아비는 뒤쪽 몹에는 반응하지 않는다 — 이미 지나간 몹이다', () => {
     const game = new Game();
-    game.hero.addAugment(card('skill_decoy'));
+    game.hero.skillId = 'decoy';
     charged(game);
     game.enemies.push(mob(game.hero.distance + 40, 1e9, 0), mob(game.hero.distance + 60, 1e9, 0));
 
@@ -497,7 +697,7 @@ describe('자동 시전 — 플레이어는 무엇을 들지만 고른다', () =
 
   test('죽어 있으면 자동 시전도 없다', () => {
     const game = new Game();
-    game.hero.addAugment(card('skill_whirlwind'));
+    game.hero.skillId = 'whirlwind';
     charged(game);
     game.enemies.push(mob(game.hero.distance, 1e9, 0), mob(game.hero.distance + 5, 1e9, 0));
     game.hero.takeDamage(1e9);
@@ -507,7 +707,7 @@ describe('자동 시전 — 플레이어는 무엇을 들지만 고른다', () =
 
   test('증강 선택 중에는 시전하지 않는다', () => {
     const game = new Game();
-    game.hero.addAugment(card('skill_whirlwind'));
+    game.hero.skillId = 'whirlwind';
     charged(game);
     game.enemies.push(mob(game.hero.distance, 1e9, 0), mob(game.hero.distance + 5, 1e9, 0));
     game.hero.pendingAugmentPicks = 1;
@@ -521,7 +721,7 @@ describe('자동 시전 — 플레이어는 무엇을 들지만 고른다', () =
 describe('스킬은 막타 경험치를 준다', () => {
   test('스킬로 잡으면 영웅 막타로 친다', () => {
     const game = new Game();
-    game.hero.addAugment(card('skill_whirlwind'));
+    game.hero.skillId = 'whirlwind';
     game.enemies.push({ ...mob(game.hero.distance, 1), hp: 1 });
 
     castNow(game);
@@ -552,7 +752,7 @@ describe('대재앙 — 단독은 적당히, 시너지를 채워야 크게 (2026
     const game = new Game();
     const hero = game.hero;
     hero.level = level;
-    for (const id of ids) hero.addAugment(card(id));
+    applyLoadout(hero, ids);
     game.augmentChoices = [];
 
     hero.distance = PATH_LENGTH / 2;
@@ -587,13 +787,14 @@ describe('대재앙 — 단독은 적당히, 시너지를 채워야 크게 (2026
     // 반경이 같은 두 빌드라 대상 수가 같다 — 차이는 순수하게 시너지가 만든 것이다.
     const alone = new Hero();
     alone.level = 35;
-    for (const id of ['skill_meteor', 'cataclysm', 'cataclysm']) alone.addAugment(card(id));
+    applyLoadout(alone, ['skill_meteor', 'cataclysm', 'cataclysm']);
 
     const synergized = new Hero();
     synergized.level = 35;
-    for (const id of ['skill_meteor', 'cataclysm', 'cataclysm', 'skill_amp', 'skill_amp']) {
-      synergized.addAugment(card(id));
-    }
+    // 스킬 카드 5장 = 대특화(초월 시전). 예전엔 획득 카드(유성)가 한 장을 채웠지만
+    // 이제 스킬은 증강이 아니므로 개조 카드만으로 5장을 채운다 (2026-07-20).
+    applyLoadout(synergized,
+      ['skill_meteor', 'cataclysm', 'cataclysm', 'skill_amp', 'skill_amp', 'skill_amp']);
 
     expect(synergized.skill!.radius).toBe(alone.skill!.radius); // 대상 수가 같다
     // 각성(3장)에 초월 시전(5장)이 얹히면서 스킬 피해가 두 배가 된다

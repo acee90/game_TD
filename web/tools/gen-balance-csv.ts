@@ -67,13 +67,13 @@ const EFFECT_COLUMNS = [
 const effectCells = (effect: H.AugmentEffect): (string | number)[] =>
   EFFECT_COLUMNS.map((key) => effect[key] ?? '');
 
-// ── 증강 (패시브 + 스킬 획득 + 스킬 개조)
+// ── 증강 (패시브 + 스킬 개조) — 스킬 획득 카드는 2026-07-20에 삭제됐다
 write(
   'augments.csv',
   toCsv(
     [
       'id', 'kind', 'kindLabel', 'name', 'description', 'maxStacks',
-      'requiresSplash', 'grantsSkill', 'requiresSkill', 'skillMod',
+      'requiresSplash', 'requiresSkill', 'skillMod',
       ...EFFECT_COLUMNS,
     ],
     H.AUGMENTS.map((a) => [
@@ -84,7 +84,6 @@ write(
       a.description,
       a.maxStacks,
       H.requiresSplash(a) ? 'TRUE' : 'FALSE',
-      a.grantsSkill ?? '',
       a.requiresSkill ?? '',
       a.skillMod ? JSON.stringify(a.skillMod) : '',
       ...effectCells(a.effect),
@@ -139,10 +138,10 @@ write(
 write(
   'skills.csv',
   toCsv(
-    ['id', 'name', 'description', 'manaMax', 'damageMult', 'radius', 'targets', 'autoCastMinTargets'],
-    K.SKILL_IDS.map((id) => {
+    ['id', 'name', 'role', 'description', 'manaMax', 'damageMult', 'radius', 'targets', 'autoCastMinTargets'],
+    K.ALL_SKILL_IDS.map((id) => {
       const s = K.SKILLS[id];
-      return [s.id, s.name, s.description, s.manaMax, s.damageMult, s.radius, s.targets, s.autoCastMinTargets];
+      return [s.id, s.name, s.role, s.description, s.manaMax, s.damageMult, s.radius, s.targets, s.autoCastMinTargets];
     }),
   ),
 );

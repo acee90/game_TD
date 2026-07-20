@@ -73,8 +73,9 @@ function killRateBy(budget: number): { merged: number; plain: number } {
 }
 
 describe('Lv1 보스 — 시작 전력으로 넘을 수 있어야 한다', () => {
-  test('시작 미네랄로 유닛 네 기를 산다', () => {
-    expect(Math.floor(B.START_MINERAL / B.SPAWN_UNIT_MINERAL)).toBe(4);
+  // 4기 → 5기 (2026-07-20, 생성 비용 12→10)
+  test('시작 미네랄로 유닛 다섯 기를 산다', () => {
+    expect(Math.floor(B.START_MINERAL / B.SPAWN_UNIT_MINERAL)).toBe(5);
   });
 
   test('75 미네랄(6기)이면 거의 어떤 뽑기 운에도 Lv1 보스를 잡는다', { timeout: 60_000 }, () => {

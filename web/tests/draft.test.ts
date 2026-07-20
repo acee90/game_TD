@@ -43,17 +43,6 @@ describe('영웅 캐리 빌드 임시 차단 (2026-07-19, 사용자 지시)', ()
     }
   });
 
-  test('스킬 보장 카드는 보조 스킬(허수아비·불화살·얼음화살)만 나온다', () => {
-    const rand = lcg(11);
-    const hero = new Hero(); // 기본 강타만 보유 — 매 제안에 스킬 획득 1장 보장
-    const allowed = new Set(['skill_decoy', 'skill_firearrow', 'skill_icearrow']);
-    for (let i = 0; i < 200; i++) {
-      const grants = rollAugmentChoices(hero, rand).filter((c) => c.augment.grantsSkill);
-      expect(grants.length).toBe(1);
-      expect(allowed.has(grants[0].augment.id)).toBe(true);
-    }
-  });
-
   test('차단은 드래프트만 막는다 — 데이터·효과는 그대로 산다 (임시 조치)', () => {
     for (const id of H.HERO_CARRY_BLOCKLIST) {
       expect(H.AUGMENTS.some((a) => a.id === id)).toBe(true);
@@ -64,6 +53,7 @@ describe('영웅 캐리 빌드 임시 차단 (2026-07-19, 사용자 지시)', ()
 describe('적응형 드래프트', () => {
   test('타입 제한이 없다 — 빈 손이면 모든 계열·모든 스킬이 뜰 수 있다', () => {
     const hero = new Hero();
+    hero.skillId = 'smite'; // 장판도 전용 개조도 없는 스킬
     for (const augment of H.AUGMENTS) {
       if (augment.requiresSkill) continue; // 스킬 개조는 스킬을 들어야 뜬다
       if (augment.requiresZone) continue; // 장판 개조는 장판 스킬을 들어야 뜬다
@@ -98,11 +88,11 @@ describe('적응형 드래프트', () => {
     expect(others.length).toBeGreaterThan(2); // 다른 계열도 실제로 뜬다
   });
 
-  test('스킬은 하나만 — 스킬을 들면 다른 스킬 증강은 안 뜬다', () => {
+  test('스킬 개조는 그 스킬을 든 영웅에게만 뜬다 (획득 카드는 2026-07-20에 사라졌다)', () => {
     const hero = new Hero();
-    hero.addAugment(card('skill_volley'));
-    expect(augmentAllowed(hero, H.AUGMENTS.find((a) => a.id === 'skill_meteor')!)).toBe(false);
-    // 든 스킬의 개조는 뜬다
+    hero.skillId = 'volley';
     expect(augmentAllowed(hero, H.AUGMENTS.find((a) => a.id === 'multishot')!)).toBe(true);
+    hero.skillId = 'meteor';
+    expect(augmentAllowed(hero, H.AUGMENTS.find((a) => a.id === 'multishot')!)).toBe(false);
   });
 });
