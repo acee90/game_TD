@@ -13,7 +13,7 @@ import { Game } from '../src/game/game';
 import * as B from '../src/data/balance';
 import * as H from '../src/data/hero';
 import type { AugmentCard } from '../src/data/hero';
-import type { Race } from '../src/data/units';
+import { GOD_TIER, type Race, type Tag } from '../src/data/units';
 
 // ── 유전자 ──
 // 연속값은 [0,1]로 정규화해 두고 쓰는 곳에서 스케일한다.
@@ -30,7 +30,22 @@ interface Genome {
   bossBack: number;
   /** 필드의 일반 몹이 이 수 이하일 때만 보스를 부른다 0~30 */
   bossSafety: number;
+  /**
+   * GOD 타워 태그 선호 (2026-07-20 신설). 0=무관 · 1=파워 · 2=스플래시.
+   *
+   * 태그를 고를 수 있는 인게임 레버는 **GOD 리롤뿐**이다 — 일반 유닛은 뽑기 운이고
+   * 조합 결과도 강제할 수 없다. 그래서 이 축은 "GOD가 선호 태그가 아니면 금화를 써서
+   * 다시 뽑는가"로 정의된다. 리롤은 고정 150골드라 유닛 생성과 직접 경쟁한다.
+   *
+   * 이 축이 필요한 이유: 2026-07-19 파워/스플래시 재조정의 핵심 주장이
+   * "파워만 깔면 보스는 잡지만 잡몹을 놓친다"인데, 기존 게놈에는 태그 축이 없어
+   * GA A/B가 그 주장을 검증하지 못했다(명세 §11 검증란 참조).
+   */
+  tagPref: 0 | 1 | 2;
 }
+
+const TAG_PREF_LABEL = ['무관', '파워', '스플래시'] as const;
+const TAG_OF_PREF: Record<1 | 2, Tag> = { 1: 'power', 2: 'splash' };
 
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
 
@@ -63,12 +78,58 @@ function pickAugment(g: Genome, game: Game): void {
   game.chooseAugment(best);
 }
 
+/**
+ * 선호 태그가 아닌 GOD 타워를 금화로 다시 뽑는다 (tagPref 축).
+ *
+ * 유닛 2기 값은 남긴다 — 리롤에 전 재산을 태워 보드가 비는 것을 막는다.
+ * 한 번의 의사결정에서 슬롯당 최대 1회만 굴린다: 같은 슬롯을 붙잡고 연타하면
+ * 태그가 나올 때까지의 비용이 정책이 아니라 운에 좌우된다.
+ */
+function hasOffTagGod(g: Genome, game: Game): boolean {
+  if (g.tagPref === 0) return false;
+  const want = TAG_OF_PREF[g.tagPref];
+  return game.slots.some(
+    (s) => s.tower?.tier === GOD_TIER && !s.tower.def.tags.includes(want),
+  );
+}
+
+function rerollTowardTag(g: Genome, game: Game): void {
+  if (g.tagPref === 0) return;
+  const want = TAG_OF_PREF[g.tagPref];
+  for (const slot of game.slots) {
+    const tower = slot.tower;
+    if (!tower || tower.tier !== GOD_TIER) continue;
+    if (tower.def.tags.includes(want)) continue;
+    if (game.mineral < game.godRerollCost) break;
+    game.selected = slot;
+    if (!game.rerollGod()) break;
+  }
+  game.selected = null;
+}
+
 /** 가스는 타워가 가장 많은 종족부터 올린다 (고정 휴리스틱) */
 function spendGas(game: Game): void {
   const byRace = [0, 0, 0, 0];
   for (const s of game.slots) if (s.tower) byRace[s.tower.def.race]++;
   const race = byRace.indexOf(Math.max(...byRace)) as Race;
   for (let i = 0; i < 8 && game.gas >= game.upgradeCost(race); i++) game.upgrade(race);
+}
+
+/** 보드 위 타워의 태그 구성 — 태그 축이 실제로 보드를 바꿨는지 확인하는 계측 */
+function tagShares(game: Game): { powerShare: number; splashShare: number } {
+  let total = 0;
+  let power = 0;
+  let splash = 0;
+  for (const slot of game.slots) {
+    if (!slot.tower) continue;
+    total++;
+    if (slot.tower.def.tags.includes('power')) power++;
+    if (slot.tower.def.tags.includes('splash')) splash++;
+  }
+  return {
+    powerShare: power / Math.max(1, total),
+    splashShare: splash / Math.max(1, total),
+  };
 }
 
 interface RunResult {
@@ -80,6 +141,10 @@ interface RunResult {
   probes: number;
   heroShare: number;
   tankAssist: number;
+  /** 종료 시점 보드에서 파워/스플래시 태그를 가진 타워 비율 */
+  powerShare: number;
+  splashShare: number;
+  godRerolls: number;
 }
 
 const MAX_TICKS = 60 * 60 * 45; // 45분 상한 (≈ R122)
@@ -108,8 +173,16 @@ function runGame(g: Genome, seed: number): RunResult {
       ) {
         if (!game.buyProbe()) break;
       }
-      // 유닛: 빈 타일이 있는 한 채운다 (조합의 재료). 생성 비용은 누적 증가한다
-      while (game.mineral >= game.spawnCost && game.spawnUnitAnywhere()) {}
+      // 태그 선호: GOD 리롤로 교정한다 — 유닛 생성보다 먼저.
+      rerollTowardTag(g, game);
+      // 유닛: 빈 타일이 있는 한 채운다 (조합의 재료). 생성 비용은 누적 증가한다.
+      //
+      // 교정할 GOD가 남아 있으면 리롤 값(150)을 **남긴다**. 이 예비가 없으면 리롤이
+      // 영원히 실행되지 않는다 — 생성 루프가 0.5초마다 잔고를 spawnCost 미만으로
+      // 비워서 150이 모이지 않기 때문이다(2026-07-20 계측: 의사결정 시점 미네랄
+      // p50 12 · 최대 75). 유닛을 참고 돈을 모으는 것이 곧 태그를 고르는 기회비용이다.
+      const tagReserve = hasOffTagGod(g, game) ? game.godRerollCost : 0;
+      while (game.mineral - tagReserve >= game.spawnCost && game.spawnUnitAnywhere()) {}
       // XP 구매: 예비금 위로만. 스탯은 레벨에 따라 자동 성장하므로 골드의 영웅 창구는 XP다
       for (let guard = 0; guard < 64; guard++) {
         if (!(game.canBuyXp && game.mineral >= H.XP_BUY_GOLD + g.heroReserve)) break;
@@ -131,6 +204,8 @@ function runGame(g: Genome, seed: number): RunResult {
     probes: game.probes,
     heroShare: game.heroDamageDealt / Math.max(1, game.heroDamageDealt + game.towerDamageDealt),
     tankAssist: game.tankAssistDamage / Math.max(1, game.towerDamageDealt),
+    ...tagShares(game),
+    godRerolls: game.godRerolls,
   };
 }
 
@@ -150,6 +225,7 @@ function randomGenome(r: () => number): Genome {
     rarityGreed: r(),
     bossBack: Math.floor(r() * 3),
     bossSafety: Math.floor(r() * 31),
+    tagPref: Math.floor(r() * 3) as Genome['tagPref'],
   };
 }
 
@@ -162,6 +238,7 @@ function crossover(a: Genome, b: Genome, r: () => number): Genome {
     rarityGreed: pick('rarityGreed'),
     bossBack: pick('bossBack'),
     bossSafety: pick('bossSafety'),
+    tagPref: pick('tagPref'),
   };
 }
 
@@ -174,6 +251,7 @@ function mutate(g: Genome, r: () => number): Genome {
   if (r() < 0.25) m.rarityGreed = clamp(m.rarityGreed + gauss(), 0, 1);
   if (r() < 0.25) m.bossBack = clamp(m.bossBack + (r() < 0.5 ? -1 : 1), 0, 2);
   if (r() < 0.25) m.bossSafety = clamp(Math.round(m.bossSafety + gauss() * 30), 0, 30);
+  if (r() < 0.25) m.tagPref = Math.floor(r() * 3) as Genome['tagPref'];
   return m;
 }
 
@@ -191,23 +269,33 @@ const ARCHETYPES: Record<string, Genome> = {
   // 축 하나씩만 다르게 — 프로브를 4로 고정해 가스 경제 교란을 없앤다
   '안정형(실버만)': {
     probeTarget: 4, heroReserve: 150,
-    focus: 1, rarityGreed: 0, bossBack: 1, bossSafety: 10,
+    focus: 1, rarityGreed: 0, bossBack: 1, bossSafety: 10, tagPref: 0,
   },
   '탐욕형(플래티넘 우선)': {
     probeTarget: 4, heroReserve: 150,
-    focus: 1, rarityGreed: 1, bossBack: 1, bossSafety: 10,
+    focus: 1, rarityGreed: 1, bossBack: 1, bossSafety: 10, tagPref: 0,
   },
   '타워몰빵(영웅 강화 없음)': {
     probeTarget: 4, heroReserve: 400,
-    focus: 1, rarityGreed: 0.5, bossBack: 1, bossSafety: 10,
+    focus: 1, rarityGreed: 0.5, bossBack: 1, bossSafety: 10, tagPref: 0,
   },
   '영웅몰빵(예비금 0)': {
     probeTarget: 4, heroReserve: 0,
-    focus: 1, rarityGreed: 0.5, bossBack: 1, bossSafety: 10,
+    focus: 1, rarityGreed: 0.5, bossBack: 1, bossSafety: 10, tagPref: 0,
   },
   '분산증강(계열 안 몰기)': {
     probeTarget: 4, heroReserve: 150,
-    focus: 0, rarityGreed: 0.5, bossBack: 1, bossSafety: 10,
+    focus: 0, rarityGreed: 0.5, bossBack: 1, bossSafety: 10, tagPref: 0,
+  },
+  // ── 태그 축 (2026-07-20 신설) — 위 '타워몰빵'과 tagPref만 다르다.
+  // "파워만 깔면 보스는 잡지만 잡몹을 놓친다"를 직접 재기 위한 대조군이다.
+  '파워 편중(GOD 파워로 리롤)': {
+    probeTarget: 4, heroReserve: 400,
+    focus: 1, rarityGreed: 0.5, bossBack: 1, bossSafety: 10, tagPref: 1,
+  },
+  '스플래시 편중(GOD 스플래시로 리롤)': {
+    probeTarget: 4, heroReserve: 400,
+    focus: 1, rarityGreed: 0.5, bossBack: 1, bossSafety: 10, tagPref: 2,
   },
 };
 
@@ -231,7 +319,7 @@ function fmt(g: Genome): string {
   return (
     `프로브${g.probeTarget} 예비금${g.heroReserve} ` +
     `몰기${g.focus.toFixed(2)} 탐욕${g.rarityGreed.toFixed(2)} ` +
-    `보스-${g.bossBack} 안전${g.bossSafety}`
+    `보스-${g.bossBack} 안전${g.bossSafety} 태그:${TAG_PREF_LABEL[g.tagPref]}`
   );
 }
 
@@ -248,7 +336,10 @@ function evaluate(name: string, g: Genome, seeds: number[]): void {
       `  증강 ${med(rs.map((x) => x.augments).sort((a, b) => a - b))}` +
       `  스탯 ${med(rs.map((x) => x.statPoints).sort((a, b) => a - b))}` +
       `  영웅몫 ${(med(rs.map((x) => x.heroShare).sort((a, b) => a - b)) * 100).toFixed(0)}%` +
-      `  탱킹어시스트 ${(med(rs.map((x) => x.tankAssist).sort((a, b) => a - b)) * 100).toFixed(0)}%`,
+      `  탱킹어시스트 ${(med(rs.map((x) => x.tankAssist).sort((a, b) => a - b)) * 100).toFixed(0)}%\n` +
+      `  보드태그 파워${(med(rs.map((x) => x.powerShare).sort((a, b) => a - b)) * 100).toFixed(0)}%` +
+      ` 스플래시${(med(rs.map((x) => x.splashShare).sort((a, b) => a - b)) * 100).toFixed(0)}%` +
+      `  GOD리롤 ${med(rs.map((x) => x.godRerolls).sort((a, b) => a - b))}회`,
   );
 }
 
