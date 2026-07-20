@@ -199,7 +199,7 @@ describe('라운드 진행 — 고정 간격', () => {
     expect(B.WAVE_TYPES.hunter.contactDamageMult).toBeGreaterThan(3);
   });
 
-  test('웨이브 총 체력 — 세 구간 성장률 직접 지정 (2026-07-19 3차)', () => {
+  test('웨이브 총 체력 — 구간별 성장률 직접 지정 (2026-07-20: 10라운드 계단)', () => {
     const waveHp = (r: number) => B.enemyHP(r) * B.enemyCount(r);
 
     // 정의가 곧 법칙이다 — 반올림 오차 안에서 일치
@@ -212,13 +212,18 @@ describe('라운드 진행 — 고정 간격', () => {
     // R1 앵커 — 504(보드 DPS 28 × clear 18초) → 572 (2026-07-20, ×1.2 ×1.5 ×0.7 ×0.9).
     // 곱셈 앵커라 곡선 전체가 같이 올라가고 성장률은 안 바뀐다 — 구간 보정은 없다.
     expect(B.WAVE_HP_R1).toBe(572);
-    // 성장률 직접 지정 (2026-07-20 완화): R2~14 15% · R15~40 15% · R41~50 17% · R51+ 13%
+    // 성장률 직접 지정 (2026-07-20, 사용자 지시): 10라운드 계단으로 세분.
+    // R2~10 14% · R11~20 16% · R21~30 17% · R31~40 18% · R41~50 19% · R51+ 13%
+    expect(B.WAVE_RATE_SEGMENTS.map(([f, r]) => [f, Math.round(r * 100)]))
+      .toEqual([[2, 14], [11, 16], [21, 17], [31, 18], [41, 19], [51, 13]]);
     // 보정 구간(R41~50)만은 실효 성장률이 다르다 — 아래에서 따로 본다.
-    for (const r of [3, 8, 14]) {
+    for (const r of [3, 8, 10]) {
       expect(B.waveTotalHp(r) / B.waveTotalHp(r - 1)).toBeCloseTo(1 + B.WAVE_EARLY_RATE, 5);
     }
-    for (const r of [16, 25, 35, 40]) {
-      expect(B.waveTotalHp(r) / B.waveTotalHp(r - 1)).toBeCloseTo(1 + B.WAVE_MID_RATE, 5);
+    // 각 구간의 실제 성장률이 표와 일치한다 — 표가 유일한 출처다
+    for (const [from, rate] of B.WAVE_RATE_SEGMENTS) {
+      if (from < 2) continue;
+      expect(B.waveTotalHp(from) / B.waveTotalHp(from - 1)).toBeCloseTo(1 + rate, 5);
     }
 
     // 앵커만 올렸으므로 **모든 구간이 표의 성장률 그대로**다 — 예외 구간이 없다

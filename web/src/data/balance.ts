@@ -165,7 +165,8 @@ export const spawnUnitCost = (spawned: number): number =>
  * (10+3r)의 3배를 넘어서 시뮬·플레이 모두 프로브 0~1기로 끝났다 — 가스 엔진이
  * 아예 시동이 안 걸렸다. (성장 방식은 아래 probeCost — 2026-07-19부터 선형.)
  */
-export const PROBE_MINERAL = 60;
+// 60 → 100 (2026-07-20, 사용자 지시) — 초반에 광부로 새는 돈을 줄인다.
+export const PROBE_MINERAL = 100;
 
 /**
  * GOD 타워 타입 리롤 (2026-07-17 7차, 플레이테스트 요청).
@@ -228,7 +229,8 @@ export const COPY_TIER_MAX = GOD_TIER - 1;
  * 첫 두 기(60·90)는 지수 시절과 같아 초반 앵커는 불변. 16기 총액 4,560
  * (지수 시절 R40 기준 사실상 도달 불가 → 이제 후반의 실질 선택지).
  */
-export const PROBE_COST_STEP = 30;
+// 30 → 50 (2026-07-20, 사용자 지시) — 증가폭도 함께 올려 광부 몰빵을 막는다.
+export const PROBE_COST_STEP = 50;
 export const probeCost = (owned: number): number => PROBE_MINERAL + PROBE_COST_STEP * owned;
 export const PROBE_MAX = 16;
 // 0.25 → 0.4 (2026-07-17 4차): 기본공을 3으로 더 깎은 몫을 가스 축이 받는다 —
@@ -482,26 +484,34 @@ export const WAVE_HP_R1 = 572;
  * 구간별 라운드당 총체력 성장률. `from` 라운드부터 다음 구간 직전까지 이 배율로 큰다.
  * 마지막 구간은 상한 없이 이어진다 — 무한 모드의 벽이다.
  *
- * 2026-07-20 (사용자 지시) — 전 구간 완화. 초반 구간을 22.7% → **15%**로 크게 내리고
- * (몹이 너무 빨리 굵어져 초반에 못 잡았다), 나머지 세 구간은 각각 **2%p씩** 내렸다.
- * R1 앵커를 낮추는 것만으로는 부족했다 — 앵커는 높이를, 성장률은 기울기를 정하는데
- * 초반에 무너지는 원인은 기울기 쪽이 컸다.
+ * 2026-07-20 (사용자 지시) — 전 구간 완화 후 **10라운드 단위로 잘게 재지정**.
+ *
+ * 이력: 초반 22.7%/중반 17%/후반 19%(3구간) → 전 구간 완화(15/15/17/13) →
+ * **10라운드 계단으로 다시 세분**(14/16/17/18/19). 라운드가 갈수록 조금씩 가팔라지는
+ * 단조 증가형이라, 시트의 growthPct 열만 봐도 "언제부터 빡세지는가"가 읽힌다.
+ *
+ * R51+만 13%로 **뒤 구간이 앞 구간보다 완만하다** — 무한 모드의 벽은 절대 난이도가
+ * 아니라 "보드 실성장(~5~7%/R 추정)을 앞서는가"로 정해지기 때문이다.
  */
 export const WAVE_RATE_SEGMENTS: readonly (readonly [from: number, rate: number])[] = [
-  [2, 0.15],  // R2~14 (22.7% → 15%, 사용자 지시)
-  [15, 0.15], // R15~40 (17% → 15%, -2%p)
-  [41, 0.17], // R41~50 (19% → 17%, -2%p)
-  [51, 0.13], // R51+ — 무한 모드의 벽. 보드 실성장(~5~7%/R 추정)을 앞서야 영생이 없다
+  [2, 0.14],  // R2~10
+  [11, 0.16], // R11~20
+  [21, 0.17], // R21~30
+  [31, 0.18], // R31~40
+  [41, 0.19], // R41~50
+  [51, 0.13], // R51+ — 무한 모드의 벽. 보드 실성장을 앞서야 영생이 없다
 ];
 
-/** 하위 호환·가독용 별칭 — 테스트와 문서가 이 이름으로 구간을 가리킨다 */
+/**
+ * 하위 호환·가독용 별칭 — 테스트와 문서가 이 이름으로 구간을 가리킨다.
+ * 구간이 3개에서 6개로 늘어(2026-07-20) 인덱스 고정이 위험해졌으므로 **끝에서** 센다.
+ */
 export const WAVE_EARLY_RATE = WAVE_RATE_SEGMENTS[0][1];
-export const WAVE_MID_FROM = WAVE_RATE_SEGMENTS[1][0];
-export const WAVE_MID_RATE = WAVE_RATE_SEGMENTS[1][1];
-export const WAVE_LATEMID_FROM = WAVE_RATE_SEGMENTS[2][0];
-export const WAVE_LATEMID_RATE = WAVE_RATE_SEGMENTS[2][1];
-export const WAVE_WALL_FROM = WAVE_RATE_SEGMENTS[3][0];
-export const WAVE_WALL_RATE = WAVE_RATE_SEGMENTS[3][1];
+export const WAVE_WALL_FROM = WAVE_RATE_SEGMENTS[WAVE_RATE_SEGMENTS.length - 1][0];
+export const WAVE_WALL_RATE = WAVE_RATE_SEGMENTS[WAVE_RATE_SEGMENTS.length - 1][1];
+/** 벽 직전 구간 (R41~50) — 곡선에서 가장 가파른 곳 */
+export const WAVE_LATEMID_FROM = WAVE_RATE_SEGMENTS[WAVE_RATE_SEGMENTS.length - 2][0];
+export const WAVE_LATEMID_RATE = WAVE_RATE_SEGMENTS[WAVE_RATE_SEGMENTS.length - 2][1];
 
 /** 그 라운드로 넘어올 때 적용된 성장률 (R1은 앵커라 없다) */
 export const waveGrowthRate = (round: number): number => {
@@ -669,8 +679,28 @@ export const waveTypeOf = (round: number): WaveType =>
  * (플레이테스트). 장갑도 비율 유지를 위해 1.5 → 1.1로 동행 (장갑/기본공 ≈ 0.375).
  */
 export const BASE_DAMAGE = 3;
-export const TIER_DAMAGE = [1, 3, 9, 28, 95] as const;
-export const TIER_RANGE = [120, 140, 160, 185, 225] as const;
+// T1~T3만 +25% (2026-07-20, 사용자 지시) — 저티어가 오래 쓸모 있게.
+// 같은 날 저티어 공속을 -20% 했으므로 순 효과는 DPS ±0에 가깝고, **한 방이 커진다** —
+// 몹 체력이 오르는 초중반에 "몇 대 때려야 죽는가"를 늦춘다.
+export const TIER_DAMAGE = [1.25, 3.75, 11.25, 28, 95] as const;
+/**
+ * 티어별 사거리 — **전면 압축** (2026-07-20, 사용자 지시: "god 사거리 줄이자").
+ *
+ * 120/140/160/185/**225**였다. GOD 225는 경로의 **73%(최적 타일 100%)**를 덮어서
+ * 1기가 입구부터 출구까지 전부 사격했다 — 실측: 마법대 GOD 1기만으로 R30~45까지
+ * 몹을 하나도 안 놓쳤고, 이는 41칸을 다 채운 보드의 사망 라운드(R45)와 같다.
+ *
+ * 커버가 100%면 **어디에 짓든 똑같아서 배치가 선택이 아니게 된다.** 압축 후 GOD는
+ * 37%(최대 54%)를 덮어, 경로를 가리려면 여러 기를 나눠 놓아야 한다.
+ *
+ * **티어 간 격차를 거의 없앴다** (130~140). 사거리는 이제 **티어가 아니라 태그**가
+ * 정한다 — 티어를 올리면 피해가 커지고, 태그가 사정거리를 정하는 분업이다.
+ *
+ * 처음엔 100/110/120/130/140으로 잡았다가 되돌렸다: 저티어까지 깎이면서 Lv1 보스
+ * 앵커(75미네랄 6기 처치율 ≥0.85)가 0.75로 깨졌다. 태그 배수를 크게 벌린 것(speed 0.7)이
+ * 저티어에도 곱해져 Lv1 speed 타워가 108 → 80까지 내려간 게 컸다.
+ */
+export const TIER_RANGE = [130, 132, 134, 136, 140] as const;
 export const BASE_ATTACK_INTERVAL = 0.9;
 
 /**
@@ -705,10 +735,22 @@ export const CREATURE_SLOW = [0.9, 0.84, 0.76, 0.66, 0.5] as const;
  * 꽂는 동안 나머지가 출구로 걸어간다 = **일반 몹을 놓칠 위험**.
  * 보스는 체력이 커서 오버킬이 없으므로 한 방 상향분을 그대로 받는다.
  */
+/**
+ * 태그 효과. 사거리 배수를 **크게 벌렸다** (2026-07-20, 사용자 지시: "타입별 사거리 다르게").
+ * 1.15 / 1.0 / 0.9 → **1.35 / 0.85 / 0.7**.
+ *
+ * 사거리가 곧 태그의 정체성이 된다:
+ * - `power` 느린 한 방 + **장거리** — 뒤에 놓고 길게 때린다 (포병다움)
+ * - `splash` 광역 + **근거리** — 길목에 바짝 붙여야 뭉친 무리를 잡는다
+ * - `speed` 연사 + **초근거리** — 몹이 지나가는 그 순간에만 쏟아붓는다
+ *
+ * 복합 태그는 곱해지므로 splash+speed는 0.6배까지 내려간다 — 가장 센 축(원소 군주)이
+ * 가장 짧은 사거리를 갖는 교환이다.
+ */
 export const TAG_EFFECT: Record<Tag, { damage: number; interval: number; range: number }> = {
-  power: { damage: 2.2, interval: 1.5, range: 1.15 },
-  splash: { damage: 0.9, interval: 1.0, range: 1.0 },
-  speed: { damage: 1.0, interval: 0.5, range: 0.9 },
+  power: { damage: 2.2, interval: 1.5, range: 1.35 },
+  splash: { damage: 0.9, interval: 1.0, range: 0.85 },
+  speed: { damage: 1.0, interval: 0.5, range: 0.7 },
 };
 
 /**
