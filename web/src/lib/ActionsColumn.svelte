@@ -9,6 +9,7 @@
     isGodSelected,
     upgradeLabel,
     skillRerollTitle,
+    augmentUpgradeLabel,
   } from './view';
 
   let {
@@ -46,6 +47,8 @@
         : `⟳ 스킬 다시 뽑기 — ${game.skillRerollCost}금화`,
       skillDisabled: !game.canRerollSkill,
       skillTitle: skillRerollTitle(game),
+
+      upgradeBtn: augmentUpgradeLabel(game),
 
       canCopy: game.canCopyTower,
       copyText: game.copyTarget?.tower
@@ -92,6 +95,7 @@
     <button id="rerollGod" title="이 GOD 타워의 종류를 다시 뽑습니다 (지금과 다른 것으로). 보스를 6기 이상 잡았으면 확장 풀에서 나옵니다." disabled={v.godDisabled} onclick={() => game.rerollGod()}>{v.godText}</button>
   {/if}
   <button id="rerollSkill" title={v.skillTitle} disabled={v.skillDisabled} onclick={() => game.rerollSkill()}>{v.skillText}</button>
+  <button id="upgradeAugment" title={v.upgradeBtn.title} disabled={v.upgradeBtn.disabled} onclick={() => game.offerAugmentUpgrade()}>{v.upgradeBtn.text}</button>
   {#if v.canCopy}
     <button id="copyTower" disabled={v.copyDisabled} onclick={onCopyClick}>{v.copyText}</button>
   {/if}

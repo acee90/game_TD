@@ -12,7 +12,7 @@ import {
 import * as H from '../data/hero';
 import type { AugmentCard, AugmentEffect } from '../data/hero';
 import * as K from '../data/skills';
-import { foldMods, resolveSkill, type ResolvedSkill, type SkillId, type SkillModPatch } from '../data/skills';
+import { foldMods, resolveSkill, type ResolvedSkill, type SkillId } from '../data/skills';
 
 export interface HeroStats {
   readonly maxHp: number;
@@ -345,8 +345,6 @@ export class Hero {
    */
   mana = 0;
   /** 가스로 산 스킬 개조 횟수 */
-  gasSkillDamage = 0;
-  gasSkillCdr = 0;
 
   /** 성장 증강용 — 영웅이 막타를 친 몹 수 */
   killStacks = 0;
@@ -429,14 +427,9 @@ export class Hero {
     if (stats.skillDamageMult !== 1 || stats.manaMaxMult !== 1) {
       patches.push({ damageMult: stats.skillDamageMult, manaMaxMult: stats.manaMaxMult });
     }
-    const gas: SkillModPatch[] = [];
-    if (this.gasSkillDamage > 0)
-      gas.push({ damageMult: Math.pow(K.GAS_SKILL_DAMAGE_MULT, this.gasSkillDamage) });
-    if (this.gasSkillCdr > 0)
-      gas.push({ manaMaxMult: Math.pow(K.GAS_SKILL_CDR_MULT, this.gasSkillCdr) });
     // 허수아비·처형은 손이 빠를수록 자주 나간다 — 공속이 쿨을 깎는다
     const attackSpeedRatio = H.HERO_ATTACK_INTERVAL / stats.attackInterval;
-    return resolveSkill(id, foldMods([...patches, ...gas]), attackSpeedRatio, this.level);
+    return resolveSkill(id, foldMods(patches), attackSpeedRatio, this.level);
   }
 
   /** 시전에 필요한 마나 (개조 반영) */
@@ -482,9 +475,6 @@ export class Hero {
       this.xp -= this.xpNeeded;
       this.level++;
       gained++;
-      if (H.grantsAugment(this.level)) this.pendingAugmentPicks++;
-      // Lv9 스킬 드래프트 — 증강이 아니라 액티브 스킬을 고른다 (2026-07-20)
-      if (H.grantsSkillDraft(this.level)) this.pendingSkillDraft++;
     }
     if (gained > 0) this.hp = this.stats.maxHp; // 레벨업 시 완전 회복
     return gained;
@@ -522,6 +512,23 @@ export class Hero {
     this.augments.push(card);
     if (this.pendingAugmentPicks > 0) this.pendingAugmentPicks--;
     this.hp = Math.min(this.stats.maxHp, this.hp + (this.stats.maxHp - this.hp) * 0.5);
+  }
+
+  /**
+   * 증강 카드의 등급을 한 칸 올린다 (2026-07-20 증강 강화).
+   * 효과는 등급 배수로 다시 계산된다 — `makeCard`가 유일한 계산 경로다.
+   */
+  upgradeAugment(index: number): boolean {
+    const card = this.augments[index];
+    if (!card || !canUpgradeCard(card)) return false;
+    const next = H.RARITY_ORDER[H.RARITY_ORDER.indexOf(card.rarity) + 1];
+    this.augments[index] = H.makeCard(card.augment, next);
+    return true;
+  }
+
+  /** 강화할 수 있는 카드의 인덱스들 */
+  get upgradableAugments(): number[] {
+    return this.augments.map((_, i) => i).filter((i) => canUpgradeCard(this.augments[i]));
   }
 
   /** 이동 · 재생 · 부활. 전투는 Game이 처리한다. */
@@ -565,6 +572,14 @@ export class Hero {
     this.justRevived = true; // Game이 이번 프레임에 부활 폭발을 터뜨린다
   }
 }
+
+/**
+ * 이 카드를 강화할 수 있는가.
+ * 플래티넘은 천장이고, **등급이 효과를 안 키우는 증강**(스킬 개조처럼 effect가 빈 것)은
+ * 올려도 아무 일이 없으므로 후보에서 뺀다 — 헛돈 쓰는 선택지를 보여주지 않는다.
+ */
+export const canUpgradeCard = (card: AugmentCard): boolean =>
+  card.rarity !== 'platinum' && H.rarityScales(card.augment);
 
 /** 이 영웅에게 뜰 수 있는 증강인가 — 타입 제한은 없다, 스킬은 하나만 */
 export function augmentAllowed(hero: Hero, augment: H.Augment): boolean {

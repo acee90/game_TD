@@ -1,7 +1,7 @@
 <script lang="ts">
   import type { Game } from '../game/game';
   import * as HD from '../data/hero';
-  import { augmentCardsHtml, heroAugsHtml, skillChoiceCardsHtml } from './view';
+  import { augmentCardsHtml, heroAugsHtml, skillChoiceCardsHtml, upgradeChoiceCardsHtml } from './view';
 
   let { game, tick }: { game: Game; tick: number } = $props();
 
@@ -31,17 +31,23 @@
   let v = $derived.by(() => {
     tick;
     const skillDraft = game.skillChoices.length > 0;
-    const open = game.augmentChoices.length > 0 || skillDraft;
+    const upgrade = game.upgradeChoices.length > 0;
+    const open = game.augmentChoices.length > 0 || skillDraft || upgrade;
     const locked = performance.now() < lockUntil;
     return {
       open,
       locked,
       skillDraft,
-      title: skillDraft ? '스킬 선택' : '증강 선택',
-      sub: skillDraft
+      upgrade,
+      title: upgrade ? '증강 강화' : skillDraft ? '스킬 선택' : '증강 선택',
+      sub: upgrade
+        ? `${game.upgradeIsFree ? '무료 강화' : `${game.augmentUpgradeCost}금화`} — 한 장을 골라 등급을 올립니다`
+        : skillDraft
         ? `영웅 Lv${game.hero.level} — 첫 스킬을 고르세요 · 카드마다 ${HD.SKILL_DRAFT_CARD_REROLLS}번 다시 뽑을 수 있습니다`
         : `영웅 Lv${game.hero.level} — 하나를 고르세요 · 카드마다 ${HD.AUGMENT_CARD_REROLLS}번 다시 뽑을 수 있습니다`,
-      cards: skillDraft
+      cards: upgrade
+        ? upgradeChoiceCardsHtml(game, locked)
+        : skillDraft
         ? skillChoiceCardsHtml(game, locked)
         : open
           ? augmentCardsHtml(game, locked)
@@ -64,7 +70,8 @@
     const card = (event.target as HTMLElement).closest<HTMLElement>('.augcard');
     if (!card?.dataset.index) return;
     const index = Number(card.dataset.index);
-    if (v.skillDraft) game.chooseSkill(index);
+    if (v.upgrade) game.chooseAugmentUpgrade(index);
+    else if (v.skillDraft) game.chooseSkill(index);
     else game.chooseAugment(index);
   }
 </script>

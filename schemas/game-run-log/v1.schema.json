@@ -21,6 +21,7 @@
     { "$ref": "#/$defs/raceUpgradedEvent" },
     { "$ref": "#/$defs/godRerolledEvent" },
     { "$ref": "#/$defs/skillRerolledEvent" },
+    { "$ref": "#/$defs/augmentUpgradedEvent" },
     { "$ref": "#/$defs/gasSkillUpgradedEvent" },
     { "$ref": "#/$defs/towerCopyMarkedEvent" },
     { "$ref": "#/$defs/gameClearedEvent" },
@@ -44,7 +45,7 @@
             "run_started", "round_started", "round_cleared", "tower_spawned", "tower_merged",
             "tower_sold", "boss_summoned", "boss_killed", "augment_offered", "augment_rerolled",
             "augment_chosen", "hero_xp_bought", "hero_leveled", "probe_bought", "race_upgraded",
-            "god_rerolled", "skill_rerolled", "gas_skill_upgraded", "tower_copy_marked", "game_cleared", "game_over",
+            "god_rerolled", "skill_rerolled", "augment_upgraded", "tower_copy_marked", "game_cleared", "game_over",
             "run_finished"
           ]
         },
@@ -341,6 +342,18 @@
       },
       "additionalProperties": false
     },
+    "augmentUpgradedData": {
+      "type": "object",
+      "required": ["augment", "fromRarity", "toRarity", "cost", "upgradeCount"],
+      "properties": {
+        "augment": { "$ref": "#/$defs/augmentRef" },
+        "fromRarity": { "enum": ["silver", "gold", "platinum"] },
+        "toRarity": { "enum": ["silver", "gold", "platinum"] },
+        "cost": { "type": "integer", "minimum": 0 },
+        "upgradeCount": { "type": "integer", "minimum": 0 }
+      },
+      "additionalProperties": false
+    },
     "skillRerolledData": {
       "type": "object",
       "required": ["before", "after", "afterRole", "cost", "rerollCount"],
@@ -431,6 +444,7 @@
     "probeBoughtEvent": { "allOf": [{ "$ref": "#/$defs/eventBase" }, { "type": "object", "properties": { "type": { "const": "probe_bought" }, "data": { "$ref": "#/$defs/probeBoughtData" } } }] },
     "raceUpgradedEvent": { "allOf": [{ "$ref": "#/$defs/eventBase" }, { "type": "object", "properties": { "type": { "const": "race_upgraded" }, "data": { "$ref": "#/$defs/raceUpgradedData" } } }] },
     "godRerolledEvent": { "allOf": [{ "$ref": "#/$defs/eventBase" }, { "type": "object", "properties": { "type": { "const": "god_rerolled" }, "data": { "$ref": "#/$defs/godRerolledData" } } }] },
+    "augmentUpgradedEvent": { "allOf": [{ "$ref": "#/$defs/eventBase" }, { "type": "object", "properties": { "type": { "const": "augment_upgraded" }, "data": { "$ref": "#/$defs/augmentUpgradedData" } } }] },
     "skillRerolledEvent": { "allOf": [{ "$ref": "#/$defs/eventBase" }, { "type": "object", "properties": { "type": { "const": "skill_rerolled" }, "data": { "$ref": "#/$defs/skillRerolledData" } } }] },
     "gasSkillUpgradedEvent": { "allOf": [{ "$ref": "#/$defs/eventBase" }, { "type": "object", "properties": { "type": { "const": "gas_skill_upgraded" }, "data": { "$ref": "#/$defs/gasSkillUpgradedData" } } }] },
     "towerCopyMarkedEvent": { "allOf": [{ "$ref": "#/$defs/eventBase" }, { "type": "object", "properties": { "type": { "const": "tower_copy_marked" }, "data": { "$ref": "#/$defs/towerCopyMarkedData" } } }] },

@@ -134,6 +134,24 @@ export const SKILL_PER_INT = 0.035;
  * 후반만 접는다. Lv30 누적 스탯 +19%(94→112), 그 뒤로도 계속 가팔라져 Lv40 +44% ·
  * Lv50 +64% — "후반부에 더" 라는 요청대로 한 지점만 튀지 않고 갈수록 벌어진다.
  */
+/**
+ * **만렙** (2026-07-20, 사용자 지시). 여기까지는 지수로 크고, 넘어서면 선형으로만 큰다.
+ *
+ * 만렙을 두는 이유는 두 가지다.
+ * ① **"영웅만 강해지는 빌드"를 구조적으로 막는다** — 상한이 있으면 후반은 반드시 타워가
+ *    주축이 된다. 타워는 골드로 계속 크지만 영웅은 여기서 멈춘다.
+ * ② **XP 구매가 '격차'가 아니라 '타이밍'을 사는 것이 된다** — 어차피 모두가 만렙에
+ *    닿으므로, 골드를 넣는 값어치는 *언제 닿느냐*뿐이다. 그래서 "타워를 더 지을까,
+ *    만렙을 앞당길까"가 배타적 선택이 아니라 템포 선택이 된다.
+ *
+ * 20으로 잡은 근거: 실측에서 XP를 안 사면 R40에 Lv15~16에서 멈췄다(R59까지 그대로).
+ * 20은 자연 성장으로 **닿을락 말락 한 지점**이라, 구매가 의미를 갖되 필수는 아니다.
+ */
+export const HERO_MAX_LEVEL = 20;
+
+/** 만렙 이후 레벨당 스탯 — 지수 성장이 끝나고 선형으로만 붙는다 */
+export const POST_MAX_STAT_POINTS = 1;
+
 export const HERO_LATE_GAME_FROM = 19;
 export const HERO_LATE_GAME_DIVISOR = 3;
 export const levelStatPoints = (level: number): number =>
@@ -141,10 +159,18 @@ export const levelStatPoints = (level: number): number =>
   Math.floor(level / 6) +
   Math.floor(Math.max(0, level - HERO_LATE_GAME_FROM) / HERO_LATE_GAME_DIVISOR);
 
-/** 해당 레벨까지 각 스탯이 공통으로 받은 자연 성장치. 총 예산을 3등분해 기존 파워 총량을 보존한다. */
+/**
+ * 해당 레벨까지 각 스탯이 공통으로 받은 자연 성장치. 총 예산을 3등분해 파워 총량을 보존한다.
+ *
+ * **만렙(HERO_MAX_LEVEL)까지는 지수, 그 뒤로는 선형**이다 (2026-07-20).
+ * 만렙 뒤에도 아주 안 크면 후반 레벨업이 완전히 무의미해져 킬 경험치가 죽은 자원이 된다 —
+ * 대신 기울기를 확 낮춰 "영웅이 계속 커져서 타워가 필요 없어지는" 일을 막는다.
+ */
 export function statBonusByLevel(level: number): number {
   let total = 0;
-  for (let l = 2; l <= level; l++) total += levelStatPoints(l);
+  const capped = Math.min(level, HERO_MAX_LEVEL);
+  for (let l = 2; l <= capped; l++) total += levelStatPoints(l);
+  if (level > HERO_MAX_LEVEL) total += (level - HERO_MAX_LEVEL) * POST_MAX_STAT_POINTS;
   return total / STAT_IDS.length;
 }
 
@@ -271,18 +297,18 @@ export const bossDamage = (level: number, round: number): number =>
   level <= BOSS_HARMLESS_MAX_LEVEL ? 0 : enemyDamage(round) * (1.5 + 0.5 * level);
 
 /**
- * 증강을 받는 영웅 레벨.
+ * 증강을 받는 **라운드** (2026-07-20, 사용자 지시: "r5,10,25,35에 증강 받도록").
  *
- * 10레벨 고정 간격이면 증강이 게임 앞쪽에 몰린다. 측정해 보니 3번째 증강이 진행률 47%,
- * 4번째가 61%에 왔고 median 4개에서 멈췄다. 뒤쪽 40%가 아무 선택 없는 구간이 됐다.
+ * 레벨 기준(`[5,10,24,30,35,42]` + 8레벨마다)이었다. 그런데 실측에서 **XP를 안 사면
+ * 영웅이 Lv15~16에서 멈춘다**(R40 이후 성장 정지) — 3번째 증강(Lv24)부터 끝까지가
+ * **구조적으로 도달 불가능한 죽은 콘텐츠**였다. 40여 종 풀에서 실제로 뽑는 건 2장뿐이고,
+ * 특화 시너지(3장 각성 / 5장 초월)는 영영 못 봤다.
  *
- * 그래서 레벨 간격을 벌려가며 게임 전체에 고르게 뿌린다. 80/20 기준으로,
- * **앞의 네 개는 80% 이상의 판이 받고**(핵심 빌드가 완성된다), 뒤의 두 개는 오래 버틴
- * 판만 받는 보상이다. 소진 후에는 AUGMENT_TAIL_EVERY 레벨마다 계속 준다.
+ * 라운드 기준으로 옮기면 **누구나 네 장을 전부 받는다.** 대신 장수를 6+α → 4장으로 줄여
+ * 한 장의 무게를 키웠다 — 이제 영웅 파워는 "몇 장 모았나"가 아니라
+ * **"가진 것을 얼마나 강화했나"**로 간다(증강 강화 시스템).
  */
-// [9,16,...] → [5,10,...] (2026-07-17 5차): 첫 두 증강을 빠르게 — "증강을 보고
-// 빌드 방향을 정할 수 있도록"(사용자). 3번째부터는 그대로 — 중반 파워 스파이크 방지.
-export const AUGMENT_LEVELS: readonly number[] = [5, 10, 24, 30, 35, 42];
+export const AUGMENT_ROUNDS: readonly number[] = [5, 10, 25, 35];
 
 /**
  * **스킬 드래프트 레벨** (2026-07-20, 사용자 지시: "처음으로 제대로된 스킬을 얻는다").
@@ -291,20 +317,18 @@ export const AUGMENT_LEVELS: readonly number[] = [5, 10, 24, 30, 35, 42];
  * 시작 장비 '강한 일격'(단일 대상 3배)만 들고 있다 — 일부러 초라하게 두어
  * 이 순간이 판의 분기점이 되게 한다.
  *
- * 9 → **12** (같은 날, 사용자 지시). 두 가지가 근거다:
+ * Lv9 → Lv12 → **R15** (2026-07-20). 레벨 기준이었다가 증강이 라운드 기준으로
+ * 옮겨가면서(AUGMENT_ROUNDS) 같이 옮겼다 — 두 축이 다른 단위를 쓰면 순서가 판마다
+ * 뒤바뀐다.
  *
- * ① **템포** — Lv9면 증강 Lv5·Lv10 사이에 결정 3개가 몰리고, 그 뒤 Lv10~24의
- *    14레벨 공백이 그대로 남는다. Lv12는 결정을 고르게 펴면서 그 공백의 앞머리를 채운다.
- * ② **방향성 먼저** — 증강 2장(Lv5·Lv10)으로 빌드 방향이 드러난 뒤에 스킬로 답한다.
- *
- * "스킬을 먼저 정해야 증강이 그에 답한다"는 반대 논리는 실측으로 기각했다:
- * 46종 증강 중 스킬에 잠긴 것은 **3장뿐**이고(도발 인형·넓은 화선·맹렬한 불길)
- * 그나마 허수아비·불화살에만 붙는다 — 순서를 뒤집어도 잃는 게 거의 없다.
+ * R15는 **증강 두 장(R5·R10)을 받은 직후**다. 빌드 방향이 드러난 뒤에 스킬로 답한다는
+ * 순서를 유지한다. ("스킬을 먼저 정해야 증강이 그에 답한다"는 반대 논리는 실측으로
+ * 기각했다 — 46종 증강 중 스킬에 잠긴 것은 3장뿐이라 순서를 뒤집어도 잃는 게 없다.)
  */
-export const SKILL_DRAFT_LEVEL = 12;
+export const SKILL_DRAFT_ROUND = 15;
 
-/** 이 레벨에 스킬 드래프트를 받는가 */
-export const grantsSkillDraft = (level: number): boolean => level === SKILL_DRAFT_LEVEL;
+/** 이 라운드에 스킬 드래프트를 받는가 */
+export const grantsSkillDraft = (round: number): boolean => round === SKILL_DRAFT_ROUND;
 
 /** 한 번에 보여주는 스킬 후보 수 */
 export const SKILL_DRAFT_CHOICES = 3;
@@ -318,19 +342,12 @@ export const SKILL_DRAFT_CARD_REROLLS = 1;
 export const AUGMENT_TAIL_EVERY = 8;
 export const AUGMENT_CHOICES = 3;
 
-/** 이 레벨에 도달하면 증강을 받는가 */
-export function grantsAugment(level: number): boolean {
-  if (AUGMENT_LEVELS.includes(level)) return true;
-  const last = AUGMENT_LEVELS[AUGMENT_LEVELS.length - 1];
-  return level > last && (level - last) % AUGMENT_TAIL_EVERY === 0;
-}
+/** 이 라운드에 진입하면 증강을 받는가 */
+export const grantsAugment = (round: number): boolean => AUGMENT_ROUNDS.includes(round);
 
-/** 다음 증강을 받는 레벨 — UI 예고용 ("다음 증강 Lv24") */
-export function nextAugmentLevel(level: number): number {
-  for (let l = level + 1; l <= level + AUGMENT_TAIL_EVERY + 1; l++) {
-    if (grantsAugment(l)) return l;
-  }
-  return level + 1; // 도달 불가 — grantsAugment가 tail을 보장하므로 실제로는 안 온다
+/** 다음 증강 라운드 — UI 예고용 ("다음 증강 R25"). 다 받았으면 null */
+export function nextAugmentRound(round: number): number | null {
+  return AUGMENT_ROUNDS.find((r) => r > round) ?? null;
 }
 
 /** `level`까지 올렸을 때 받은 증강 개수 */

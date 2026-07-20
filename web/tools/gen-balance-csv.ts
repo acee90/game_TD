@@ -122,14 +122,14 @@ write(
   toCsv(['kind', 'kindLabel', 'tier', 'threshold', 'name', 'description', ...EFFECT_COLUMNS], synergyRows),
 );
 
-// ── 증강 획득 레벨
+// ── 증강 획득 라운드 (2026-07-20: 레벨 → 라운드 기준)
 write(
   'augment-schedule.csv',
   toCsv(
-    ['index', 'heroLevel', 'note'],
+    ['index', 'round', 'note'],
     [
-      ...H.AUGMENT_LEVELS.map((level, i) => [i + 1, level, i < 4 ? '핵심 빌드 (80%+ 도달)' : '초과 달성 보상']),
-      ['이후', `+${H.AUGMENT_TAIL_EVERY}레벨마다`, ''],
+      ...H.AUGMENT_ROUNDS.map((round, i) => [i + 1, round, '증강']),
+      [H.AUGMENT_ROUNDS.length + 1, H.SKILL_DRAFT_ROUND, '스킬 드래프트'],
     ],
   ),
 );

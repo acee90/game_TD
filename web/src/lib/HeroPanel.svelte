@@ -24,10 +24,6 @@
               : `마나 ${Math.floor(hero.mana)}/${Math.round(skill.manaMax)}`;
             return `${skill.def.name}${dmg}${targets} · ${state}`;
           })(),
-          dmgText: `스킬 피해 +8% · ${game.gasSkillCost('damage')}마정석 (${hero.gasSkillDamage})`,
-          dmgDisabled: !game.canBuyGasSkill('damage'),
-          cdrText: `필요 마나 -6% · ${game.gasSkillCost('cdr')}마정석 (${hero.gasSkillCdr})`,
-          cdrDisabled: !game.canBuyGasSkill('cdr'),
         }
       : null;
 
@@ -36,7 +32,7 @@
       hpWidth: (hero.alive ? hero.hp / stats.maxHp : 0) * 100,
       hpText: hero.alive ? `${Math.ceil(hero.hp)}/${stats.maxHp}` : `부활 ${Math.ceil(hero.respawnTimer)}s`,
       xpWidth: (hero.xp / hero.xpNeeded) * 100,
-      xpText: `${Math.floor(hero.xp)}/${hero.xpNeeded} · 다음 증강 Lv${HD.nextAugmentLevel(hero.level)}`,
+      xpText: `${Math.floor(hero.xp)}/${hero.xpNeeded}${HD.nextAugmentRound(game.round) ? ` · 다음 증강 R${HD.nextAugmentRound(game.round)}` : ''}`,
       stats: heroStatsText(game),
       statButtons: HD.STAT_IDS.map((stat) => ({
         label: `${HD.STAT_LABEL[stat]} ${attributes[stat].toFixed(1)}`,
@@ -72,10 +68,6 @@
     <div id="skill" class:ready={v.skill.ready}>
       <i id="skillCd" style="transform:scaleX({v.skill.charged.toFixed(3)})"></i>
       <span id="skillText">{v.skill.text}</span>
-    </div>
-    <div class="row c2" id="gasSkillRow">
-      <button id="gasSkillDmg" disabled={v.skill.dmgDisabled} onclick={() => game.buyGasSkill('damage')}>{v.skill.dmgText}</button>
-      <button id="gasSkillCdr" disabled={v.skill.cdrDisabled} onclick={() => game.buyGasSkill('cdr')}>{v.skill.cdrText}</button>
     </div>
   {/if}
 </section>

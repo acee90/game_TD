@@ -330,38 +330,38 @@ describe('사망과 부활 — 패널티는 대기시간뿐', () => {
 });
 
 describe('증강 — 선택 동안 게임이 멈춘다', () => {
-  test('스케줄에 적힌 레벨에서 선택이 뜬다', () => {
-    const first = H.AUGMENT_LEVELS[0];
-    const hero = new Hero();
-    while (hero.level < first) hero.gainXp(hero.xpNeeded);
-
-    expect(hero.level).toBe(first);
-    expect(hero.pendingAugmentPicks).toBe(1);
+  // 레벨 → **라운드** 기준 (2026-07-20). 레벨 기준일 땐 XP를 안 사면 Lv15에서 멈춰
+  // 3번째 증강부터 영영 못 받았다 — 이제 누구나 네 장을 다 받는다.
+  test('스케줄은 라운드 기준이다 — 네 장 전부 도달 가능하다', () => {
+    expect(H.AUGMENT_ROUNDS).toEqual([5, 10, 25, 35]);
+    for (const r of H.AUGMENT_ROUNDS) expect(H.grantsAugment(r)).toBe(true);
+    for (const r of [1, 4, 6, 11, 24, 34, 40, 60]) expect(H.grantsAugment(r)).toBe(false);
   });
 
-  test('스케줄에 없는 레벨에서는 안 뜬다', () => {
+  test('스킬 드래프트도 라운드 기준 — 증강 두 장 뒤다', () => {
+    expect(H.SKILL_DRAFT_ROUND).toBe(15);
+    expect(H.grantsSkillDraft(15)).toBe(true);
+    expect(H.grantsSkillDraft(14)).toBe(false);
+    // 증강 라운드와 겹치지 않는다 — 한 라운드에 두 선택이 몰리지 않게
+    expect(H.AUGMENT_ROUNDS).not.toContain(H.SKILL_DRAFT_ROUND);
+    // R5·R10을 받은 뒤여야 "방향성을 보고 답한다"가 성립한다
+    expect(H.AUGMENT_ROUNDS.filter((r) => r < H.SKILL_DRAFT_ROUND)).toEqual([5, 10]);
+  });
+
+  test('레벨업으로는 증강이 안 나온다 — 라운드가 준다', () => {
     const hero = new Hero();
-    while (hero.level < H.AUGMENT_LEVELS[0] - 1) hero.gainXp(hero.xpNeeded);
+    for (let i = 0; i < 30; i++) hero.gainXp(hero.xpNeeded);
+    expect(hero.level).toBeGreaterThan(10);
     expect(hero.pendingAugmentPicks).toBe(0);
-  });
-
-  test('스케줄을 소진하면 일정 간격으로 계속 준다', () => {
-    const last = H.AUGMENT_LEVELS[H.AUGMENT_LEVELS.length - 1];
-    expect(H.grantsAugment(last + H.AUGMENT_TAIL_EVERY)).toBe(true);
-    expect(H.grantsAugment(last + 1)).toBe(false);
   });
 
   test('선택지가 떠 있으면 update가 시간을 흘리지 않는다', () => {
     const game = new Game();
     const hero = game.hero;
 
-    // 증강 레벨까지 한 방에 올린다
-    game.enemies.push({
-      kind: 'mob', name: 'x', maxHp: 1, hp: 0, armor: 0,
-      speed: 0, radius: 8, distance: 10,
-    });
-    hero.gainXp(1000);
-    game.update(0.016); // grantXp 경로를 태우지 않고 직접 오퍼시킨다
+    // 증강은 이제 라운드가 준다 (2026-07-20) — 레벨업으로는 안 뜬다
+    hero.pendingAugmentPicks = 1;
+    game.update(0.016);
     game.chooseAugment(-1); // 잘못된 인덱스 — 아무 일도 없다
 
     expect(hero.pendingAugmentPicks).toBeGreaterThan(0);

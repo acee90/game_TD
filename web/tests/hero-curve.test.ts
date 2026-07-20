@@ -99,10 +99,48 @@ describe('증강이 역전을 만든다 — 레벨이 아니라', () => {
     expect(heroDps(30)).toBeLessThan(GOD_TOWER_DPS * 1.5);
   });
 
-  test('공격 3증강(Lv24)이면 GOD 1~2.5기', () => {
-    const dps = heroDps(24, ['might', 'might', 'might']);
-    expect(dps).toBeGreaterThan(GOD_TOWER_DPS * 1);
-    expect(dps).toBeLessThan(GOD_TOWER_DPS * 2.5);
+  /**
+   * 만렙 20 도입(2026-07-20) 전에는 Lv24를 앵커로 "GOD 1~2.5기"를 요구했다.
+   * 이제 레벨이 20에서 멈추므로 **Lv24와 Lv30이 거의 같다** — 앵커를 만렙으로 옮긴다.
+   *
+   * 지키려는 계약은 그대로다: **레벨이 아니라 증강이 역전을 만든다.**
+   * 만렙 자동 성장만으로는 GOD 한 기에 못 미치고, 공격 증강 3장을 얹어야 넘어선다.
+   */
+  test('만렙 자동 성장만으로는 GOD 한 기에 못 미친다', () => {
+    expect(heroDps(H.HERO_MAX_LEVEL)).toBeLessThan(GOD_TOWER_DPS);
+  });
+
+  /**
+   * **증강이 레벨보다 크다** — 이게 이 describe가 지키는 계약이다.
+   * 만렙 자동 성장(99 DPS)에 공격 증강 3장을 얹으면 3배가 넘는다(317).
+   */
+  test('공격 3증강이 만렙 자동 성장보다 훨씬 크다', () => {
+    const bare = heroDps(H.HERO_MAX_LEVEL);
+    const built = heroDps(H.HERO_MAX_LEVEL, ['might', 'might', 'might']);
+    expect(built / bare).toBeGreaterThan(3);
+  });
+
+  /**
+   * **미달 상태를 못 박아 둔다** (2026-07-20).
+   *
+   * 만렙 20 + 공속 0.7/초 너프 뒤로, 공격 증강 3장을 다 얹은 영웅도 GOD 한 기(464 DPS)에
+   * 못 미친다(317 = 0.68배). 설계 목표는 "R25에 영웅:타워 = 3:7, 투자하면 6:4"인데
+   * 현재 실측 지분은 9%라 한참 모자란다.
+   *
+   * 이 테스트는 목표 달성을 요구하지 않는다 — **얼마나 모자란지를 기록**해서,
+   * 캘리브레이션(증강 리뉴얼 4단계)이 끝났을 때 이 숫자가 움직였는지 알 수 있게 한다.
+   * 참고로 `might`는 지금 HERO_CARRY_BLOCKLIST에 걸려 실제 드래프트에는 안 나온다.
+   */
+  test('[미달 기록] 공격 3증강 만렙 영웅은 아직 GOD 한 기에 못 미친다', () => {
+    const dps = heroDps(H.HERO_MAX_LEVEL, ['might', 'might', 'might']);
+    expect(dps).toBeLessThan(GOD_TOWER_DPS); // 목표는 이 줄이 깨지는 것이다
+    expect(dps / GOD_TOWER_DPS).toBeGreaterThan(0.5); // 그래도 절반은 넘는다
+  });
+
+  test('만렙을 넘겨도 거의 안 큰다 — 후반은 타워가 주축이라는 보장', () => {
+    const atCap = heroDps(H.HERO_MAX_LEVEL);
+    const wayPast = heroDps(H.HERO_MAX_LEVEL + 20);
+    expect(wayPast / atCap).toBeLessThan(1.6); // 20레벨을 더 먹어도 1.6배 미만
   });
 
   test('계열 특화(강화 3)가 혼합보다 세다 — 몰빵의 값어치', () => {

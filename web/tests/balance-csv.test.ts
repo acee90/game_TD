@@ -57,10 +57,10 @@ describe('밸런스 CSV — 코드와 일치해야 한다', () => {
     expect(rows).toHaveLength(Object.keys(H.SYNERGIES).length * 2);
   });
 
-  test('증강 스케줄이 코드와 같다', () => {
+  test('증강 스케줄이 코드와 같다 — 라운드 기준 (2026-07-20)', () => {
     const rows = read('augment-schedule.csv').slice(1);
-    const levels = rows.slice(0, H.AUGMENT_LEVELS.length).map((r) => Number(r.split(',')[1]));
-    expect(levels).toEqual([...H.AUGMENT_LEVELS]);
+    const rounds = rows.slice(0, H.AUGMENT_ROUNDS.length).map((r) => Number(r.split(',')[1]));
+    expect(rounds).toEqual([...H.AUGMENT_ROUNDS]);
   });
 
   test('상수 표의 값이 코드와 같다', () => {

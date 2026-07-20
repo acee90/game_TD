@@ -183,6 +183,32 @@ export const GOD_REROLL_MINERAL = 150;
 export const godRerollCost = (_rolled: number): number => GOD_REROLL_MINERAL;
 
 /**
+ * **증강 강화** (2026-07-20, 사용자 지시) — 영웅 투자에 랜덤성을 얹는다.
+ *
+ * 그전에는 영웅 투자가 XP 구매(= 예측 가능한 +1레벨)뿐이라, 타워 생성(뽑기)과 나란히
+ * 놓으면 **도파민에서 진다**. 그래서 아무도 영웅에 투자하지 않고 타워만 탔다.
+ *
+ * 강화는 **보유 증강 하나의 등급을 한 칸 올린다**(실버 ×1 → 골드 ×2 → 플래티넘 ×3.5).
+ * 후보 2장을 보여주고 그중 하나를 고르므로 **운과 선택이 섞인다** — 순수 랜덤이면
+ * "잡몹 빌드인데 방어 증강만 강화됨" 같은 배신이 생기고 그건 도파민이 아니라 스트레스다.
+ *
+ * 비용이 **지수로 오르므로 전부 풀강화하는 건 사실상 불가능**하다. 그래서 운이
+ * 값어치를 갖는다 — 원하는 카드가 후보에 자주 뜨면 같은 돈으로 더 깊은 빌드가 된다.
+ * 증강 4장 × 2단계 = **최대 8회**가 구조적 상한이라 "영웅 만능"이 막힌다.
+ *
+ * 화폐는 **골드** — 타워 한 기와 직접 맞바꾸는 자리라야 "타워를 더 지을까,
+ * 영웅을 강화할까"의 저울이 성립한다. (마정석은 초당 자동 수입이라 포기의 감각이 약하다.)
+ */
+export const AUGMENT_UPGRADE_BASE = 120;
+export const AUGMENT_UPGRADE_GROWTH = 1.7;
+export const augmentUpgradeCost = (bought: number): number =>
+  Math.round(AUGMENT_UPGRADE_BASE * Math.pow(AUGMENT_UPGRADE_GROWTH, bought));
+/** 후보를 몇 장 보여주는가 */
+export const AUGMENT_UPGRADE_CHOICES = 2;
+/** 이 라운드에 무료 강화 1회 (사용자 지시) */
+export const FREE_AUGMENT_UPGRADE_ROUND = 45;
+
+/**
  * 스킬 리롤 (2026-07-20, 사용자 지시).
  *
  * 판이 낸 '문제'(보드 태그 편중)에 스킬로 '답'하게 하는 레버다.

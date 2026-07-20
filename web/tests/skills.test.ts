@@ -198,27 +198,19 @@ describe('스킬 리롤 — 운을 자원으로 교정한다 (2026-07-20)', () =
 });
 
 describe('스킬 드래프트 — 처음으로 제대로된 스킬을 얻는다 (2026-07-20)', () => {
-  /** 드래프트 레벨까지 올려 스킬 선택을 띄운다 */
+  /** 드래프트 라운드까지 진행해 스킬 선택을 띄운다 */
   const atLevel9 = () => {
     const g = new Game(lcg(21));
-    g.hero.level = H.SKILL_DRAFT_LEVEL - 1;
-    g.hero.gainXp(1e9); // 드래프트 레벨을 지나며 pendingSkillDraft가 선다
+    // 라운드만 밀어 올린다 — 밀린 증강 선택은 즉시 소화한다
+    for (let r = 1; r <= H.SKILL_DRAFT_ROUND; r++) {
+      g.round = r - 1;
+      g.hero.pendingAugmentPicks = 0;
+      if (H.grantsSkillDraft(r)) g.hero.pendingSkillDraft++;
+      g.round = r;
+    }
     g.update(0);
     return g;
   };
-
-  // 9 → 12 (2026-07-20, 사용자 지시): 증강 2장으로 방향을 정한 뒤에 스킬로 답한다.
-  test('드래프트는 Lv12 — 증강 두 장을 받은 뒤다', () => {
-    expect(H.SKILL_DRAFT_LEVEL).toBe(12);
-    expect(H.grantsSkillDraft(12)).toBe(true);
-    expect(H.grantsSkillDraft(11)).toBe(false);
-    expect(H.grantsSkillDraft(13)).toBe(false);
-    // 증강 레벨과 겹치지 않는다 — 한 레벨에 두 선택이 몰리지 않게
-    expect(H.AUGMENT_LEVELS).not.toContain(H.SKILL_DRAFT_LEVEL);
-    // Lv5·Lv10 증강을 이미 받은 뒤여야 "방향성을 보고 답한다"가 성립한다
-    const before = H.AUGMENT_LEVELS.filter((l) => l < H.SKILL_DRAFT_LEVEL);
-    expect(before).toEqual([5, 10]);
-  });
 
   test('후보는 전부 제대로된 스킬이고 서로 겹치지 않는다', () => {
     const g = atLevel9();
@@ -261,10 +253,10 @@ describe('스킬 드래프트 — 처음으로 제대로된 스킬을 얻는다 
 
   test('스킬을 정한 뒤에 증강 선택이 온다 — 무엇에 답할지가 정해진 채로 고른다', () => {
     const g = atLevel9();
-    expect(g.augmentChoices).toHaveLength(0); // 스킬이 먼저
+    g.hero.pendingAugmentPicks = 1; // 증강이 밀려 있는 상태를 만든다
+    expect(g.augmentChoices).toHaveLength(0); // 스킬이 먼저다
     g.chooseSkill(0);
-    // Lv9까지 오며 밀린 일반 증강(Lv5)이 이제 뜬다
-    expect(g.augmentChoices.length).toBeGreaterThan(0);
+    expect(g.augmentChoices.length).toBeGreaterThan(0); // 그다음 증강
   });
 });
 

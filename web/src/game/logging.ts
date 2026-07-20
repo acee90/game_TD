@@ -175,11 +175,13 @@ export interface GameEventDataMap {
     readonly cost: number;
     readonly rerollCount: number;
   };
-  readonly gas_skill_upgraded: {
-    readonly track: 'damage' | 'cdr';
-    readonly fromLevel: number;
-    readonly toLevel: number;
+  /** 증강 등급을 한 칸 올렸다 (2026-07-20 증강 강화) */
+  readonly augment_upgraded: {
+    readonly augment: AugmentLogRef;
+    readonly fromRarity: AugmentLogRef['rarity'];
+    readonly toRarity: AugmentLogRef['rarity'];
     readonly cost: number;
+    readonly upgradeCount: number;
   };
   readonly tower_copy_marked: {
     readonly action: 'marked' | 'cancelled';

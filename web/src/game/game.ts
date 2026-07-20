@@ -264,8 +264,13 @@ export class Game {
 
   /** 증강 선택·클리어 오버레이 중에는 시간이 흐르지 않는다. */
   get paused(): boolean {
-    // 스킬 드래프트(Lv9)도 증강 선택과 똑같이 게임을 멈춘다
-    return this.augmentChoices.length > 0 || this.skillChoices.length > 0 || this.clearPending;
+    // 선택 화면은 전부 게임을 멈춘다 — 증강·스킬 드래프트·증강 강화
+    return (
+      this.augmentChoices.length > 0 ||
+      this.skillChoices.length > 0 ||
+      this.upgradeChoices.length > 0 ||
+      this.clearPending
+    );
   }
 
   /** 클리어 오버레이에서 "무한 모드 계속"을 누른다 */
@@ -820,34 +825,6 @@ export class Game {
     return true;
   }
 
-  // ── 마정석 스킬 개조 ──
-  gasSkillCost(track: 'damage' | 'cdr'): number {
-    return K.gasSkillCost(track === 'damage' ? this.hero.gasSkillDamage : this.hero.gasSkillCdr);
-  }
-
-  canBuyGasSkill(track: 'damage' | 'cdr'): boolean {
-    return !this.over && this.gas >= this.gasSkillCost(track);
-  }
-
-  /** 마정석로 스킬을 개조한다 — 종족 업그레이드와 같은 지갑을 두고 경쟁한다 */
-  buyGasSkill(track: 'damage' | 'cdr'): boolean {
-    const cost = this.gasSkillCost(track);
-    if (this.gas < cost) {
-      this.message = `마정석 부족 — 개조 ${cost} 필요.`;
-      return false;
-    }
-    this.gas -= cost;
-    const fromLevel = track === 'damage' ? this.hero.gasSkillDamage : this.hero.gasSkillCdr;
-    if (track === 'damage') this.hero.gasSkillDamage++;
-    else this.hero.gasSkillCdr++;
-    this.record('gas_skill_upgraded', { track, fromLevel, toLevel: fromLevel + 1, cost });
-    this.message =
-      track === 'damage'
-        ? `스킬 피해 개조 +${this.hero.gasSkillDamage} · 다음 ${this.gasSkillCost('damage')}`
-        : `스킬 쿨타임 개조 +${this.hero.gasSkillCdr} · 다음 ${this.gasSkillCost('cdr')}`;
-    return true;
-  }
-
   /** 필드에 살아있는 보스들의 레벨 */
   get liveBossLevels(): number[] {
     return this.enemies.filter((e) => e.kind === 'boss').map((e) => e.bossLevel ?? 1);
@@ -1136,6 +1113,98 @@ export class Game {
     return true;
   }
 
+  // ── 증강 강화 (2026-07-20) — 영웅 투자에 랜덤성을 얹는다 ──
+  /** 지금까지 몇 번 강화했나 — 비용이 지수로 오른다 */
+  augmentUpgrades = 0;
+  /** 무료 강화가 몇 번 밀려 있나 (R45에 1회) */
+  pendingFreeUpgrades = 0;
+  /** 지금 띄운 강화 후보 — hero.augments의 인덱스. 비어 있으면 강화 중이 아니다 */
+  upgradeChoices: number[] = [];
+  /** 이번 강화가 무료인가 */
+  upgradeIsFree = false;
+
+  get augmentUpgradeCost(): number {
+    return B.augmentUpgradeCost(this.augmentUpgrades);
+  }
+
+  get canOfferAugmentUpgrade(): boolean {
+    return (
+      !this.over &&
+      this.upgradeChoices.length === 0 &&
+      this.hero.upgradableAugments.length > 0 &&
+      (this.pendingFreeUpgrades > 0 || this.mineral >= this.augmentUpgradeCost)
+    );
+  }
+
+  /**
+   * 강화 후보를 띄운다. 보유 증강 중 강화 가능한 것에서 무작위로 뽑되,
+   * **골드는 고를 때 빠진다** — 후보만 보고 취소할 수 있어야 한다.
+   */
+  offerAugmentUpgrade(): boolean {
+    if (this.upgradeChoices.length > 0) return false;
+    const pool = this.hero.upgradableAugments;
+    if (pool.length === 0) {
+      this.message = '더 강화할 증강이 없습니다.';
+      return false;
+    }
+    const free = this.pendingFreeUpgrades > 0;
+    if (!free && this.mineral < this.augmentUpgradeCost) {
+      this.message = `금화 부족 — 증강 강화 ${this.augmentUpgradeCost} 필요.`;
+      return false;
+    }
+    // 후보를 겹치지 않게 뽑는다
+    const rest = [...pool];
+    const picks: number[] = [];
+    while (picks.length < B.AUGMENT_UPGRADE_CHOICES && rest.length > 0) {
+      const i = Math.min(rest.length - 1, Math.floor(this.rand() * rest.length));
+      picks.push(rest[i]);
+      rest.splice(i, 1);
+    }
+    this.upgradeChoices = picks;
+    this.upgradeIsFree = free;
+    return true;
+  }
+
+  /** 후보 하나를 골라 강화한다 — 여기서 골드가 빠진다 */
+  chooseAugmentUpgrade(choiceIndex: number): boolean {
+    const target = this.upgradeChoices[choiceIndex];
+    if (target === undefined) return false;
+    const card = this.hero.augments[target];
+    if (!card) return false;
+
+    const cost = this.upgradeIsFree ? 0 : this.augmentUpgradeCost;
+    if (cost > this.mineral) return false;
+
+    const before = card.rarity;
+    if (!this.hero.upgradeAugment(target)) return false;
+    const after = this.hero.augments[target];
+
+    this.mineral -= cost;
+    if (this.upgradeIsFree) this.pendingFreeUpgrades--;
+    else this.augmentUpgrades++;
+    this.upgradeChoices = [];
+    this.upgradeIsFree = false;
+
+    this.record('augment_upgraded', {
+      augment: this.augmentLogRef(after),
+      fromRarity: before,
+      toRarity: after.rarity,
+      cost,
+      upgradeCount: this.augmentUpgrades,
+    });
+    this.float(this.hero.x, this.hero.y, `▲ ${after.augment.name}`, H.RARITIES[after.rarity].color);
+    this.message =
+      `${after.augment.name} → ${H.RARITIES[after.rarity].label} (효과 ×${H.RARITIES[after.rarity].power})` +
+      ` · 다음 강화 ${this.augmentUpgradeCost}금화`;
+    return true;
+  }
+
+  /** 후보를 물린다 — 골드는 안 빠진 상태다 */
+  cancelAugmentUpgrade(): void {
+    this.upgradeChoices = [];
+    this.upgradeIsFree = false;
+  }
+
   // ── 스킬 리롤 (2026-07-20) — 판이 낸 문제에 다시 답한다 ──
   /** 지금까지 스킬을 몇 번 다시 뽑았나 — 첫 회는 무료다 */
   skillRerolls = 0;
@@ -1167,7 +1236,7 @@ export class Game {
   rerollSkill(): boolean {
     if (this.over) return false;
     if (K.isStarterSkill(this.hero.skillId)) {
-      this.message = `첫 스킬은 영웅 Lv${H.SKILL_DRAFT_LEVEL} 선택에서 얻습니다.`;
+      this.message = `첫 스킬은 영웅 Lv${H.SKILL_DRAFT_ROUND} 선택에서 얻습니다.`;
       return false;
     }
     if (this.skillRerollUsedThisRound) {
@@ -1333,6 +1402,13 @@ export class Game {
 
     this.round++;
     this.roundTime = 0;
+
+    // 증강·스킬 드래프트는 **라운드**가 준다 (2026-07-20) — 레벨 기준이던 시절엔
+    // XP를 안 사면 Lv15에서 멈춰 3번째 증강부터 영영 못 받았다.
+    if (H.grantsAugment(this.round)) this.hero.pendingAugmentPicks++;
+    if (H.grantsSkillDraft(this.round)) this.hero.pendingSkillDraft++;
+    // R45 무료 강화 1회 (사용자 지시) — 후반에 빌드를 한 번 더 밀어준다
+    if (this.round === B.FREE_AUGMENT_UPGRADE_ROUND) this.pendingFreeUpgrades++;
     // 초반 느린 템포 — 몹 체력을 ×p로 낮춘다. 이동·공속은 update의 combatDt가 함께 늦춘다.
     const hp = Math.round(B.enemyHP(this.round) * B.earlyTempo(this.round));
     const armor = B.enemyArmor(this.round);

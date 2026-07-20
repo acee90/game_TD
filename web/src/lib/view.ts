@@ -337,6 +337,48 @@ export const SKILL_ROLE_LABEL: Record<SkillRole, { label: string; color: string 
   utility: { label: '유틸', color: '#7ce7ff' },
 };
 
+/**
+ * 증강 강화 후보 카드 HTML — 등급이 **어떻게 오르는지**를 보여준다.
+ * 지금 등급 → 다음 등급과 효과 배수를 나란히 두어, 무엇을 사는지가 읽히게 한다.
+ */
+export function upgradeChoiceCardsHtml(game: Game, locked: boolean): string {
+  return game.upgradeChoices
+    .map((augIndex, i) => {
+      const card = game.hero.augments[augIndex];
+      if (!card) return '';
+      const now = HD.RARITIES[card.rarity];
+      const nextRarity = HD.RARITY_ORDER[HD.RARITY_ORDER.indexOf(card.rarity) + 1];
+      const next = HD.RARITIES[nextRarity];
+      const lockStyle = locked ? ';opacity:.45;pointer-events:none' : '';
+      return `<button class="augcard" data-index="${i}" style="border-color:${next.color}${lockStyle}">
+        <div class="k">
+          <span style="color:${HD.displayKindColor(card.augment)}">${HD.displayKindLabel(card.augment)}</span>
+          <span class="rar" style="color:${next.color}">${now.label} → <b>${next.label}</b></span>
+        </div>
+        <div class="n">${card.augment.name}</div>
+        <div class="d">${card.augment.description}</div>
+        <div class="d" style="color:${next.color}">효과 ×${now.power} → <b>×${next.power}</b></div>
+      </button>`;
+    })
+    .join('');
+}
+
+/** 영웅 강화 버튼 라벨 · 툴팁 */
+export function augmentUpgradeLabel(game: Game): { text: string; title: string; disabled: boolean } {
+  const free = game.pendingFreeUpgrades > 0;
+  const cost = game.augmentUpgradeCost;
+  const pool = game.hero.upgradableAugments.length;
+  const text = free ? '▲ 증강 강화 — 무료' : `▲ 증강 강화 — ${cost}금화`;
+  const title =
+    pool === 0
+      ? '더 강화할 증강이 없습니다 (플래티넘은 천장입니다).'
+      : free
+        ? `무료 강화 1회가 남아 있습니다. 후보 ${B.AUGMENT_UPGRADE_CHOICES}장 중 하나를 고릅니다.`
+        : `보유 증강 중 ${B.AUGMENT_UPGRADE_CHOICES}장을 뽑아 그중 하나의 등급을 올립니다.` +
+          ` 강화할수록 비싸집니다 (지금까지 ${game.augmentUpgrades}회).`;
+  return { text, title, disabled: !game.canOfferAugmentUpgrade };
+}
+
 /** 명예의 전당 목록 HTML */
 export function hallOfFameHtml(records: readonly hallOfFame.Record[], myRank: number | null): string {
   const rows = records
@@ -364,7 +406,7 @@ export function isGodSelected(game: Game): boolean {
 export function skillRerollTitle(game: Game): string {
   const held = `지금 든 스킬: ${game.hero.skill.def.name}`;
   if (isStarterSkill(game.hero.skillId)) {
-    return `${held} — 영웅 Lv${HD.SKILL_DRAFT_LEVEL}에 첫 스킬을 고른 뒤부터 다시 뽑을 수 있습니다.`;
+    return `${held} — R${HD.SKILL_DRAFT_ROUND}에 첫 스킬을 고른 뒤부터 다시 뽑을 수 있습니다.`;
   }
   if (game.skillRerollUsedThisRound) return `${held} — 스킬 리롤은 라운드당 한 번입니다.`;
   if (game.beam !== null) return `${held} — 레이저가 나가는 중에는 바꿀 수 없습니다.`;
