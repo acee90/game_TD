@@ -11,6 +11,7 @@ import {
   pathPos, pathPosOffset,
 } from '@engine/core/map';
 import { BOSS_COOLDOWN_SECONDS } from '@engine/data/balance';
+import { range } from '@engine/game/combat';
 import { GOD_TIER, RACE_COLOR } from '@engine/data/units';
 import { HERO_RADIUS } from '@engine/data/hero';
 import { SKILLS } from '@engine/data/skills';
@@ -60,9 +61,28 @@ const TRAIL: Record<ProjStyle, { interval: number; life: number; scale: number; 
   bullet: { interval: 0.04, life: 0.18, scale: 0.7, gravity: 0 },
 };
 
+/** 씬 바깥(Svelte HUD)과 공유하는 의존성 */
+export interface SceneDeps {
+  /** 엔진 인스턴스 — HUD와 같은 객체를 본다 */
+  game: Game;
+  /** 게임 배속 (HUD의 1×/1.25×/1.5×/2× 버튼) */
+  speed: () => number;
+  /** 데모 봇 모드 (?bot) — 켜면 증강·건설을 자동으로 굴리고 캔버스 안 HUD를 띄운다 */
+  bot: boolean;
+  /** 시뮬레이션 진행 여부 — 시작 게이트·메뉴가 닫혀 있을 때만 true. 렌더는 계속 돈다 */
+  running?: () => boolean;
+  /** 프레임마다 호출 — Svelte HUD의 tick을 올린다 */
+  onTick?: () => void;
+}
+
 export class BattleScene extends Phaser.Scene {
-  private game_!: Game;
+  private game_: Game;
   private bot = new PreviewBot();
+
+  constructor(private deps: SceneDeps) {
+    super('battle');
+    this.game_ = deps.game;
+  }
 
   private towers: TowerView[] = [];
   private enemyImgs = new Map<Enemy, Phaser.GameObjects.Image>();
@@ -86,14 +106,9 @@ export class BattleScene extends Phaser.Scene {
   private texts!: TextPool;
   private walkClock = 0;
 
-  constructor() {
-    super('battle');
-  }
-
   create(): void {
     makeTextures(this);
     makeGlowTextures(this); // HD-2D 이펙트 — 월드는 NEAREST, 글로우는 LINEAR
-    this.game_ = new Game();
 
     this.drawBoard();
     this.overlay = this.add.graphics().setDepth(DEPTH.overlay);
@@ -140,13 +155,31 @@ export class BattleScene extends Phaser.Scene {
       .setResolution(2)
       .setVisible(false);
 
-    // 클릭: 빈 타일 = 생성 시도 · 그 외 = 영웅 이동
+    // 클릭 규칙 — web App.svelte의 onCanvasPointerDown과 동일:
+    // 몹 클릭 = 스탯 보기 → 타일 = 선택/생성 → 제단·바깥 = 영웅 이동
     this.input.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
-      const slot = this.game_.slots.find(
-        (s) => Math.abs(s.x - pointer.worldX) <= TILE / 2 && Math.abs(s.y - pointer.worldY) <= TILE / 2,
+      const game = this.game_;
+      const x = pointer.worldX;
+      const y = pointer.worldY;
+
+      const enemy = game.enemyAt(x, y);
+      if (enemy) {
+        game.selectedEnemy = enemy;
+        game.selected = null;
+        return;
+      }
+      game.selectedEnemy = null;
+
+      const hit = game.slots.find(
+        (s) => Math.abs(s.x - x) <= TILE / 2 && Math.abs(s.y - y) <= TILE / 2,
       );
-      if (slot && !slot.tower) this.game_.spawnUnit(slot);
-      else this.game_.moveHero(pointer.worldX, pointer.worldY);
+      if (!hit || hit === game.altarSlot) {
+        game.selected = null;
+        game.moveHero(x, y);
+        return;
+      }
+      if (hit.tower) game.selected = hit;
+      else game.spawnUnit(hit);
     });
   }
 
@@ -186,11 +219,14 @@ export class BattleScene extends Phaser.Scene {
   }
 
   update(_time: number, deltaMs: number): void {
-    const dt = Math.min(deltaMs / 1000, 0.05);
+    const dt = Math.min(deltaMs / 1000, 0.05) * this.deps.speed();
     const game = this.game_;
 
-    this.bot.step(game, dt);
-    game.update(dt);
+    // 시작 게이트·메뉴 중에는 시뮬만 멈춘다 — 보드·HUD는 계속 그린다
+    if (this.deps.running?.() ?? true) {
+      if (this.deps.bot) this.bot.step(game, dt); // 데모 모드에서만 자동 조작
+      game.update(dt);
+    }
     this.walkClock += dt;
 
     this.syncTowers();
@@ -207,6 +243,7 @@ export class BattleScene extends Phaser.Scene {
     this.particles.update(dt);
     this.embers.update(dt);
     this.texts.update(dt);
+    this.deps.onTick?.();
   }
 
   private syncTowers(): void {
@@ -562,6 +599,22 @@ export class BattleScene extends Phaser.Scene {
       g.fillRect(x - 11, y - 15, 22 * Math.max(0, game.decoy.hp / game.decoy.maxHp), 2);
     }
 
+    // 선택 표시 — 타워는 타일 테두리+사거리 링, 몹은 금색 원 (ActionsColumn 정보와 짝)
+    const sel = game.selected;
+    if (sel?.tower) {
+      const half = TILE / 2 - 2;
+      g.lineStyle(1.5, 0xe3b23e, 1);
+      g.strokeRect(sel.x - half, sel.y - half, half * 2, half * 2);
+      g.lineStyle(1, 0xe3b23e, 0.28);
+      g.strokeCircle(sel.x, sel.y, range(sel.tower) * game.hero.stats.towerRangeMult);
+    }
+    const selEnemy = game.selectedEnemy;
+    if (selEnemy && !selEnemy.dead) {
+      const [ex, ey] = pathPosOffset(selEnemy.distance, selEnemy.lateral ?? 0);
+      g.lineStyle(1.5, 0xe3b23e, 0.9);
+      g.strokeCircle(ex, ey, selEnemy.radius + 5);
+    }
+
     // 넥서스 보스 쿨타임 링
     if (game.bossCooldown > 0) {
       const progress = 1 - game.bossCooldown / BOSS_COOLDOWN_SECONDS;
@@ -574,6 +627,13 @@ export class BattleScene extends Phaser.Scene {
 
   private syncHud(): void {
     const game = this.game_;
+    // 캔버스 안 텍스트 HUD는 데모(봇) 전용 — DOM HUD가 있으면 중복이라 숨긴다
+    if (!this.deps.bot) {
+      this.hud.setVisible(false);
+      this.msg.setVisible(false);
+      this.pickBanner.setVisible(false);
+      return;
+    }
     this.hud.setText(
       `R${game.round}  금화 ${Math.floor(game.mineral)}  마정석 ${Math.floor(game.gas)}  ` +
       `라이프 ${game.lives}  킬 ${game.kills}  영웅 Lv${game.hero.level}${game.hero.atMaxLevel ? '(만렙)' : ''}`,
