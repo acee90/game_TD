@@ -678,6 +678,46 @@ describe('돌파와 스킬', () => {
   });
 });
 
+describe('보스 조준 — 3기 가중 + 앞선 보스 우선 (2026-07-21, 사용자 지시)', () => {
+  const boss = (distance: number): Enemy => ({
+    kind: 'boss', name: 'B', maxHp: 1e9, hp: 1e9, armor: 0,
+    speed: 0, radius: 14, distance, bossLevel: 1,
+  });
+
+  test('혼자 걷는 보스도 불화살 자동 시전 조건(2기)을 채운다 — 보스는 3기 취급', () => {
+    const game = new Game();
+    game.hero.skillId = 'firearrow';
+    game.hero.mana = game.hero.manaMax;
+    expect(game.shouldAutoCastSkill).toBe(false); // 적이 없으면 안 쏜다
+
+    game.enemies.push(boss(game.hero.distance));
+    expect(game.shouldAutoCastSkill).toBe(true); // 밀집도 1이지만 가중 3 ≥ 2
+  });
+
+  test('보스가 잡몹 무리보다 경로에서 앞서면 장판을 보스 위에 깐다', () => {
+    const game = new Game();
+    game.hero.skillId = 'firearrow';
+    // 잡몹 5기 무리 (뒤쪽) + 앞서 걷는 보스
+    for (let i = 0; i < 5; i++) game.enemies.push(mob(100));
+    const leader = boss(400);
+    game.enemies.push(leader);
+
+    castNow(game);
+    expect(game.zones).toHaveLength(1);
+    expect(game.zones[0].distance).toBe(leader.distance);
+  });
+
+  test('보스가 무리 뒤에 있으면 낙점은 여전히 가장 뭉친 잡몹 무리다', () => {
+    const game = new Game();
+    game.hero.skillId = 'firearrow';
+    for (let i = 0; i < 5; i++) game.enemies.push(mob(400));
+    game.enemies.push(boss(100)); // 무리보다 뒤
+
+    castNow(game);
+    expect(game.zones[0].distance).toBe(400); // 가중 3 < 잡몹 5
+  });
+});
+
 describe('강화 5축의 새 축 — 여파(도트) · 부식(방깎) (2026-07-21)', () => {
   test('여파는 스킬 명중 후 도트를 남기고, 시간이 지나면 꺼진다', () => {
     const game = new Game();

@@ -304,10 +304,12 @@ function instantXpPreview(game: Game, instantXp: number): string {
   const hero = game.hero;
   let level = hero.level;
   let xp = hero.xp + Math.round(instantXp) * hero.stats.xpMult;
-  while (xp >= HD.xpToNext(level)) {
+  // 만렙(Lv20)은 하드캡 — 초과분은 버려지므로 예상도 거기서 멈춘다
+  while (level < HD.HERO_MAX_LEVEL && xp >= HD.xpToNext(level)) {
     xp -= HD.xpToNext(level);
     level++;
   }
+  if (level >= HD.HERO_MAX_LEVEL) return `예상: Lv${hero.level} → <b>Lv${level} (만렙)</b>`;
   return level > hero.level
     ? `예상: Lv${hero.level} → <b>Lv${level}</b>`
     : `예상: Lv${level} 유지 (경험치 ${Math.round(xp)}/${HD.xpToNext(level)})`;
@@ -448,12 +450,11 @@ export function augmentUpgradeLabel(game: Game): { text: string; title: string; 
   const free = game.pendingFreeUpgrades > 0;
   const cost = game.augmentUpgradeCost;
   const pool = game.hero.upgradableAugments.length;
-  // 해금 전에는 왜 잠겼는지를 버튼이 직접 말한다 (2026-07-21, 모든 증강 획득 후 해금)
+  // 해금 전에는 왜 잠겼는지를 버튼이 직접 말한다 (2026-07-21, 만렙 도달 후 해금)
   if (!game.augmentUpgradeUnlocked) {
-    const total = HD.AUGMENT_ROUNDS.length;
     return {
-      text: `▲ 증강 강화 — 잠김 (${game.hero.augments.length}/${total})`,
-      title: `모든 증강 ${total}개를 받으면 열립니다 (증강 라운드: R${HD.AUGMENT_ROUNDS.join('·R')}).`,
+      text: `▲ 증강 강화 — 잠김 (Lv${game.hero.level}/${HD.HERO_MAX_LEVEL})`,
+      title: `만렙(Lv${HD.HERO_MAX_LEVEL})에 도달하면 열립니다 — 만렙 이후 영웅은 증강 강화로 강해집니다.`,
       disabled: true,
     };
   }

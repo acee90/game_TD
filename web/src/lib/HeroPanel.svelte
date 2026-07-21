@@ -31,13 +31,18 @@
       level: `Lv${hero.level}`,
       hpWidth: (hero.alive ? hero.hp / stats.maxHp : 0) * 100,
       hpText: hero.alive ? `${Math.ceil(hero.hp)}/${stats.maxHp}` : `부활 ${Math.ceil(hero.respawnTimer)}s`,
-      xpWidth: (hero.xp / hero.xpNeeded) * 100,
-      xpText: `${Math.floor(hero.xp)}/${hero.xpNeeded}${HD.nextAugmentRound(game.round) ? ` · 다음 증강 R${HD.nextAugmentRound(game.round)}` : ''}`,
+      // 만렙(Lv20 하드캡) — 바를 가득 채우고, 이후 성장 수단(증강 강화)을 알려준다
+      xpWidth: hero.atMaxLevel ? 100 : (hero.xp / hero.xpNeeded) * 100,
+      xpText: hero.atMaxLevel
+        ? `만렙 — 증강 강화로 성장${HD.nextAugmentRound(game.round) ? ` · 다음 증강 R${HD.nextAugmentRound(game.round)}` : ''}`
+        : `${Math.floor(hero.xp)}/${hero.xpNeeded}${HD.nextAugmentRound(game.round) ? ` · 다음 증강 R${HD.nextAugmentRound(game.round)}` : ''}`,
       stats: heroStatsText(game),
       statButtons: HD.STAT_IDS.map((stat) => ({
         label: `${HD.STAT_LABEL[stat]} ${attributes[stat].toFixed(1)}`,
       })),
-      buyXpText: `[E] XP +${HD.XP_BUY_AMOUNT} (${HD.XP_BUY_GOLD}금화)`,
+      buyXpText: hero.atMaxLevel
+        ? '만렙 — XP 구매 종료'
+        : `[E] XP +${HD.XP_BUY_AMOUNT} (${HD.XP_BUY_GOLD}금화)`,
       buyXpDisabled: !game.canBuyXp,
       augs: heroAugsHtml(game),
       skill: skillView,

@@ -469,15 +469,22 @@ export class Hero {
   }
 
   /** 경험치를 넣고, 레벨이 오르면 오른 레벨 수를 돌려준다 */
+  /** 만렙(Lv20 하드캡)인가 — 이후 영웅이 강해지는 길은 증강 강화뿐이다 (2026-07-21) */
+  get atMaxLevel(): boolean {
+    return this.level >= H.HERO_MAX_LEVEL;
+  }
+
   gainXp(amount: number): number {
-    if (!this.alive) return 0;
+    if (!this.alive || this.atMaxLevel) return 0;
     this.xp += amount;
     let gained = 0;
-    while (this.xp >= this.xpNeeded) {
+    while (this.xp >= this.xpNeeded && !this.atMaxLevel) {
       this.xp -= this.xpNeeded;
       this.level++;
       gained++;
     }
+    // 만렙에 닿는 순간 초과 경험치는 버린다 — 하드캡 (2026-07-21, 사용자 지시)
+    if (this.atMaxLevel) this.xp = 0;
     if (gained > 0) this.hp = this.stats.maxHp; // 레벨업 시 완전 회복
     return gained;
   }
@@ -588,6 +595,8 @@ export function augmentAllowed(hero: Hero, augment: H.Augment): boolean {
   if (hero.stacksOf(augment.id) >= augment.maxStacks) return false;
   if (H.requiresSplash(augment) && !hero.hasSplash) return false;
   if (!H.skillGateAllows(augment, hero.skillId)) return false;
+  // 만렙(하드캡)이면 경험치 일시불(깨달음)은 아무것도 안 준다 — 죽은 카드는 안 띄운다
+  if (augment.effect.instantXp && hero.atMaxLevel) return false;
   return true;
 }
 

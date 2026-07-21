@@ -17,10 +17,11 @@ const lcg = (seed: number) => {
 const card = (id: string, rarity: H.Rarity = 'silver') =>
   H.makeCard(H.AUGMENTS.find((a) => a.id === id)!, rarity);
 
-/** 강화 가능한 증강 넷을 든 게임 */
+/** 강화 가능한 증강 넷을 들고 만렙에 도달한 게임 — 강화는 만렙 해금이다 (2026-07-21) */
 const withAugments = (seed = 5) => {
   const g = new Game(lcg(seed));
   for (const id of ['bulwark', 'plating', 'swift', 'greed']) g.hero.addAugment(card(id));
+  g.hero.level = H.HERO_MAX_LEVEL;
   g.mineral = 1e6;
   return g;
 };

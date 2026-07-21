@@ -112,11 +112,19 @@ export const AS_AGI_SOFT_CAP = 23;
  */
 // 0.0125 → 0.005 (2026-07-19, 사용자 지시): 민첩 소프트캡과 세트 — 레벨 축 공속도
 // 완만하게. Lv40 무증강 3.0/초 앵커의 나머지 절반을 이 축이 만든다.
-export const LEVEL_ATTACK_SPEED_RATE = 0.005;
+// 0.005 → 0.045 (2026-07-21, 사용자 지시: "만렙 20 기준 공속 1.9~2.0"): Lv20 하드캡
+// 체제의 새 앵커. 민첩 지수 성장은 포화식에 먹혀 공속을 거의 못 올리므로(만렙 +97%가
+// 상한) 레벨 축이 나머지를 만든다 — Lv1 0.73/초는 거의 그대로 두고(보스 앵커 보존)
+// 만렙 1.96/초에 맞춘 재적합 해다. 무증강: Lv1 0.73 · Lv10 1.24 · Lv15 1.59 · Lv20 1.96.
+export const LEVEL_ATTACK_SPEED_RATE = 0.045;
 /** 공격 간격 하한 — 민첩을 아무리 골라도 이 밑으로는 안 내려간다 */
 export const MIN_ATTACK_INTERVAL = 0.25;
-/** 지능 1당 스킬 피해 +3.5% */
-export const SKILL_PER_INT = 0.035;
+/**
+ * 지능 1당 스킬 피해. 0.035 → 0.012 (2026-07-21, 스탯 지수 성장과 세트) —
+ * 지능 종점이 23 → 69로 커진 비율만큼 낮춰 **만렙 스킬 피해(+83%)를 보존**한다.
+ * 곡선 모양만 지수가 되고 만렙 앵커는 그대로다.
+ */
+export const SKILL_PER_INT = 0.012;
 
 /**
  * 레벨업이 세 스탯에 나눠 주는 총 포인트 — 후반 레벨일수록 굵게.
@@ -146,33 +154,29 @@ export const SKILL_PER_INT = 0.035;
  *
  * 20으로 잡은 근거: 실측에서 XP를 안 사면 R40에 Lv15~16에서 멈췄다(R59까지 그대로).
  * 20은 자연 성장으로 **닿을락 말락 한 지점**이라, 구매가 의미를 갖되 필수는 아니다.
+ *
+ * **하드캡이다** (2026-07-21, 사용자 지시 — 소프트캡에서 변경). Lv20에서 레벨업이
+ * 완전히 멈추고 초과 경험치는 버려지며 XP 구매도 잠긴다. 만렙 이후 영웅이 강해지는
+ * 길은 **증강 강화뿐**이다 — 레벨은 바닥을 깔고, 골드는 강화(등급)로 들어간다.
+ * (예전의 만렙 후 선형 성장 POST_MAX_STAT_POINTS는 이 결정으로 폐지.)
  */
 export const HERO_MAX_LEVEL = 20;
 
-/** 만렙 이후 레벨당 스탯 — 지수 성장이 끝나고 선형으로만 붙는다 */
-export const POST_MAX_STAT_POINTS = 1;
-
-export const HERO_LATE_GAME_FROM = 19;
-export const HERO_LATE_GAME_DIVISOR = 3;
-export const levelStatPoints = (level: number): number =>
-  1 +
-  Math.floor(level / 6) +
-  Math.floor(Math.max(0, level - HERO_LATE_GAME_FROM) / HERO_LATE_GAME_DIVISOR);
-
 /**
- * 해당 레벨까지 각 스탯이 공통으로 받은 자연 성장치. 총 예산을 3등분해 파워 총량을 보존한다.
+ * 스탯 성장 — **지수 곡선** (2026-07-21, 사용자 지시: "영웅 스탯 지수그래프로 증가").
  *
- * **만렙(HERO_MAX_LEVEL)까지는 지수, 그 뒤로는 선형**이다 (2026-07-20).
- * 만렙 뒤에도 아주 안 크면 후반 레벨업이 완전히 무의미해져 킬 경험치가 죽은 자원이 된다 —
- * 대신 기울기를 확 낮춰 "영웅이 계속 커져서 타워가 필요 없어지는" 일을 막는다.
+ * 전에는 레벨당 포인트(1 + floor(L/6) + 후반 가산)를 누적해 3등분하는 계단식 가산이었다.
+ * 만렙이 Lv20 하드캡이 되면서 지수의 위험(무한 폭주)이 사라졌으므로, 곡선을
+ * `기본값 × 1.12^(레벨-1)`로 단순화한다 — 레벨 하나하나가 뒤로 갈수록 확 커지고,
+ * 만렙 직전 구간이 성장의 절정이 된다.
+ *
+ * 1.12의 근거: 힘 종점이 2 → 17.2로 **옛 계단식 곡선의 만렙 종점(17.3)과 일치**한다 —
+ * 힘이 정하는 공격력·체력의 만렙 앵커는 그대로 두고 곡선 모양만 지수로 바꾼다.
+ * 민첩·지능은 기본값(8)이 커서 종점이 23 → 69로 크게 오른다: 민첩은 포화식이
+ * 흡수하고(공속 앵커는 LEVEL_ATTACK_SPEED_RATE로 잡는다), 지능은 SKILL_PER_INT를
+ * 같은 비율로 낮춰 만렙 스킬 피해를 보존한다.
  */
-export function statBonusByLevel(level: number): number {
-  let total = 0;
-  const capped = Math.min(level, HERO_MAX_LEVEL);
-  for (let l = 2; l <= capped; l++) total += levelStatPoints(l);
-  if (level > HERO_MAX_LEVEL) total += (level - HERO_MAX_LEVEL) * POST_MAX_STAT_POINTS;
-  return total / STAT_IDS.length;
-}
+export const HERO_STAT_GROWTH = 1.12;
 
 export interface HeroAttributes {
   readonly str: number;
@@ -180,13 +184,13 @@ export interface HeroAttributes {
   readonly int: number;
 }
 
-/** UI와 전투 계산이 공유하는 레벨별 실제 능력치. */
+/** UI와 전투 계산이 공유하는 레벨별 실제 능력치. 만렙(하드캡) 값으로 잘라둔다. */
 export function attributesByLevel(level: number): HeroAttributes {
-  const bonus = statBonusByLevel(level);
+  const mult = Math.pow(HERO_STAT_GROWTH, Math.min(level, HERO_MAX_LEVEL) - 1);
   return {
-    str: HERO_BASE_STR + bonus,
-    agi: HERO_BASE_AGI + bonus,
-    int: HERO_BASE_INT + bonus,
+    str: HERO_BASE_STR * mult,
+    agi: HERO_BASE_AGI * mult,
+    int: HERO_BASE_INT * mult,
   };
 }
 

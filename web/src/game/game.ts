@@ -324,30 +324,57 @@ export class Game {
     return this.autoCastTargetCount(skill) >= skill.def.autoCastMinTargets;
   }
 
-  /** 지금 시전하면 몇 기가 영향을 받는가 */
+  /** 밀집도 셈법의 적 가중치 — 보스는 3기 취급 (2026-07-21, K.BOSS_TARGET_WEIGHT 주석) */
+  private targetWeight(enemy: Enemy): number {
+    return enemy.kind === 'boss' ? K.BOSS_TARGET_WEIGHT : 1;
+  }
+
+  /** 이 지점 반경 안 적들의 가중 밀집도 — 낙점형 스킬(유성·장판 화살)의 조준 점수 */
+  private weightedCountAround(live: readonly Enemy[], center: number, radius: number): number {
+    return live.reduce(
+      (sum, e) => sum + (Math.abs(e.distance - center) <= radius ? this.targetWeight(e) : 0),
+      0,
+    );
+  }
+
+  /**
+   * 낙점보다 경로에서 **앞선**(돌파에 더 가까운) 보스 (2026-07-21, 사용자 지시:
+   * "보스가 path에서 앞서 있으면 보스한테 먼저"). 잡몹 무리가 아무리 뭉쳐 있어도
+   * 그보다 앞서 걷는 보스가 더 급한 표적이다 — 있으면 낙점을 보스 위로 옮긴다.
+   */
+  private bossAheadOf(live: readonly Enemy[], distance: number): Enemy | null {
+    let lead: Enemy | null = null;
+    for (const e of live) {
+      if (e.kind !== 'boss' || e.distance <= distance) continue;
+      if (!lead || e.distance > lead.distance) lead = e;
+    }
+    return lead;
+  }
+
+  /** 지금 시전하면 몇 기가 영향을 받는가 (보스는 3기 가중 — targetWeight) */
   private autoCastTargetCount(skill: K.ResolvedSkill): number {
     const hero = this.hero;
     const live = this.enemies.filter((e) => !e.dead);
+    const weightedIn = (predicate: (e: Enemy) => boolean): number =>
+      live.reduce((sum, e) => sum + (predicate(e) ? this.targetWeight(e) : 0), 0);
 
     switch (skill.def.id) {
       case 'smite':
         // 기본 스킬 — 사거리 안에 하나라도 있으면 값어치가 있다
-        return live.filter((e) => Math.abs(e.distance - hero.distance) <= hero.stats.range).length;
+        return weightedIn((e) => Math.abs(e.distance - hero.distance) <= hero.stats.range);
       case 'whirlwind':
-        return live.filter((e) => Math.abs(e.distance - hero.distance) <= skill.radius).length;
+        return weightedIn((e) => Math.abs(e.distance - hero.distance) <= skill.radius);
       case 'volley':
-        return live.filter((e) => Math.abs(e.distance - hero.distance) <= hero.stats.range).length;
+        return weightedIn((e) => Math.abs(e.distance - hero.distance) <= hero.stats.range);
       case 'meteor':
         return live.reduce(
           (best, candidate) =>
-            Math.max(
-              best,
-              live.filter((e) => Math.abs(e.distance - candidate.distance) <= skill.radius).length,
-            ),
+            Math.max(best, this.weightedCountAround(live, candidate.distance, skill.radius)),
           0,
         );
       case 'decoy':
-        // 이미 세워져 있으면 다시 안 세운다
+        // 이미 세워져 있으면 다시 안 세운다.
+        // 보스 가중치도 없다 — 허수아비는 보스를 붙잡지 못하므로 보스만 보고 세우면 낭비다.
         if (this.decoy) return 0;
         return live.filter((e) => {
           const gap = hero.distance - e.distance;
@@ -358,31 +385,28 @@ export class Game {
         // (실제 시전 방향은 laserDirection이 같은 기준으로 고른다).
         if (this.beam) return 0;
         return Math.max(
-          live.filter((e) => {
+          weightedIn((e) => {
             const gap = e.distance - hero.distance;
             return gap >= -H.ENEMY_TOUCH_RANGE && gap <= skill.beamLength;
-          }).length,
-          live.filter((e) => {
+          }),
+          weightedIn((e) => {
             const gap = hero.distance - e.distance;
             return gap >= -H.ENEMY_TOUCH_RANGE && gap <= skill.beamLength;
-          }).length,
+          }),
         );
       case 'firearrow':
       case 'icearrow':
         // 장판은 '가장 뭉친 곳'에 깐다 — 유성과 같은 셈법
         return live.reduce(
           (best, candidate) =>
-            Math.max(
-              best,
-              live.filter((e) => Math.abs(e.distance - candidate.distance) <= skill.zoneRadius).length,
-            ),
+            Math.max(best, this.weightedCountAround(live, candidate.distance, skill.zoneRadius)),
           0,
         );
       case 'execution':
-        return live.filter((e) => Math.abs(e.distance - hero.distance) <= hero.stats.range).length;
+        return weightedIn((e) => Math.abs(e.distance - hero.distance) <= hero.stats.range);
       case 'chain':
         // 튕김은 몹이 많아야 값어치가 있다 — 사거리 안 적 수를 그대로 센다
-        return live.filter((e) => Math.abs(e.distance - hero.distance) <= hero.stats.range).length;
+        return weightedIn((e) => Math.abs(e.distance - hero.distance) <= hero.stats.range);
     }
   }
 
@@ -476,18 +500,19 @@ export class Game {
   private castZoneArrow(skill: K.ResolvedSkill): void {
     const hero = this.hero;
     const live = this.enemies.filter((e) => !e.dead);
-    // 가장 뭉친 지점에 쏜다
+    // 가장 뭉친 지점에 쏜다 (보스는 3기 가중)
     let best = hero.distance;
     let bestCount = -1;
     for (const candidate of live) {
-      const count = live.filter(
-        (e) => Math.abs(e.distance - candidate.distance) <= skill.zoneRadius,
-      ).length;
+      const count = this.weightedCountAround(live, candidate.distance, skill.zoneRadius);
       if (count > bestCount) {
         bestCount = count;
         best = candidate.distance;
       }
     }
+    // 낙점보다 앞서 걷는 보스가 있으면 보스 위에 깐다 (2026-07-21, 사용자 지시)
+    const lead = this.bossAheadOf(live, best);
+    if (lead) best = lead.distance;
 
     // 착탄 즉발 피해
     for (const enemy of live) {
@@ -648,19 +673,25 @@ export class Game {
     let bestDistance = this.enemies[0].distance;
     let bestCount = 0;
     for (const candidate of this.enemies) {
-      const count = this.enemies.filter(
-        (e) => Math.abs(e.distance - candidate.distance) <= skill.radius,
-      ).length;
+      // 보스는 3기 가중 — 낙점 점수 (2026-07-21)
+      const count = this.weightedCountAround(this.enemies, candidate.distance, skill.radius);
       if (count > bestCount) {
         bestCount = count;
         bestDistance = candidate.distance;
       }
     }
+    // 낙점보다 앞서 걷는 보스가 있으면 보스 위에 떨어뜨린다 (장판 화살과 같은 규칙)
+    const lead = this.bossAheadOf(this.enemies.filter((e) => !e.dead), bestDistance);
+    if (lead) bestDistance = lead.distance;
+    let hits = 0;
     for (const enemy of this.enemies) {
-      if (Math.abs(enemy.distance - bestDistance) <= skill.radius) this.skillHit(enemy, skill);
+      if (Math.abs(enemy.distance - bestDistance) <= skill.radius) {
+        this.skillHit(enemy, skill);
+        hits++;
+      }
     }
     const [x, y] = pathPos(bestDistance);
-    this.float(x, y, `유성! ${bestCount}기`, '#c065e0');
+    this.float(x, y, `유성! ${hits}기`, '#c065e0');
     this.shots.push({ x, y, tx: x, ty: y, life: 0.3, color: '#c065e0', splashRadius: skill.radius });
   }
 
@@ -1177,13 +1208,13 @@ export class Game {
   }
 
   /**
-   * 증강 강화 해금 — 예정된 증강(AUGMENT_ROUNDS)을 **전부 받은 뒤**에만 (2026-07-21,
-   * 사용자 지시). 드래프트가 끝나기 전에 강화 골드가 도는 것(특히 일확천금 목돈으로
-   * 바로 강화를 돌리는 초반 연쇄)을 구조적으로 막고, "뽑기 끝 → 키우기 시작"으로
-   * 페이즈가 갈린다.
+   * 증강 강화 해금 — **만렙(Lv20 하드캡) 도달 후** (2026-07-21, 사용자 지시 —
+   * 당초 "모든 증강 획득 후"에서 변경). 만렙이 레벨 성장의 끝이자 강화의 시작이 된다:
+   * 레벨(바닥) → 증강(방향) → 강화(깊이). 만렙 전에 강화 골드가 도는 것(특히 일확천금
+   * 목돈으로 바로 강화를 돌리는 초반 연쇄)도 같은 문으로 막힌다.
    */
   get augmentUpgradeUnlocked(): boolean {
-    return this.hero.augments.length >= H.AUGMENT_ROUNDS.length;
+    return this.hero.atMaxLevel;
   }
 
   get canOfferAugmentUpgrade(): boolean {
@@ -1203,8 +1234,7 @@ export class Game {
   offerAugmentUpgrade(): boolean {
     if (this.upgradeChoices.length > 0) return false;
     if (!this.augmentUpgradeUnlocked) {
-      this.message =
-        `증강 강화는 모든 증강(${H.AUGMENT_ROUNDS.length}개)을 받은 뒤 열립니다.`;
+      this.message = `증강 강화는 만렙(Lv${H.HERO_MAX_LEVEL})에 열립니다.`;
       return false;
     }
     const pool = this.hero.upgradableAugments;
@@ -1417,13 +1447,16 @@ export class Game {
 
   // ── 골드 스탯 구매 ──
   get canBuyXp(): boolean {
-    return !this.over && this.hero.alive && this.mineral >= H.XP_BUY_GOLD;
+    // 만렙(Lv20 하드캡)이면 XP는 죽은 재화다 — 구매를 잠근다 (2026-07-21)
+    return !this.over && this.hero.alive && !this.hero.atMaxLevel && this.mineral >= H.XP_BUY_GOLD;
   }
 
   /** 골드로 XP 구매 (TFT식) — 영웅 성장의 주 연료 */
   buyXp(): boolean {
     if (!this.canBuyXp) {
-      this.message = `금화 부족 — XP 구매 ${H.XP_BUY_GOLD} 필요.`;
+      this.message = this.hero.atMaxLevel
+        ? '만렙(Lv20)입니다 — 이제 영웅은 증강 강화로만 강해집니다.'
+        : `금화 부족 — XP 구매 ${H.XP_BUY_GOLD} 필요.`;
       return false;
     }
     this.mineral -= H.XP_BUY_GOLD;

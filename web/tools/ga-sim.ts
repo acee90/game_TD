@@ -199,7 +199,8 @@ function runGame(g: Genome, seed: number): RunResult {
     round: lastRound,
     score: game.score,
     heroLevel: game.hero.level,
-    statPoints: H.statBonusByLevel(game.hero.level) * H.STAT_IDS.length,
+    // 지수 성장(2026-07-21) 후 "총 포인트" 개념이 사라졌다 — 힘 성장분으로 대신 요약한다
+    statPoints: (H.attributesByLevel(game.hero.level).str - H.HERO_BASE_STR) * H.STAT_IDS.length,
     augments: game.hero.augments.length,
     probes: game.probes,
     heroShare: game.heroDamageDealt / Math.max(1, game.heroDamageDealt + game.towerDamageDealt),

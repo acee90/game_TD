@@ -7,9 +7,9 @@ DMG_PER_STR,6,힘 1당 공격력
 HP_PER_STR,70,힘 1당 체력
 AS_PER_AGI,0.056,민첩 1당 공속 (포화식 분자)
 AS_AGI_SOFT_CAP,23,민첩 공속 소프트캡 — 기여 상한 AS_PER_AGI×CAP
-SKILL_PER_INT,0.035,지능 1당 스킬 피해
+SKILL_PER_INT,0.012,지능 1당 스킬 피해
 XP_BUY_GOLD,60,"XP 골드 구매 — 1골드=1XP, 버튼당 20 (3안 유지)"
-levelStatPoints(1),1,"레벨업당 세 스탯 총 포인트 (2+floor(L/10), 3등분)"
+HERO_STAT_GROWTH,1.12,"레벨당 스탯 지수 성장률 (기본값 × 1.12^(Lv-1), 2026-07-21)"
 HERO_ATTACK_INTERVAL,1.9034,초
 HERO_BASE_RANGE,130,
 XP_BASE_COST,14,

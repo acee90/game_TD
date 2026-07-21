@@ -201,7 +201,7 @@ write(
       ['AS_AGI_SOFT_CAP', H.AS_AGI_SOFT_CAP, '민첩 공속 소프트캡 — 기여 상한 AS_PER_AGI×CAP'],
       ['SKILL_PER_INT', H.SKILL_PER_INT, '지능 1당 스킬 피해'],
       ['XP_BUY_GOLD', H.XP_BUY_GOLD, 'XP 골드 구매 — 1골드=1XP, 버튼당 20 (3안 유지)'],
-      ['levelStatPoints(1)', H.levelStatPoints(1), '레벨업당 세 스탯 총 포인트 (2+floor(L/10), 3등분)'],
+      ['HERO_STAT_GROWTH', H.HERO_STAT_GROWTH, '레벨당 스탯 지수 성장률 (기본값 × 1.12^(Lv-1), 2026-07-21)'],
       ['HERO_ATTACK_INTERVAL', H.HERO_ATTACK_INTERVAL, '초'],
       ['HERO_BASE_RANGE', H.HERO_BASE_RANGE, ''],
       ['XP_BASE_COST', H.XP_BASE_COST, ''],
