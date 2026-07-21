@@ -168,6 +168,22 @@
     {#if !started}
       <div id="startOverlay">
         <h1>G-타워디펜스</h1>
+        <p class="startGoal">타워와 영웅으로 몬스터가 출구에 닿기 전에 막아내세요.</p>
+        <ol class="startGuide" aria-label="게임 방법">
+          <li>
+            <b>타워를 배치하세요</b>
+            <span>빈 타일을 누르거나 <kbd>P</kbd>로 랜덤 타워를 생성합니다.</span>
+          </li>
+          <li>
+            <b>같은 타워를 모으세요</b>
+            <span>같은 이름 2기는 자동 합성됩니다. 마정석으로 병과도 강화하세요.</span>
+          </li>
+          <li>
+            <b>영웅과 보스를 활용하세요</b>
+            <span>빈 곳을 눌러 영웅을 이동하고, 준비되면 보스를 소환해 보상을 얻으세요.</span>
+          </li>
+        </ol>
+        <p class="startTip"><b>라이프가 0이 되면 패배</b> · 스킬은 자동으로 시전됩니다.</p>
         <button id="startBtn" onclick={() => (started = true)}>게임 시작</button>
       </div>
     {/if}

@@ -216,6 +216,25 @@ button:disabled{opacity:.35;cursor:default;box-shadow:none}
 #startOverlay h1{font-size:24px;font-family:var(--serif);color:var(--gold);letter-spacing:.04em}
 #startOverlay button{padding:12px 28px;font-size:15px;font-family:var(--serif);border-color:var(--gold);color:var(--gold)}
 #startOverlay p{line-height:1.9}
+.startGoal{max-width:340px;color:#e8e2d0;font-size:13px}
+.startGuide{width:min(100%,360px);display:grid;gap:7px;margin:0;padding:0;list-style:none;text-align:left;counter-reset:start-step}
+.startGuide li{position:relative;padding:8px 10px 8px 39px;border:1px solid rgba(200,164,92,.24);border-radius:7px;
+               background:linear-gradient(100deg,rgba(200,164,92,.1),rgba(255,255,255,.025));counter-increment:start-step}
+.startGuide li::before{content:counter(start-step);position:absolute;left:10px;top:9px;width:20px;height:20px;border-radius:50%;
+                       display:grid;place-items:center;background:var(--gold);color:#171006;font:bold 12px var(--serif)}
+.startGuide b{display:block;color:#f1d28b;font-size:12px;margin-bottom:2px}
+.startGuide span{display:block;color:#b9b09e;font-size:10.5px;line-height:1.45}
+.startGuide kbd{padding:1px 4px;border:1px solid #746345;border-radius:3px;background:#17120b;color:#f1d28b;font:inherit}
+#startOverlay .startTip{color:#a9a08e;font-size:10.5px;line-height:1.45}
+#startOverlay .startTip b{color:#d9795f}
+
+@media (max-width:430px){
+  #startOverlay{gap:9px;padding:16px}
+  #startOverlay h1{font-size:21px}
+  .startGuide{gap:5px}
+  .startGuide li{padding-top:6px;padding-bottom:6px}
+  .startGuide li::before{top:7px}
+}
 
 /* 선택 정보 — 좌측 컬럼에서 넓게 (2026-07-17). 내용이 없어도 높이를 유지해 레이아웃이 안 튄다 */
 .actions #info{min-height:170px;font-size:12.5px;line-height:1.8}
