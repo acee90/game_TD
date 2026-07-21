@@ -161,13 +161,22 @@ export function makeTextures(scene: Phaser.Scene): void {
     px(11, 2, 1, 2, BODY);
   });
 
-  // 화살 (정규군) — 이단 깃 + 살대 + 촉 (18×6)
-  makeCanvasTexture(scene, 'arrow', 18, 6, (px) => {
-    px(0, 0, 2, 6, S1);
-    px(2, 1, 2, 4, S1);
-    px(4, 2, 9, 2, S3);
-    px(13, 1, 3, 4, BODY);
-    px(16, 2, 2, 2, BODY);
+  // 화살 — 작은 해상도에서도 깃·긴 화살대·촉이 분리되는 장축 실루엣 (30×8)
+  makeCanvasTexture(scene, 'arrow', 30, 8, (px) => {
+    // 이단 깃
+    px(0, 0, 2, 3, S1);
+    px(0, 5, 2, 3, S1);
+    px(2, 1, 3, 2, BODY);
+    px(2, 5, 3, 2, BODY);
+    px(4, 2, 3, 4, S2);
+    // 긴 화살대 — 어두운 하단과 밝은 상단으로 두께를 읽힌다
+    px(6, 3, 19, 2, S3);
+    px(7, 3, 18, 1, BODY);
+    // 넓은 삼각 촉
+    px(23, 2, 3, 4, S1);
+    px(25, 1, 2, 6, BODY);
+    px(27, 2, 2, 4, BODY);
+    px(29, 3, 1, 2, BODY);
   });
 
   // 포탄 (포병) — 둥근 쇳덩이 + 심지 구멍 (10×10)
@@ -338,4 +347,28 @@ export function makeGlowTextures(scene: Phaser.Scene): void {
     ctx.fillStyle = g;
     ctx.fillRect(0, 0, s, s);
   });
+
+  // 화살 리본 조각 — 여러 개가 비행 경로에 겹치며 하나의 긴 흰색 tail이 된다.
+  if (!scene.textures.exists('trail-streak')) {
+    const tex = scene.textures.createCanvas('trail-streak', 48, 8);
+    if (tex) {
+      const ctx = tex.context;
+      const fade = ctx.createLinearGradient(0, 0, 48, 0);
+      fade.addColorStop(0, 'rgba(255,255,255,0)');
+      fade.addColorStop(0.38, 'rgba(255,255,255,.08)');
+      fade.addColorStop(0.76, 'rgba(255,255,255,.48)');
+      fade.addColorStop(1, 'rgba(255,255,255,1)');
+      ctx.fillStyle = fade;
+      ctx.fillRect(0, 2, 48, 4);
+
+      const core = ctx.createLinearGradient(0, 0, 48, 0);
+      core.addColorStop(0, 'rgba(255,255,255,0)');
+      core.addColorStop(0.65, 'rgba(255,255,255,.15)');
+      core.addColorStop(1, 'rgba(255,255,255,.95)');
+      ctx.fillStyle = core;
+      ctx.fillRect(8, 3, 40, 2);
+      tex.refresh();
+      tex.setFilter(Phaser.Textures.FilterMode.LINEAR);
+    }
+  }
 }

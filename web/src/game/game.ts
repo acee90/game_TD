@@ -2049,13 +2049,13 @@ export class Game {
           }
           this.shots.push({
             x: hero.x, y: hero.y, tx, ty, life: 0.1,
-            color: '#c065e0', splashRadius: stats.splashRadius,
+            color: '#c065e0', splashRadius: stats.splashRadius, source: 'hero',
           });
         } else {
           this.heroHitEnemy(target, raw, stats, crit);
           this.shots.push({
             x: hero.x, y: hero.y, tx, ty, life: 0.1,
-            color: crit ? '#ffd23f' : '#ffffff',
+            color: crit ? '#ffd23f' : '#ffffff', source: 'hero',
           });
         }
         if (crit) this.float(tx, ty, 'CRIT!', '#ffd23f');
@@ -2425,7 +2425,7 @@ export class Game {
         }
         this.shots.push({
           x: slot.x, y: slot.y, tx: cx, ty: cy, life: 0.08, color,
-          splashRadius: blast, race: tower.def.race,
+          splashRadius: blast, race: tower.def.race, speed: tower.def.tags.includes('speed'),
         });
       } else {
         // 파워는 체력 최대(보스) 우선, 그 외에는 가장 멀리 간 적(돌파 임박) 우선
@@ -2441,7 +2441,10 @@ export class Game {
         target.lastHitByHero = false;
         const [x, y] = pathPos(target.distance);
         this.pushVfx({ kind: 'hit', x, y, amount: dealt, color });
-        this.shots.push({ x: slot.x, y: slot.y, tx: x, ty: y, life: 0.08, color, race: tower.def.race });
+        this.shots.push({
+          x: slot.x, y: slot.y, tx: x, ty: y, life: 0.08, color,
+          race: tower.def.race, speed: tower.def.tags.includes('speed'),
+        });
       }
       tower.cooldown = attackInterval(tower);
     }

@@ -103,6 +103,10 @@ export interface Shot {
   splashRadius?: number;
   /** 쏜 타워의 병과 — 렌더러가 투사체 모양(화살·포탄·볼트·가시)을 가른다 (2026-07-21) */
   race?: Race;
+  /** 스피드 태그 타워는 병과와 무관하게 화살 투사체를 쓴다. */
+  speed?: boolean;
+  /** 영웅 평타를 스킬·타워 투사체와 시각적으로 구분한다. */
+  source?: 'hero';
 }
 
 export interface FloatText {

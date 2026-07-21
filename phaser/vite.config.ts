@@ -49,4 +49,12 @@ export default defineConfig({
     port: 5199,
     fs: { allow: ['..'] }, // ../web/src를 읽는다
   },
+  build: {
+    rollupOptions: {
+      input: {
+        game: fileURLToPath(new URL('./index.html', import.meta.url)),
+        vfxLab: fileURLToPath(new URL('./vfx-lab.html', import.meta.url)),
+      },
+    },
+  },
 });
