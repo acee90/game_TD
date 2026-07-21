@@ -674,8 +674,7 @@ describe('채널링 vs 단발 — 쿨감의 값어치가 갈린다', () => {
     for (let i = 0; i < 20; i++) game.update(0.05);
     expect(game.hero.mana).toBe(manaWhileChanneling);
 
-    // 빔이 끝나면 그때부터 다시 찬다. earlyTempo(초반 슬로우모션, ~0.6배)가 걸려 있어
-    // 실제 필요한 시간은 channelSeconds/earlyTempo ≈ 5초 — 여유를 좀 더 줘서 빔이 끝난
+    // 빔이 끝나면 그때부터 다시 찬다. 채널 시간을 넘겨 빔이 끝난
     // 뒤 최소 한 프레임은 평타가 마나를 채울 시간을 보장한다.
     for (let i = 0; i < 140; i++) game.update(0.05);
     expect(game.beam).toBeNull();

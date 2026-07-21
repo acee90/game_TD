@@ -252,11 +252,8 @@ namespace GodTD.Core
                 return false;
             }
             BossCooldown = Balance.BOSS_COOLDOWN_SECONDS;
-            // 초반 느린 템포 — 보스는 이동속도만 ×p로 늦춘다(HP는 그대로). 체류시간 ×1/p 와
-            // 공속 ÷p 가 상쇄돼 전달 총딜 불변 → 난이도 중립. HP까지 낮추면 순수하게 쉬워진다.
-            float bossTempo = Balance.EarlyTempo(Round);
             Spawn(new EnemySpec(EnemyKind.Boss, $"Lv{level} BOSS",
-                Balance.BossHP(level), Balance.BossArmor(level), Balance.BOSS_SPEED * bossTempo,
+                Balance.BossHP(level), Balance.BossArmor(level), Balance.BOSS_SPEED,
                 radius: 18f, bossLevel: level));
             Record("boss_summoned", new BossSummonedData
             {
@@ -529,16 +526,15 @@ namespace GodTD.Core
 
             Round++;
             RoundTime = 0;
-            // 초반 느린 템포 — 몹 체력·이동속도를 같은 배수로 낮춘다(공속은 발사부에서 함께 낮춤)
-            float tempo = Balance.EarlyTempo(Round);
-            float hp = MathF.Round(Balance.EnemyHP(Round) * tempo);
+            // 초반 난이도 완화는 몹 HP에만 적용한다. 이동·공격 시간은 전 라운드 정속이다.
+            float hp = MathF.Round(Balance.EnemyHP(Round) * Balance.EarlyEnemyHpMultiplier(Round));
             float armor = Balance.EnemyArmor(Round);
 
             for (int i = 0; i < Balance.EnemyCount(Round); i++)
             {
                 var waveType = Balance.WaveTypeOf(Round);
                 spawnQueue.Enqueue(new EnemySpec(EnemyKind.Mob, $"R{Round}", hp, armor,
-                    Balance.ENEMY_SPEED * tempo, radius: 9f,
+                    Balance.ENEMY_SPEED, radius: 9f,
                     contactDamageMult: waveType.ContactDamageMult,
                     typeColor: waveType.Id == Balance.WaveTypeId.Normal ? null : waveType.Color));
             }
@@ -709,8 +705,8 @@ namespace GodTD.Core
             RoundTimer -= dt;
             if (RoundTimer <= 0f)
             {
-                RoundTimer = Balance.ROUND_SECONDS;
                 BeginRound();
+                RoundTimer = Balance.RoundCountdownSeconds(Round);
             }
 
             if (spawnQueue.Count > 0)
@@ -928,8 +924,7 @@ namespace GodTD.Core
                     }
                     // 평타가 마나를 채운다 (TFT식) — 공속이 곧 스킬 회전
                     hero.GainMana(Skills.MANA_PER_ATTACK);
-                    // 초반 느린 템포 — 영웅도 타워·몹과 같은 비율로 느리게 친다(마나 충전도 함께 느려짐)
-                    hero.AttackCooldown = stats.AttackInterval / Balance.EarlyTempo(Round);
+                    hero.AttackCooldown = stats.AttackInterval;
                 }
             }
 
@@ -1061,8 +1056,7 @@ namespace GodTD.Core
                         X = slot.X, Y = slot.Y, Tx = p.X, Ty = p.Y, Life = 0.08f, Color = color,
                     });
                 }
-                // 초반 느린 템포 — 공격 인터벌을 늘려(÷p) 타워도 몹과 같은 비율로 느리게 쏜다
-                tower.Cooldown = Combat.AttackInterval(tower) / Balance.EarlyTempo(Round);
+                tower.Cooldown = Combat.AttackInterval(tower);
             }
         }
     }

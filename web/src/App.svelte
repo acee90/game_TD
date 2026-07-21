@@ -30,7 +30,7 @@
   let menuOpen = $state(false);
 
   // 게임 속도 — 라운드 타이머·스폰·가스·전투 전부에 걸리는 dt 자체를 배속한다
-  // (game.update 안의 combatDt도 이 dt에서 파생되므로 자동으로 같이 빨라진다).
+  // 초반 전투 감속 없이 game.update 전체가 선택한 배율로 같이 빨라진다.
   const GAME_SPEEDS = [1, 1.25, 1.5, 2] as const;
   let gameSpeed = $state<(typeof GAME_SPEEDS)[number]>(1);
 

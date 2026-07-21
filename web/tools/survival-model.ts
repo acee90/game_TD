@@ -150,8 +150,9 @@ function killIncomeAt(round: number): number {
 // 보드와 무관하게 "가장 운 좋을 때 / 가장 나쁠 때"의 두 값으로 두고, 그 사이를 밴드로
 // 본다. 설계를 먼저 정하고 보스 체력·보상을 거기 맞추는 **역방향 작업**이 가능해진다.
 
-/** 한 라운드에 시도할 수 있는 소환 횟수 (쿨타임이 정한다) */
-export const bossAttemptsPerRound = (): number => B.ROUND_SECONDS / B.BOSS_COOLDOWN_SECONDS;
+/** 지정 라운드까지 시도할 수 있는 누적 소환 횟수 (쿨타임이 정한다) */
+export const bossAttemptsByRound = (round: number): number =>
+  B.cumulativeRoundCountdownSeconds(round) / B.BOSS_COOLDOWN_SECONDS;
 
 export type BossLuck = 'best' | 'typical' | 'worst' | 'mixed';
 
@@ -170,7 +171,7 @@ export const TYPICAL_ATTEMPTS_PER_RUNG = 4;
  *   보스를 부르되 한 칸도 못 오르는 최악이다.
  */
 export function bossGoldBound(round: number, luck: BossLuck, attemptsPerRung = TYPICAL_ATTEMPTS_PER_RUNG): number {
-  const attempts = Math.floor(bossAttemptsPerRound() * round);
+  const attempts = Math.floor(bossAttemptsByRound(round));
   const reward = (level: number): number =>
     B.BOSS_KILL_MINERAL[Math.min(level, B.BOSS_MAX_LEVEL) - 1] ?? 0;
 
@@ -278,7 +279,7 @@ export function sampleRun(rand: () => number, options: ModelOptions = {}): RunSa
      *
      * 처리 가능량 = 보드 실효 DPS × 몹이 경로에 머무는 시간(스폰창 + 완주).
      */
-    const window = B.ROUND_SECONDS + PATH_LENGTH / B.ENEMY_SPEED;
+    const window = B.roundCountdownSeconds(round) + PATH_LENGTH / B.ENEMY_SPEED;
     const capacity = dps * window;
     const waveHp = scaledWaveHp(round, waveScale);
     const killedFraction = Math.min(1, capacity / waveHp);

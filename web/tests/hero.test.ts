@@ -108,9 +108,13 @@ describe('어그로 — 몹이 영웅을 보면 멈춘다', () => {
     kind: 'mob' as const, name: 'x', maxHp: 1e9, hp: 1e9, armor: 1e9,
     speed: 50, radius: 9, distance,
   });
+  const enableAggro = (game: Game): void => {
+    game.hero.addAugment(H.makeCard(H.AUGMENTS.find((a) => a.id === 'provoke')!, 'silver'));
+  };
 
   test('시야 안에 영웅이 있으면 전진하지 않는다', () => {
     const game = new Game();
+    enableAggro(game);
     const hero = game.hero;
 
     // 영웅 바로 앞(뒤쪽)에 몹을 둔다
@@ -126,9 +130,10 @@ describe('어그로 — 몹이 영웅을 보면 멈춘다', () => {
 
   test('시야 밖이면 그냥 지나간다', () => {
     const game = new Game();
+    enableAggro(game);
     const hero = game.hero;
 
-    game.enemies.push(mob(hero.distance - H.HERO_AGGRO_RANGE - 50));
+    game.enemies.push(mob(hero.distance - hero.stats.aggroRange - 50));
     const before = game.enemies[0].distance;
     game.update(0.2);
 
@@ -137,6 +142,7 @@ describe('어그로 — 몹이 영웅을 보면 멈춘다', () => {
 
   test('영웅을 지나친 몹은 되돌아오지 않는다', () => {
     const game = new Game();
+    enableAggro(game);
     const hero = game.hero;
 
     game.enemies.push(mob(hero.distance + 40));
@@ -148,6 +154,7 @@ describe('어그로 — 몹이 영웅을 보면 멈춘다', () => {
 
   test('영웅이 죽으면 몹이 다시 흐른다', () => {
     const game = new Game();
+    enableAggro(game);
     const hero = game.hero;
 
     game.enemies.push(mob(hero.distance - 30));
@@ -490,6 +497,9 @@ describe('적이 영웅을 때린다', () => {
   });
 
   test('몹 공격력은 선형이다 — 영웅 체력도 선형이라 나란히 간다', () => {
+    expect(H.ENEMY_DAMAGE_BASE).toBe(0.5);
+    expect(H.ENEMY_DAMAGE_PER_ROUND).toBe(0.3);
+    expect(H.enemyDamage(10)).toBe(3.5);
     const step = H.enemyDamage(20) - H.enemyDamage(10);
     expect(H.enemyDamage(40) - H.enemyDamage(30)).toBeCloseTo(step, 5);
   });

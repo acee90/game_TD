@@ -29,7 +29,11 @@ namespace GodTD.Core
         ///
         /// 원본 57초는 연출과 조합 시간이 있을 때의 값이라 프로토에서는 짧게 잡았다. [프로토]
         /// </summary>
-        public const float ROUND_SECONDS = 22f;
+        public const float ROUND_SECONDS = 25f;
+        public const float LATE_ROUND_SECONDS = 30f;
+        public const int LATE_ROUND_FROM = 50;
+        public static float RoundCountdownSeconds(int round) =>
+            round >= LATE_ROUND_FROM ? LATE_ROUND_SECONDS : ROUND_SECONDS;
 
         /// <summary>
         /// 첫 라운드까지의 대기. 원본은 trigger #344에서 20초지만(그동안 명예의 전당 연출이 돈다)
@@ -214,8 +218,8 @@ namespace GodTD.Core
         // 주: Unity에는 아직 클리어 판정(ResolveClear)이 없다 — 상수만 미러한다.
         public const int CLEAR_ROUND = 60;
 
-        /// <summary>R1 웨이브 총체력 = 기대 보드 DPS 실측 28 × 목표 clear 18초 — 초반 앵커의 유래</summary>
-        public const float WAVE_HP_R1 = 504f;
+        /// <summary>R1 웨이브 총체력. 572에서 20% 상향하고 R40 총체력은 기존 기준을 유지한다.</summary>
+        public const float WAVE_HP_R1 = 686.4f;
 
         /// <summary>
         /// 구간별 라운드당 총체력 성장률. from 라운드부터 다음 구간 직전까지 이 배율로 큰다.
@@ -223,10 +227,11 @@ namespace GodTD.Core
         /// </summary>
         public static readonly (int from, float rate)[] WAVE_RATE_SEGMENTS =
         {
-            (2, 0.227f),  // R2~14 — 옛 수입 모델 초반 곡선의 기하평균
-            (15, 0.17f),  // R15~40
-            (41, 0.19f),  // R41~50
-            (51, 0.15f),  // R51+ — 무한 모드의 벽
+            (2, 0.1905732684f),
+            (16, 0.17f),
+            (30, 0.16f),
+            (41, 0.17f),  // R41~50
+            (51, 0.10f),  // R51+ — 무한 모드의 벽
         };
 
         /// <summary>그 라운드로 넘어올 때 적용된 성장률 (R1은 앵커라 없다)</summary>
@@ -263,14 +268,12 @@ namespace GodTD.Core
         /// 웨이브당 잡몹 수. 사이클 안에서 라운드마다 COUNT_STEP만큼 늘어난다.
         /// 원본은 스폰 로직이 EUD라 몹 수를 읽을 수 없다(§9.2, §11.1). [프로토]
         /// </summary>
-        // 20 → 16 · 4 → 3.2 (2026-07-18, 사용자 지시): 몹 수 -20% 전체. 초반에 뜨는 성장
-        // 증강(막타 스택형)이 낮은 라운드에서부터 너무 많은 처치 기회를 얻어 고점이 치솟는
-        // 문제 — 밀도를 낮춰 초반 막타 기회 자체를 줄인다. 총 체력(EnemyHP가 총량÷count로
-        // 역산)은 그대로 — 개체가 굵어질 뿐 라운드 난이도 곡선은 안 바뀐다. ← web
-        public const int ENEMY_BASE_COUNT = 16;
-        public const float ENEMY_COUNT_STEP = 3.2f;
-        public static int EnemyCount(int round) =>
-            (int)MathF.Round(ENEMY_BASE_COUNT + ENEMY_COUNT_STEP * PosInCycle(round));
+        public static readonly int[] ENEMY_COUNT_BY_CYCLE_POS = { 11, 12, 13, 14, 15 };
+        public const int ENEMY_COUNT_FLAT_FROM = LATE_ROUND_FROM;
+        public const int ENEMY_COUNT_FLAT = 20;
+        public static int EnemyCount(int round) => round >= ENEMY_COUNT_FLAT_FROM
+            ? ENEMY_COUNT_FLAT
+            : ENEMY_COUNT_BY_CYCLE_POS[PosInCycle(round)];
 
         /// <summary>웨이브 내 스폰 간격(초) [프로토]</summary>
         public const float SPAWN_INTERVAL = 0.18f;
@@ -303,13 +306,14 @@ namespace GodTD.Core
         public const float ENEMY_SPEED = 42f; // 52 → 42 (2026-07-14 web 동기화): 초반 체감 템포 완화 [프로토]
 
         /// <summary>
-        /// 초반 전투 템포 배수 (2026-07-16). 게임 시작 몇 라운드를 "느린 템포"로 시작한다.
-        /// 라운드 타이머·스폰·dt는 그대로 두고 전투 3요소에만 곱한다:
-        /// 몹 이동속도 × p, 몹 체력 × p, 타워/영웅 공격 인터벌 ÷ p.
-        /// 수학적 불변이 아니라 튜닝 대상 — 시드 시뮬로 초반 난이도를 맞춘다. [프로토]
-        /// ← web/src/data/balance.ts earlyTempo
+        /// 초반 일반 몬스터 HP 완화 배수. 이동·공격 시간에는 적용하지 않는다. [프로토]
+        /// ← web/src/data/balance.ts earlyEnemyHpMultiplier
         /// </summary>
-        public static float EarlyTempo(int round) => MathF.Min(1f, 0.5f + 0.1f * Math.Max(1, round));
+        public static float EarlyEnemyHpMultiplier(int round)
+        {
+            float ramp = MathF.Min(1f, 0.5f + 0.1f * Math.Max(1, round));
+            return ramp * ramp;
+        }
 
         // ───────── 전투 (전부 [프로토]) ─────────
         // 원본은 무기슬롯→유닛 바인딩 정보가 없어 실제 공격력을 읽을 수 없다(§11.3).

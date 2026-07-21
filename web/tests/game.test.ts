@@ -49,6 +49,45 @@ describe('시작 상태', () => {
     expect(game.round).toBe(1);
   });
 
+  test('카운트다운은 R49까지 25초, 20마리 구간 R50부터 30초다', () => {
+    expect(B.enemyCount(49)).toBeLessThan(20);
+    expect(B.roundCountdownSeconds(49)).toBe(25);
+    expect(B.enemyCount(50)).toBe(20);
+    expect(B.roundCountdownSeconds(50)).toBe(30);
+
+    const early = new Game();
+    early.round = 48;
+    early.roundTimer = 0.001;
+    early.update(0.002);
+    expect(early.round).toBe(49);
+    expect(early.roundTimer).toBe(25);
+
+    const late = new Game();
+    late.round = 49;
+    late.roundTimer = 0.001;
+    late.update(0.002);
+    expect(late.round).toBe(50);
+    expect(late.roundTimer).toBe(30);
+  });
+
+  test('초반 전투는 감속 없이 dt만큼 진행되고 몬스터 HP만 완화된다', () => {
+    const expectedHpMultipliers = [0.36, 0.49, 0.64, 0.81, 1];
+    expectedHpMultipliers.forEach((expected, i) => {
+      expect(B.earlyEnemyHpMultiplier(i + 1)).toBeCloseTo(expected, 8);
+    });
+
+    const game = new Game();
+    game.round = 1;
+    game.roundTimer = 999;
+    game.enemies.push({
+      kind: 'mob', name: '속도 확인', maxHp: 1e9, hp: 1e9, armor: 0,
+      speed: 100, radius: 9, distance: 0,
+    });
+    game.update(0.1);
+
+    expect(game.enemies[0].distance).toBeCloseTo(10, 5);
+  });
+
   test('round는 진행 중인 라운드를 가리킨다 — 웨이브가 도는 동안 숫자가 앞서지 않는다', () => {
     const game = new Game();
     game.update(B.OPENING_SECONDS + 0.01);
@@ -211,13 +250,12 @@ describe('라운드 진행 — 고정 간격', () => {
 
     // R1 앵커 — 504(보드 DPS 28 × clear 18초) → 572 (2026-07-20, ×1.2 ×1.5 ×0.7 ×0.9).
     // 곱셈 앵커라 곡선 전체가 같이 올라가고 성장률은 안 바뀐다 — 구간 보정은 없다.
-    expect(B.WAVE_HP_R1).toBe(572);
-    // 성장률 직접 지정 (2026-07-20, 사용자 지시): 10라운드 계단으로 세분.
-    // R2~30 18% · R31~40 20% · R41~50 19% · R51+ 10%
+    expect(B.WAVE_HP_R1).toBeCloseTo(686.4, 8);
+    // R40을 고정점으로 두고 지정 구간을 역산한다.
     expect(B.WAVE_RATE_SEGMENTS.map(([f, r]) => [f, Math.round(r * 100)]))
-      .toEqual([[2, 18], [31, 20], [41, 19], [51, 10]]);
+      .toEqual([[2, 19], [16, 17], [30, 16], [41, 17], [51, 10]]);
     // 보정 구간(R41~50)만은 실효 성장률이 다르다 — 아래에서 따로 본다.
-    for (const r of [3, 8, 10]) {
+    for (const r of [3, 8, 10, 15]) {
       expect(B.waveTotalHp(r) / B.waveTotalHp(r - 1)).toBeCloseTo(1 + B.WAVE_EARLY_RATE, 5);
     }
     // 각 구간의 실제 성장률이 표와 일치한다 — 표가 유일한 출처다
@@ -238,6 +276,7 @@ describe('라운드 진행 — 고정 간격', () => {
     for (const [from, rate] of B.WAVE_RATE_SEGMENTS) {
       expect(B.waveGrowthRate(from)).toBeCloseTo(rate, 10);
     }
+    expect(B.waveTotalHp(40)).toBeCloseTo(B.WAVE_HP_R40_ANCHOR, 4);
     // 벽(R51+)은 보드 실성장을 앞서야 무한 모드 영생이 없다 (과거 확인된 함정) —
     // 캐리 차단 후 보드 성장 추정 ~5-7%/R. 12%는 앞서지만 여유가 얇다 — 플레이테스트 확인.
     expect(B.WAVE_WALL_RATE).toBeGreaterThan(0.08);
@@ -271,7 +310,8 @@ describe('라운드 진행 — 고정 간격', () => {
   test('R60 클리어 — 타이머가 아니라 웨이브 정리가 기준이다 (2026-07-19)', () => {
     const game = new Game(() => 0.5);
     game.round = B.CLEAR_ROUND;
-    game.roundTimer = B.ROUND_SECONDS;
+    const clearCountdown = B.roundCountdownSeconds(B.CLEAR_ROUND);
+    game.roundTimer = clearCountdown;
 
     // R60 웨이브가 남아 있는 동안에는 시간이 얼마가 지나도 클리어가 아니고,
     // 다음 라운드 카운트다운도 흐르지 않는다 (몹은 판정만 확인하도록 정지시킨다)
@@ -282,7 +322,7 @@ describe('라운드 진행 — 고정 간격', () => {
     for (let i = 0; i < 100; i++) game.update(0.5);
     expect(game.cleared).toBe(false);
     expect(game.round).toBe(B.CLEAR_ROUND); // R61이 열리지 않는다
-    expect(game.roundTimer).toBeCloseTo(B.ROUND_SECONDS, 1);
+    expect(game.roundTimer).toBeCloseTo(clearCountdown, 1);
 
     // 마지막 몹을 잡으면 (놓쳐서 누출돼도 라이프만 남으면 같다) — 클리어
     const scoreBefore = game.score;
@@ -298,10 +338,10 @@ describe('라운드 진행 — 고정 간격', () => {
     game.update(1);
     expect(game.round).toBe(B.CLEAR_ROUND);
 
-    // 계속 — 무한 모드. ROUND_SECONDS 뒤 R61이 열린다
+    // 계속 — 무한 모드. 후반 카운트다운 뒤 R61이 열린다
     game.continueAfterClear();
     expect(game.paused).toBe(false);
-    game.update(B.ROUND_SECONDS + 0.1);
+    game.update(clearCountdown + 0.1);
     expect(game.round).toBe(B.CLEAR_ROUND + 1);
 
     // 클리어는 한 번뿐 — 다시 발동하지 않는다

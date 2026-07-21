@@ -536,7 +536,7 @@ describe('허수아비 — 원거리 영웅의 탱커', () => {
     const game = new Game();
     game.hero.skillId = 'decoy';
     castNow(game);
-    game.decoy!.hp = 1;
+    game.decoy!.hp = H.enemyDamage(game.round);
 
     const enemy = mob(game.decoy!.distance, 1e9, 0);
     game.enemies.push(enemy);
@@ -547,7 +547,7 @@ describe('허수아비 — 원거리 영웅의 탱커', () => {
 
   test('수명이 다하면 사라진다', () => {
     const game = new Game();
-    game.round = 5; // 완전 템포(초반 슬로우 배제)에서 허수아비 수명 자체를 검증
+    game.round = 5;
     game.hero.skillId = 'decoy';
     castNow(game);
 

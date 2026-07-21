@@ -864,8 +864,6 @@ export class Game {
       return false;
     }
     this.bossCooldown = B.BOSS_COOLDOWN_SECONDS;
-    // 보스는 HP·속도 원본 그대로. 초반 느린 템포는 update의 combatDt가 보스·영웅·타워를 통째로
-    // 같은 비율로 늦추므로(순수 슬로우모션) 보스전 난이도는 불변이다 — 여기서 손댈 게 없다.
     this.spawn({
       kind: 'boss',
       name: `Lv${level} BOSS`,
@@ -1414,8 +1412,8 @@ export class Game {
     if (H.grantsSkillDraft(this.round)) this.hero.pendingSkillDraft++;
     // R45 무료 강화 1회 (사용자 지시) — 후반에 빌드를 한 번 더 밀어준다
     if (this.round === B.FREE_AUGMENT_UPGRADE_ROUND) this.pendingFreeUpgrades++;
-    // 초반 느린 템포 — 몹 체력을 ×p로 낮춘다. 이동·공속은 update의 combatDt가 함께 늦춘다.
-    const hp = Math.round(B.enemyHP(this.round) * B.earlyTempo(this.round));
+    // 초반 난이도 완화는 몹 HP에만 적용한다. 전투 시간은 모든 라운드에서 정속이다.
+    const hp = Math.round(B.enemyHP(this.round) * B.earlyEnemyHpMultiplier(this.round));
     const armor = B.enemyArmor(this.round);
 
     const waveType = B.waveTypeOf(this.round);
@@ -1633,8 +1631,8 @@ export class Game {
     if (!holdRoundTimer) {
       this.roundTimer -= dt;
       if (this.roundTimer <= 0) {
-        this.roundTimer = B.ROUND_SECONDS;
         this.beginRound();
+        this.roundTimer = B.roundCountdownSeconds(this.round);
       }
     }
 
@@ -1654,22 +1652,18 @@ export class Game {
       }
     }
 
-    // 초반 느린 템포 — 전투 스텝만 combatDt로 늦춘다(순수 슬로우모션). 위의 라운드 타이머·
-    // 스폰·마정석·보스 쿨다운은 실시간 dt를 써서 라운드 진행 속도는 그대로 유지한다.
-    const combatDt = dt * B.earlyTempo(this.round);
+    this.advanceEnemies(dt);
+    this.separateEnemies(dt);
 
-    this.advanceEnemies(combatDt);
-    this.separateEnemies(combatDt);
-
-    this.fireTowers(combatDt);
-    this.stepHero(combatDt);
+    this.fireTowers(dt);
+    this.stepHero(dt);
     // 영웅 생사와 무관하게 돌아야 한다 — 화상·장판은 계속 타고, 사망 폭발은 죽는 순간 터진다
-    this.tickBurns(combatDt);
-    this.tickBeam(combatDt);
-    this.tickZones(combatDt);
+    this.tickBurns(dt);
+    this.tickBeam(dt);
+    this.tickZones(dt);
     this.tickNova();
     if (this.shouldAutoCastSkill) this.useSkill();
-    this.stepDecoy(combatDt);
+    this.stepDecoy(dt);
 
     for (const enemy of this.enemies) {
       if (enemy.hp <= 0 && !enemy.dead) {
@@ -1682,8 +1676,7 @@ export class Game {
 
     this.resolveClear();
 
-    // 투사체 궤적은 전투의 일부 — combatDt로 함께 늦춘다. (아래 떠오르는 텍스트는 UI라 실시간)
-    for (const shot of this.shots) shot.life -= combatDt;
+    for (const shot of this.shots) shot.life -= dt;
     this.shots = this.shots.filter((s) => s.life > 0);
     for (const f of this.floats) {
       f.life -= dt;

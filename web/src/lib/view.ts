@@ -142,6 +142,7 @@ export interface MissionView {
 
 export function missionView(game: Game): MissionView {
   const remaining = Math.max(0, game.roundTimer);
+  const countdown = game.round > 0 ? B.roundCountdownSeconds(game.round) : B.OPENING_SECONDS;
   const nextType = B.waveTypeOf(Math.max(1, game.round) + 1);
   const notice = nextType.id === 'normal' ? '' : ` · 다음: ${nextType.label}!`;
   const repeatText =
@@ -159,7 +160,7 @@ export function missionView(game: Game): MissionView {
   }
 
   return {
-    repeatWidth: (1 - remaining / B.ROUND_SECONDS) * 100,
+    repeatWidth: (1 - remaining / countdown) * 100,
     repeatText,
     milestoneWidth,
     milestoneText,

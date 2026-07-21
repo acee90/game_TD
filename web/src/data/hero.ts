@@ -307,8 +307,10 @@ export const ENEMY_ATTACK_INTERVAL = 1;
 // 2026-07-12 대폭 하향(3/1.3 → 1/0.6): 영웅 위협은 기본 몹이 아니라 **사냥꾼 웨이브**가
 // 전담한다(balance.ts waveTypeOf — 접촉 공격력 배수). 기본 몹은 어그로로 모아도 안전하고,
 // 사냥꾼 라운드(R10+, 5의 배수)에만 탱킹이 시험대에 오른다.
-export const ENEMY_DAMAGE_BASE = 1;
-export const ENEMY_DAMAGE_PER_ROUND = 0.6;
+// 2026-07-21 사용자 지시: 몬스터 공격력 1/2. 체력 상향과 역할을 분리해 타워 화력은
+// 단단한 몹으로 시험하되, 영웅·허수아비가 받는 접촉 압력은 절반으로 낮춘다.
+export const ENEMY_DAMAGE_BASE = 0.5;
+export const ENEMY_DAMAGE_PER_ROUND = 0.3;
 export const enemyDamage = (round: number): number =>
   ENEMY_DAMAGE_BASE + ENEMY_DAMAGE_PER_ROUND * round;
 

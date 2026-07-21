@@ -16,8 +16,7 @@ export const START_GAS = 6;
 export const ORIGINAL_ROUND_SECONDS = 57;
 
 /**
- * 라운드 간격. 원본과 똑같이 **고정 간격**이다 — 웨이브를 빨리 정리해도 다음 라운드가
- * 앞당겨지지 않는다.
+ * 라운드 카운트다운. 웨이브를 빨리 정리해도 다음 라운드가 앞당겨지지 않는다.
  *
  * 웨이브를 다 잡으면 곧장 넘기는 방식은 쓰지 않는다. 그러면 천천히 잡을수록 라운드가
  * 느려지고, 쉬운 웨이브에 머물면서 쿨타임(45초)만 도는 보스를 계속 소환하는 게 이득이 된다.
@@ -30,7 +29,20 @@ export const ORIGINAL_ROUND_SECONDS = 57;
  * 웨이브가 겹겹이 쌓이지 않는다. "빨리 잡아도 안 앞당겨진다"는 원칙은 그대로다 —
  * 정리 속도가 아니라 스폰 완료가 기준이라 보스 쿨 악용 여지도 없다.
  */
-export const ROUND_SECONDS = 22;
+export const ROUND_SECONDS = 25;
+export const LATE_ROUND_SECONDS = 30;
+/** 20마리 고정 웨이브가 시작되는 라운드 */
+export const LATE_ROUND_FROM = 50;
+
+export const roundCountdownSeconds = (round: number): number =>
+  round >= LATE_ROUND_FROM ? LATE_ROUND_SECONDS : ROUND_SECONDS;
+
+/** 모델에서 쓰는 R1부터 지정 라운드까지의 누적 카운트다운 시간 */
+export const cumulativeRoundCountdownSeconds = (round: number): number => {
+  const earlyRounds = Math.min(Math.max(0, round), LATE_ROUND_FROM - 1);
+  const lateRounds = Math.max(0, round - earlyRounds);
+  return earlyRounds * ROUND_SECONDS + lateRounds * LATE_ROUND_SECONDS;
+};
 /**
  * 첫 라운드까지의 대기. 원본은 trigger #344에서 20초지만(그동안 명예의 전당 연출이 돈다)
  * 연출이 없는 프로토에서는 그냥 기다리는 시간이라 짧게 줄였다. [프로토]
@@ -432,7 +444,7 @@ const milestoneCumAt = (kills: number): number =>
 
 /** r라운드 종료 시점까지의 보스 소환 횟수 (연속 — 모델용. 쿨타임 45초가 유일한 제한) */
 export const bossSummonsBy = (round: number): number =>
-  (OPENING_SECONDS + round * ROUND_SECONDS) / BOSS_COOLDOWN_SECONDS + 1;
+  (OPENING_SECONDS + cumulativeRoundCountdownSeconds(round)) / BOSS_COOLDOWN_SECONDS + 1;
 
 /** "항상 최고 해금 보스 + 전부 처치" 상한의 누적 보상 — 소수 소환은 선형 보간 */
 const bossCumHigh = (summons: number): number => {
@@ -506,39 +518,36 @@ export const CLEAR_ROUND = 60;
  * ③④는 ①②를 올린 뒤 실측에서 초반이 무너져 되돌린 몫이다 — 단순 봇이 R5~12에
  * 죽고 영웅이 Lv4를 못 넘겼다("일반 몬스터가 너무 강해져서 잡질 못한다", 2026-07-20).
  *
- * 앵커가 곱셈이므로 여기만 올리면 **성장률을 따라 전 구간이 같이 올라간다** —
- * 라운드 구간별 보정 같은 건 필요 없다. WAVE_RATE_SEGMENTS는 한 글자도 안 바뀌므로
- * 곡선의 모양은 그대로고 높이만 올라간다.
+ * 572 → **686.4** (2026-07-21, 사용자 지시): R1 체력을 20% 높인다. R40 총체력은
+ * 별도 앵커로 유지하고, 지정되지 않은 R2~15 성장률을 역산해 중간 곡선을 잇는다.
  */
-export const WAVE_HP_R1 = 572;
+export const WAVE_HP_R1 = 572 * 1.2;
+
+/**
+ * R40 난이도 기준점. R1과 구간 성장률을 바꿔도 이 총체력은 유지한다.
+ */
+export const WAVE_HP_R40_ANCHOR = 363_750;
+/** R40 앵커에서 역산한 R2~15 성장률 */
+export const WAVE_PRE16_RATE =
+  Math.pow(
+    WAVE_HP_R40_ANCHOR / (WAVE_HP_R1 * Math.pow(1.17, 14) * Math.pow(1.16, 11)),
+    1 / 14,
+  ) - 1;
 
 /**
  * 구간별 라운드당 총체력 성장률. `from` 라운드부터 다음 구간 직전까지 이 배율로 큰다.
  * 마지막 구간은 상한 없이 이어진다 — 무한 모드의 벽이다.
  *
- * 2026-07-20 (사용자 지시) — 전 구간 완화 후 **10라운드 단위로 잘게 재지정**.
- *
- * 이력: 초반 22.7%/중반 17%/후반 19%(3구간) → 전 구간 완화(15/15/17/13) →
- * **10라운드 계단으로 다시 세분**(14/16/17/18/19). 라운드가 갈수록 조금씩 가팔라지는
- * 단조 증가형이라, 시트의 growthPct 열만 봐도 "언제부터 빡세지는가"가 읽힌다.
- *
- * R51+만 13%로 **뒤 구간이 앞 구간보다 완만하다** — 무한 모드의 벽은 절대 난이도가
- * 아니라 "보드 실성장(~5~7%/R 추정)을 앞서는가"로 정해지기 때문이다.
+ * 2026-07-21 (사용자 지시) — 플레이테스트상 적절한 R40 총체력을 고정하고, R1과
+ * R16~40 성장률을 직접 지정한다. R2~15만 종착점에서 역산해 임의의 추가 기준점을 만들지 않는다.
  */
 export const WAVE_RATE_SEGMENTS: readonly (readonly [from: number, rate: number])[] = [
-  // 2026-07-21 (사용자 지시: "r2~r50 성장률을 좀 더 높이자") — **앞을 무겁게**.
-  // 증상: R10~40 몹이 너무 약해 **보스 도전을 계속 실패해도 잡몹 처리에 아무 지장이 없다**.
-  // T4 타워 3~4기(GOD 없이)만으로 R25까지 순삭이었다.
-  //
-  // 전 구간을 균일하게 올리면(예: +3%p) 48라운드 복리로 R60이 ×3.5가 되어 후반이
-  // 폭발한다 — 문제 구간은 앞인데 뒤가 더 크게 오른다. 그래서 R11~30을 가장 크게
-  // 올리고(+5·+4%p) R41~50은 그대로 둬, R50 총량 증가를 ×3.4로 묶었다.
-  // 2026-07-21 (사용자 지시: "r10 → r30까지 성장률 18%) — R11~30을 21% → **18%**로
-  // 되돌려 R2~30이 한 구간이 됐다. 21%는 R30 개당 체력을 7,655까지 밀어올려
-  // 중반이 과했다. 초반~중반은 평탄하게 두고 R31부터 조금씩 가팔라지는 모양이다.
-  [2, 0.18],  // R2~30 — 평탄
-  [31, 0.20], // R31~40
-  [41, 0.19], // R41~50
+  // 2026-07-21 사용자 지시: R40 난이도를 고정점으로 두고 R1 +20%, R16~29 17%,
+  // R30~40 16%. 지정되지 않은 R2~15는 R40 앵커에서 역산한다.
+  [2, WAVE_PRE16_RATE], // R2~15 — 약 19.0573%
+  [16, 0.17], // R16~29
+  [30, 0.16], // R30~40
+  [41, 0.17], // R41~50
   // 13% → 10% (2026-07-20, 사용자 지시: "r50부터 몹 체력도 좀 낮추도록").
   // 모델에서 클리어율이 0%였다 — 최선 밴드조차 R56에 죽어 보상이 없는 게임이 됐다.
   [51, 0.10], // R51+ — 무한 모드의 벽. 보드 실성장을 앞서야 영생이 없다
@@ -551,7 +560,7 @@ export const WAVE_RATE_SEGMENTS: readonly (readonly [from: number, rate: number]
 export const WAVE_EARLY_RATE = WAVE_RATE_SEGMENTS[0][1];
 export const WAVE_WALL_FROM = WAVE_RATE_SEGMENTS[WAVE_RATE_SEGMENTS.length - 1][0];
 export const WAVE_WALL_RATE = WAVE_RATE_SEGMENTS[WAVE_RATE_SEGMENTS.length - 1][1];
-/** 벽 직전 구간 (R41~50) — 곡선에서 가장 가파른 곳 */
+/** 벽 직전 구간 (R41~50) */
 export const WAVE_LATEMID_FROM = WAVE_RATE_SEGMENTS[WAVE_RATE_SEGMENTS.length - 2][0];
 export const WAVE_LATEMID_RATE = WAVE_RATE_SEGMENTS[WAVE_RATE_SEGMENTS.length - 2][1];
 
@@ -616,7 +625,7 @@ export const ENEMY_BASE_COUNT = ENEMY_COUNT_BY_CYCLE_POS[0];
  * R50부터는 사이클과 무관하게 **20기 고정** (2026-07-20, 사용자 지시).
  * 후반에는 밀도가 아니라 개체 굵기로만 어려워진다 — 화면이 몹으로 덮이지 않는다.
  */
-export const ENEMY_COUNT_FLAT_FROM = 50;
+export const ENEMY_COUNT_FLAT_FROM = LATE_ROUND_FROM;
 export const ENEMY_COUNT_FLAT = 20;
 
 export const enemyCount = (round: number): number =>
@@ -637,21 +646,16 @@ export const MAX_ALIVE_MOBS = 45;
 export const ENEMY_SPEED = 42;
 
 /**
- * 초반 전투 템포 배수 (2026-07-16). 게임 시작 몇 라운드를 "느린 템포"로 시작한다.
+ * 초반 몬스터 HP 완화 배수. R1~R5 = 0.36/0.49/0.64/0.81/1.0, 이후 1.0. [프로토]
  *
- * 적용 방식(game.ts update): 전투 스텝에만 `combatDt = dt × earlyTempo(round)`를 넘긴다.
- * 라운드 타이머·스폰 케이던스·가스·보스 쿨다운은 실시간 `dt` 그대로 — 라운드 진행 속도는
- * 유지된다. 그 결과 전투(몹·보스·영웅 이동, 타워·영웅 공속, 장판·화상)가 통째로 같은 비율로
- * 느려진다 = **순수 슬로우모션**이라 전투 자체의 난이도는 수학적으로 불변이다.
- *
- * 여기에 더해 **몹 체력을 ×p로 낮춘다**(spawn 시). 라운드 타이머를 안 늦췄으므로 느려진 몹이
- * 쌓이는 압력이 생기는데, 체력을 낮춰 이를 상쇄하고 초반을 부드럽게 만든다. 이 부분은
- * 수학적 불변이 아니라 **튜닝 대상** — 아래 램프는 시작값이고 시드 시뮬로 초반 누수/클리어를
- * 확인하며 맞춘다. (보스는 웨이브 누적이 없어 HP를 낮추지 않는다 — 순수 슬로우모션만.) [프로토]
- *
- * p(1)=0.6 → p(5)=1.0 선형 램프. R5 이후는 1.0(원래 속도). round 0(오프닝)은 1로 클램프.
+ * 2026-07-21 전투 슬로우모션은 배속 표기와 실제 속도를 어긋나게 해 제거했다. 이 배율은
+ * 감속 제거로 빨라진 초반 진입 압력을 보정하기 위해 기존 0.6→1.0 램프를 한 번 더 곱한다.
+ * 일반 몬스터 HP에만 적용하며 이동·공격 시간에는 적용하지 않는다.
  */
-export const earlyTempo = (round: number): number => Math.min(1, 0.5 + 0.1 * Math.max(1, round));
+export const earlyEnemyHpMultiplier = (round: number): number => {
+  const ramp = Math.min(1, 0.5 + 0.1 * Math.max(1, round));
+  return ramp * ramp;
+};
 
 /**
  * 스폰 시 몹의 초기 횡오프셋(px). **0 = 1열 종대** (2026-07-20, 사용자 지시:
