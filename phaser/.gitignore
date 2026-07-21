@@ -1,3 +1,10 @@
 node_modules/
 dist/
 .playwright-mcp/
+
+# wrangler files
+.wrangler
+.dev.vars*
+!.dev.vars.example
+.env*
+!.env.example
