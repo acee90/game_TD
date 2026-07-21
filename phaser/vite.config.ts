@@ -4,6 +4,8 @@ import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
+import { cloudflare } from "@cloudflare/vite-plugin";
+
 // 엔진 단일 원본 — 게임 로직·데이터는 web/src를 그대로 import한다 (이중화 없음).
 // 나중에 monorepo(packages/engine)로 정리하더라도 이 alias만 옮기면 된다.
 const engineDir = fileURLToPath(new URL('../web/src', import.meta.url));
@@ -38,7 +40,7 @@ const buildInfo = {
 
 export default defineConfig({
   // HUD도 단일 원본 — web/src/lib의 Svelte 컴포넌트를 그대로 import한다
-  plugins: [svelte()],
+  plugins: [svelte(), cloudflare()],
   define: {
     __GAME_BUILD_INFO__: JSON.stringify(buildInfo),
   },
