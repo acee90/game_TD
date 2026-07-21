@@ -115,8 +115,10 @@
     const phaser = new Phaser.Game({
       type: Phaser.AUTO,
       parent: host,
-      width: 420,
-      height: 470,
+      // 도트 고도화 — 캔버스 2배 해상도, BattleScene이 카메라 zoom 2로 본다.
+      // 월드 좌표계는 여전히 420×470 (엔진·클릭 규칙 무영향).
+      width: 840,
+      height: 940,
       pixelArt: true,
       roundPixels: true,
       backgroundColor: '#0d0a06',

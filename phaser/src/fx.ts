@@ -5,6 +5,13 @@
 import Phaser from 'phaser';
 import { tint } from './sprites';
 
+// ───────── 캔버스 안 UI 폰트 ─────────
+// 도트 스프라이트와 달리 텍스트는 **시인성이 우선**이다 (2026-07-21, 사용자 결정) —
+// HUD(app.css)와 같은 시스템 산세리프로 맞추고, 3배 해상도로 구워 선명하게 표시한다.
+export const UI_FONT = "system-ui, -apple-system, 'Noto Sans KR', sans-serif";
+/** Phaser Text 내부 래스터 배율 — 카메라 zoom 2 + 레티나까지 감안한 값 */
+export const UI_RES = 3;
+
 interface Particle {
   img: Phaser.GameObjects.Image;
   vx: number;
@@ -98,7 +105,7 @@ export class TextPool {
     t.obj
       .setText(crit ? `${text}!` : text)
       .setColor(crit ? '#ffd23f' : color)
-      .setFontSize(crit ? 14 : big ? 12 : 8)
+      .setFontSize(crit ? 14 : big ? 12 : 9)
       .setPosition(x + (Math.random() - 0.5) * 8, y - 6)
       .setVisible(true)
       .setAlpha(1);
@@ -110,10 +117,13 @@ export class TextPool {
     const idle = this.pool.find((t) => t.life <= 0);
     if (idle) return idle;
     const obj = this.scene.add
-      .text(0, 0, '', { fontFamily: 'monospace', fontSize: 8, color: '#fff', stroke: '#1a130a', strokeThickness: 2 })
+      .text(0, 0, '', {
+        fontFamily: UI_FONT, fontStyle: 'bold', fontSize: 9, color: '#fff',
+        stroke: '#1a130a', strokeThickness: 2,
+      })
       .setOrigin(0.5, 1)
       .setDepth(this.depth)
-      .setResolution(2)
+      .setResolution(UI_RES)
       .setVisible(false);
     const t: RisingText = { obj, life: 0, max: 1, vy: -30 };
     this.pool.push(t);

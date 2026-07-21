@@ -15,8 +15,8 @@ import { range } from '@engine/game/combat';
 import { GOD_TIER, RACE_COLOR } from '@engine/data/units';
 import { HERO_RADIUS } from '@engine/data/hero';
 import { SKILLS } from '@engine/data/skills';
-import { ParticlePool, TextPool } from './fx';
-import { makeGlowTextures, makeTextures, tint } from './sprites';
+import { ParticlePool, TextPool, UI_FONT, UI_RES } from './fx';
+import { makeAnims, makeGlowTextures, makeTextures, tint } from './sprites';
 import { PreviewBot } from './bot';
 
 const PATH_WIDTH = (WALKABLE_HALF_WIDTH + 10) * 2;
@@ -85,7 +85,7 @@ export class BattleScene extends Phaser.Scene {
   }
 
   private towers: TowerView[] = [];
-  private enemyImgs = new Map<Enemy, Phaser.GameObjects.Image>();
+  private enemyImgs = new Map<Enemy, Phaser.GameObjects.Sprite>();
   private flashUntil = new Map<Enemy, number>();
   private seenShots = new WeakSet<object>();
   private seenFloats = new WeakSet<object>();
@@ -94,7 +94,7 @@ export class BattleScene extends Phaser.Scene {
   private zoneGlows = new Map<object, Phaser.GameObjects.Image>();
 
   private overlay!: Phaser.GameObjects.Graphics;
-  private heroImg!: Phaser.GameObjects.Image;
+  private heroImg!: Phaser.GameObjects.Sprite;
   private heroLabel!: Phaser.GameObjects.Text;
   private decoyImg!: Phaser.GameObjects.Image;
   private hud!: Phaser.GameObjects.Text;
@@ -106,9 +106,26 @@ export class BattleScene extends Phaser.Scene {
   private texts!: TextPool;
   private walkClock = 0;
 
+  preload(): void {
+    // 정식 도트 에셋을 기존 애니메이션 키에 연결한다. 프레임별 PNG가 생기기 전까지는
+    // 같은 텍스처를 재사용해 현재 애니메이션/틴트 파이프라인을 그대로 유지한다.
+    for (const frame of [0, 1]) {
+      this.load.image(`hero${frame}`, 'assets/sprites/hero-knight.png');
+    }
+    for (const frame of [0, 1, 2, 3]) {
+      this.load.image(`boss${frame}`, 'assets/sprites/boss-dragon.png');
+    }
+  }
+
   create(): void {
     makeTextures(this);
     makeGlowTextures(this); // HD-2D 이펙트 — 월드는 NEAREST, 글로우는 LINEAR
+    makeAnims(this);
+
+    // 도트 고도화 — 스프라이트가 2배 해상도라 카메라도 2배로 본다.
+    // 월드 좌표계(420×470)는 그대로 — 엔진·클릭·이펙트 수치는 전혀 안 바뀐다.
+    this.cameras.main.setZoom(2);
+    this.cameras.main.centerOn(210, 235);
 
     this.drawBoard();
     this.overlay = this.add.graphics().setDepth(DEPTH.overlay);
@@ -117,42 +134,46 @@ export class BattleScene extends Phaser.Scene {
     for (const slot of this.game_.slots) {
       const img = this.add.image(slot.x, slot.y, 'tower').setDepth(DEPTH.tower).setVisible(false);
       const label = this.add
-        .text(slot.x, slot.y + 1, '', { fontFamily: 'monospace', fontSize: 7, color: '#1a130a' })
+        .text(slot.x, slot.y + 1, '', { fontFamily: UI_FONT, fontStyle: 'bold', fontSize: 8, color: '#1a130a' })
         .setOrigin(0.5)
         .setDepth(DEPTH.tower + 1)
-        .setResolution(2)
+        .setResolution(UI_RES)
         .setVisible(false);
       this.towers.push({ img, label, key: '' });
     }
 
-    this.heroImg = this.add.image(0, 0, 'hero').setDepth(DEPTH.hero);
+    this.heroImg = this.add.sprite(0, 0, 'hero0').setScale(0.5).setDepth(DEPTH.hero);
+    this.heroImg.play('hero-idle');
     this.heroLabel = this.add
-      .text(0, 0, '', { fontFamily: 'monospace', fontSize: 7, color: '#ffd23f' })
+      .text(0, 0, '', {
+        fontFamily: UI_FONT, fontStyle: 'bold', fontSize: 7, color: '#ffd23f',
+        stroke: '#0d0a06', strokeThickness: 2,
+      })
       .setOrigin(0.5, 1)
       .setDepth(DEPTH.hero + 1)
-      .setResolution(2);
-    this.decoyImg = this.add.image(0, 0, 'decoy').setDepth(DEPTH.decoy).setVisible(false);
+      .setResolution(UI_RES);
+    this.decoyImg = this.add.image(0, 0, 'decoy').setScale(0.5).setDepth(DEPTH.decoy).setVisible(false);
 
     this.particles = new ParticlePool(this, DEPTH.particle);
     this.embers = new ParticlePool(this, DEPTH.particle - 1, 120);
     this.texts = new TextPool(this, DEPTH.text);
 
     this.hud = this.add
-      .text(4, 3, '', { fontFamily: 'monospace', fontSize: 9, color: '#e8e2d0', stroke: '#0d0a06', strokeThickness: 3 })
+      .text(4, 3, '', { fontFamily: UI_FONT, fontStyle: 'bold', fontSize: 9, color: '#e8e2d0', stroke: '#0d0a06', strokeThickness: 3 })
       .setDepth(DEPTH.hud)
-      .setResolution(2);
+      .setResolution(UI_RES);
     this.msg = this.add
-      .text(4, 458, '', { fontFamily: 'monospace', fontSize: 8, color: '#9aa2c0', stroke: '#0d0a06', strokeThickness: 3 })
+      .text(4, 458, '', { fontFamily: UI_FONT, fontSize: 8, color: '#9aa2c0', stroke: '#0d0a06', strokeThickness: 3 })
       .setDepth(DEPTH.hud)
-      .setResolution(2);
+      .setResolution(UI_RES);
     this.pickBanner = this.add
       .text(210, 200, '', {
-        fontFamily: 'monospace', fontSize: 10, color: '#ffd23f', align: 'center',
+        fontFamily: UI_FONT, fontStyle: 'bold', fontSize: 10, color: '#ffd23f', align: 'center',
         backgroundColor: '#1a130acc', padding: { x: 8, y: 6 },
       })
       .setOrigin(0.5)
       .setDepth(DEPTH.hud)
-      .setResolution(2)
+      .setResolution(UI_RES)
       .setVisible(false);
 
     // 클릭 규칙 — web App.svelte의 onCanvasPointerDown과 동일:
@@ -222,6 +243,9 @@ export class BattleScene extends Phaser.Scene {
     const dt = Math.min(deltaMs / 1000, 0.05) * this.deps.speed();
     const game = this.game_;
 
+    // 걷기·숨쉬기 애니는 게임 배속·일시정지를 그대로 따라간다
+    this.anims.globalTimeScale = (this.deps.running?.() ?? true) ? this.deps.speed() : 0;
+
     // 시작 게이트·메뉴 중에는 시뮬만 멈춘다 — 보드·HUD는 계속 그린다
     if (this.deps.running?.() ?? true) {
       if (this.deps.bot) this.bot.step(game, dt); // 데모 모드에서만 자동 조작
@@ -263,7 +287,8 @@ export class BattleScene extends Phaser.Scene {
         view.img
           .setTexture(god ? 'towerGod' : 'tower')
           .setTint(tint(RACE_COLOR[tower.def.race]))
-          .setScale(god ? 1.2 : 1 + tower.tier * 0.14)
+          .setScale((god ? 1.2 : 1 + tower.tier * 0.14) / 2) // 텍스처가 2배 해상도라 절반이 기준
+
           .setVisible(true);
         view.label
           .setText(god ? 'G' : String(tower.tier + 1))
@@ -282,17 +307,17 @@ export class BattleScene extends Phaser.Scene {
 
     for (const enemy of game.enemies) {
       seen.add(enemy);
+      const boss = enemy.kind === 'boss';
       let img = this.enemyImgs.get(enemy);
       if (!img) {
-        img = this.add.image(0, 0, 'mob0').setDepth(DEPTH.enemy);
+        img = this.add.sprite(0, 0, boss ? 'boss0' : 'mob0').setDepth(DEPTH.enemy);
+        // 걷기 위상을 무작위로 흩는다 — 전 몹이 발맞춰 행진하지 않도록
+        img.play({ key: boss ? 'boss-walk' : 'mob-walk', startFrame: Math.floor(Math.random() * 4) });
         this.enemyImgs.set(enemy, img);
       }
       const [x, y] = pathPosOffset(enemy.distance, enemy.lateral ?? 0);
-      const boss = enemy.kind === 'boss';
-      const frame = Math.floor(this.walkClock * 6 + enemy.distance * 0.05) % 2;
-      img.setTexture(`${boss ? 'boss' : 'mob'}${frame}`);
       img.setPosition(x, y);
-      img.setScale((enemy.radius * 2) / (boss ? 16 : 11));
+      img.setScale((enemy.radius * 2) / (boss ? 32 : 22)); // 분모 = 텍스처 속 몸통 폭
       const flashing = (this.flashUntil.get(enemy) ?? 0) > now;
       if (flashing) img.setTintFill(0xffffff);
       else img.setTint(tint(boss ? '#c14a2c' : (enemy.typeColor ?? '#a89a80')));
@@ -357,6 +382,7 @@ export class BattleScene extends Phaser.Scene {
       const img = this.add
         .image(shot.x, shot.y, conf.style === 'bullet' ? 'shot' : conf.style)
         .setTint(tint(shot.color))
+        .setScale(0.5) // 2배 해상도 텍스처 → 월드 크기는 그대로
         .setDepth(DEPTH.shot);
       // 마법 볼트·포탄은 가산 글로우를 끌고 다닌다 (HD-2D)
       const halo = conf.style === 'bolt' || conf.style === 'shell'
