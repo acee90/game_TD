@@ -3,7 +3,6 @@
 
 import { describe, expect, test } from 'vitest';
 import * as H from '../src/data/hero';
-import * as B from '../src/data/balance';
 import * as K from '../src/data/skills';
 import { AUGMENTS } from '../src/data/hero';
 import { Game } from '../src/game/game';
@@ -26,10 +25,14 @@ const mob = (distance: number, hp = 1000, maxHp = 1000): Enemy => ({
 });
 
 describe('풀 구성 — 스탯에 몰리지 않는다', () => {
-  test('모든 계열이 최소 9종씩 있다 — 한 판에 같은 카드가 반복되지 않게', () => {
+  // 계열별 최소 종수 — ≥9였다. 증강이 **레벨→라운드 4장**으로 줄고(2026-07-20)
+  // 경제가 골드 2종으로 압축되면서(2026-07-21) 이 하한이 옛 전제가 됐다. 한 판에 4장만
+  // 받으므로 "한 계열 9종"은 과했다. 카드 리뉴얼 본편에서 축을 재정의할 때 다시 잡는다.
+  // 지금은 "우연히 텅 빈 계열"만 잡는 느슨한 하한(≥4)으로 둔다.
+  test('계열마다 최소한의 종수는 있다 (리뉴얼 중 임시 하한)', () => {
     for (const kind of H.AUGMENT_KINDS) {
       const count = AUGMENTS.filter((a) => a.kind === kind).length;
-      expect(count, `${kind} 계열이 너무 적다`).toBeGreaterThanOrEqual(9);
+      expect(count, `${kind} 계열이 너무 적다`).toBeGreaterThanOrEqual(4);
     }
   });
 
@@ -226,33 +229,45 @@ describe('발동 효과 — 새 전투 프리미티브', () => {
 });
 
 describe('경제 — 라운드 수입', () => {
-  test('가스 정맥은 라운드를 넘길 때 들어온다 — 수확은 보상 폐지로 죽은 효과다', () => {
+  test('가스 정맥은 라운드를 넘길 때 들어온다', () => {
     const game = new Game();
-    game.hero.addAugment(card('harvest'));
     game.hero.addAugment(card('gasvein'));
 
     const s = game.hero.stats;
-    // 수확은 고정 가산이 아니라 라운드 보상 **배수**다.
-    // 2026-07-20 웨이브 보상 폐지로 이 배수는 0에 곱해져 **지금은 죽은 효과**다 —
-    // 스탯 계산은 그대로 살아 있으므로(되돌릴 수 있어야 한다) 여기서는 계산만 고정한다.
-    expect(s.waveRewardMult).toBeGreaterThan(1);
-    expect(B.waveReward(1)).toBe(0); // 죽은 효과인 이유
     expect(s.gasPerWave).toBeGreaterThan(0);
 
     // 첫 라운드(0→1)는 설계상 보상이 없다 — 라운드를 한 번 넘긴 뒤부터 잰다
     for (let i = 0; i < 4000 && game.round < 1; i++) game.update(0.05);
-    const mineral = game.mineral;
     const gas = game.gas;
 
     const round = game.round;
     for (let i = 0; i < 4000 && game.round === round; i++) game.update(0.05);
 
     expect(game.round).toBeGreaterThan(round);
-    expect(game.gas).toBeGreaterThan(gas); // 가스 정맥은 그대로 산다
-    // 수확(waveRewardMult)은 0에 곱해져 미네랄을 못 준다 — 라운드 넘김만으로는 안 는다.
-    // 늘었다면 누출 미네랄뿐이다.
-    expect(game.mineral - mineral).toBeLessThanOrEqual((game.lives - game.lives) + B.LEAK_MINERAL * B.START_LIVES);
-    expect(B.waveReward(round)).toBe(0);
+    expect(game.gas).toBeGreaterThan(gas); // 가스 정맥은 라운드를 넘길 때 들어온다
+  });
+
+  // 골드 증강은 딱 둘 — 즉시 골드(일확천금) + 처치 골드(탐욕) (2026-07-21, 사용자 지시)
+  test('일확천금은 고르는 즉시 목돈을 준다 (라운드마다가 아니라 일회성)', () => {
+    const game = new Game();
+    game.augmentChoices = [card('windfall')];
+    const before = game.mineral;
+    game.chooseAugment(0);
+    expect(game.mineral).toBe(before + 150);
+
+    // 즉시 골드는 스탯이 아니라 일회성이다 — 스탯에 안 남는다
+    expect(game.hero.stats).not.toHaveProperty('instantMineral');
+  });
+
+  test('죽은 라운드보상 증강(수확·재벌)은 삭제됐다', () => {
+    for (const id of ['harvest', 'tycoon', 'prospector', 'apprentice', 'bounty']) {
+      expect(AUGMENTS.some((a) => a.id === id)).toBe(false);
+    }
+    // 골드를 주는 경제 증강은 둘뿐이다
+    const gold = AUGMENTS.filter(
+      (a) => a.kind === 'econ' && (a.effect.instantMineral || a.effect.mineralPerKill),
+    );
+    expect(gold.map((a) => a.id).sort()).toEqual(['greed', 'windfall']);
   });
 
   test('학자는 경험치 획득을 늘린다', () => {

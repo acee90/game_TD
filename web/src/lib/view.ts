@@ -72,14 +72,13 @@ export function selectionInfoHtml(game: Game): string {
   if (!tower) {
     return '<span class="dim">빈 타일 = 유닛 생성 · 유닛 타일 = 정보 · 몹/보스 클릭 = 스탯. 같은 유닛 2기가 모이면 자동 조합됩니다.</span>';
   }
-  const total = damage(tower, game.upgrades);
-  // 공격력은 합계가 주인공, 분해는 칩+호버로 (플레이테스트 2026-07-17 2차: 가독성)
+  const towerDamage = damage(tower, game.upgrades);
+  // 실제 타격과 동일하게 영웅의 전역 타워 공격력 보너스까지 포함한다.
+  const total = towerDamage * game.hero.stats.towerDamageMult;
   const base = damage(tower, [0, 0, 0, 0]);
+  const increased = total - base;
   const upLevel = game.upgrades[tower.def.race];
-  const upText =
-    upLevel > 0
-      ? ` <span class="chip" title="기본 ${base.toFixed(0)} + 강화 ${(total - base).toFixed(0)}">강화 Lv${upLevel}</span>`
-      : '';
+  const upPercent = Math.round(B.UPGRADE_DAMAGE_PER_LEVEL * upLevel * 100);
   const dps = (total / attackInterval(tower)).toFixed(0);
   // F5 (unity-hud-playtest-v0.1) — 간격(초/회)이 아니라 초당 공격 횟수. 큰 값 = 빠른 공격.
   const rate = 1 / Math.max(0.01, attackInterval(tower));
@@ -90,8 +89,20 @@ export function selectionInfoHtml(game: Game): string {
       <span class="chip">${TIER_LABEL[tower.tier]}</span>
       <span class="chip">【 ${tagLabel(tower.def)} 】</span>
     </div>
-    <div class="dim">${RACES[tower.def.race]} · 공격력 <b>${total.toFixed(0)}</b>${upText} · 공속 ${rateText}회/초
-      · DPS ${dps} · 사거리 ${range(tower).toFixed(0)}</div>`;
+    <div class="tower-stats">
+      <div class="attack-card" title="현재 공격력 = 기본 공격력 + 상승된 공격력">
+        <span class="attack-label">공격력</span>
+        <b class="attack-total">${total.toFixed(0)}</b>
+        <span class="attack-breakdown">기본 ${base.toFixed(0)} + 상승 ${increased.toFixed(0)}</span>
+        <span class="attack-upgrade">강화 Lv${upLevel} · +${upPercent}%</span>
+      </div>
+      <div class="tower-stat-details dim">
+        <b>${RACES[tower.def.race]}</b>
+        <span>공속 ${rateText}회/초</span>
+        <span>DPS ${dps}</span>
+        <span>사거리 ${range(tower).toFixed(0)}</span>
+      </div>
+    </div>`;
 }
 
 /** 보스 소환대 — 레벨별 버튼 HTML. 내용이 바뀔 때만 DOM에 반영하도록 Svelte가 관리한다. */
@@ -283,21 +294,22 @@ export function augmentCardsHtml(game: Game, locked: boolean): string {
         ? `<div class="d" style="color:${rarity.color}">→ 실제: ${actual}</div>`
         : '';
       const used = !game.canRerollAugmentChoice(i);
-      const badgeStyle = locked || used ? 'opacity:.45' : 'cursor:pointer';
       const lockStyle = locked ? ';opacity:.45;pointer-events:none' : '';
-      return `<button class="augcard" data-index="${i}" style="border-color:${rarity.color}${lockStyle}">
-        <div class="k">
-          <span style="color:${kindColor}">${kindLabel}</span>
-          ${risk}
-          <span class="rar" style="color:${rarity.color}">${rarity.label}${power}</span>
-        </div>
-        <div class="n">${card.augment.name}</div>
-        <div class="d">${card.augment.description}</div>
-        ${actualLine}
-        <span class="cardReroll" data-reroll="${i}" style="${badgeStyle}">${
-          used ? '⟳ 사용함' : '⟳ 이 카드만 다시'
-        }</span>
-      </button>`;
+      return `<div class="augcardRow">
+        <button class="augcard" data-index="${i}" style="border-color:${rarity.color}${lockStyle}">
+          <div class="k">
+            <span style="color:${kindColor}">${kindLabel}</span>
+            ${risk}
+            <span class="rar" style="color:${rarity.color}">${rarity.label}${power}</span>
+          </div>
+          <div class="n">${card.augment.name}</div>
+          <div class="d">${card.augment.description}</div>
+          ${actualLine}
+        </button>
+        <button class="cardReroll" data-reroll="${i}" ${locked || used ? 'disabled' : ''}>
+          ${used ? '사용함' : '⟳ 새로고침'}
+        </button>
+      </div>`;
     })
     .join('');
 }
@@ -306,8 +318,8 @@ export function augmentCardsHtml(game: Game, locked: boolean): string {
  * Lv9 스킬 드래프트 카드 HTML — 증강이 아니라 **액티브 스킬**을 고르는 화면.
  *
  * 성향(role)을 앞세운다: 지금 보드가 잡몹을 놓치는지 보스를 못 녹이는지에 따라
- * 무엇을 골라야 하는지가 갈리기 때문이다. 카드마다 리롤 배지가 붙는데,
- * **버튼 안의 버튼은 무효 HTML**이라 span으로 두고 클릭은 오버레이가 가려낸다.
+ * 무엇을 골라야 하는지가 갈리기 때문이다. 리롤 버튼은 카드 오른쪽의 독립 버튼으로 둬
+ * 카드 선택과 새로고침을 시각적·구조적으로 분리한다.
  */
 export function skillChoiceCardsHtml(game: Game, locked: boolean): string {
   return game.skillChoices
@@ -315,17 +327,18 @@ export function skillChoiceCardsHtml(game: Game, locked: boolean): string {
       const def = SKILLS[id];
       const role = SKILL_ROLE_LABEL[def.role];
       const used = !game.canRerollSkillChoice(i);
-      const badgeStyle = locked || used ? 'opacity:.45' : 'cursor:pointer';
       const lockStyle = locked ? ';opacity:.45;pointer-events:none' : '';
-      return `<button class="augcard" data-index="${i}" style="border-color:${role.color}${lockStyle}">
-        <div class="k"><span style="color:${role.color}">${role.label}</span></div>
-        <div class="n">${def.name}</div>
-        <div class="d">${def.description}</div>
-        <div class="d">필요 마나 ${def.manaMax}</div>
-        <span class="cardReroll" data-reroll="${i}" style="${badgeStyle}">${
-          used ? '⟳ 사용함' : '⟳ 이 카드만 다시'
-        }</span>
-      </button>`;
+      return `<div class="augcardRow">
+        <button class="augcard" data-index="${i}" style="border-color:${role.color}${lockStyle}">
+          <div class="k"><span style="color:${role.color}">${role.label}</span></div>
+          <div class="n">${def.name}</div>
+          <div class="d">${def.description}</div>
+          <div class="d">필요 마나 ${def.manaMax}</div>
+        </button>
+        <button class="cardReroll" data-reroll="${i}" ${locked || used ? 'disabled' : ''}>
+          ${used ? '사용함' : '⟳ 새로고침'}
+        </button>
+      </div>`;
     })
     .join('');
 }

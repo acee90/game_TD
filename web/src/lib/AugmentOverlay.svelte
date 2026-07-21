@@ -59,10 +59,10 @@
 
   function onCardsClick(event: MouseEvent): void {
     if (v.locked) return; // F1 — pointer-events만 믿지 않고 재검사
-    // 카드별 리롤 배지가 먼저다 — 카드 안에 있으므로 선택보다 앞서 가려낸다
-    const rerollBadge = (event.target as HTMLElement).closest<HTMLElement>('.cardReroll');
-    if (rerollBadge?.dataset.reroll) {
-      const index = Number(rerollBadge.dataset.reroll);
+    // 카드 오른쪽의 독립 리롤 버튼을 카드 선택보다 먼저 처리한다.
+    const rerollButton = (event.target as HTMLElement).closest<HTMLElement>('.cardReroll');
+    if (rerollButton?.dataset.reroll) {
+      const index = Number(rerollButton.dataset.reroll);
       if (v.skillDraft) game.rerollSkillChoice(index);
       else game.rerollAugmentChoice(index);
       return;

@@ -54,12 +54,21 @@ const CROSS_SLOTS: readonly Pt[] = [
 ];
 
 /**
- * 모서리 타일 — 경로 바깥의 네 모서리에 3×2 블록씩, 모두 24칸.
- * 십자 타일과 달리 경로의 한쪽 변만 커버하므로 사거리가 짧은 유닛에게는 자리가 아깝다.
- * 대신 십자가 꽉 차도 계속 유닛을 놓을 수 있어 후반의 골드 소비처가 된다.
+ * 모서리 타일 — 네 모서리에 **L자 3칸씩, 모두 12칸** (2026-07-21, 사용자 지시).
+ *
+ * 3×2 블록 6칸씩 24칸이었다(총 41칸). 보드가 넓으면 **수로 밀어붙이는 것**이
+ * 조합·티어보다 쉬워져서, 저티어를 잔뜩 깔아도 중반 웨이브가 다 죽었다.
+ * 타일을 줄이면 한 칸의 값어치가 오르고 조합 압력이 생긴다.
+ *
+ * 남길 3칸은 **경로에 가장 가까운 것**으로 골랐다. 6칸 중 4칸이 거리 38로 동률이고
+ * 2칸만 74인데(바깥 대각), 동률 4칸에서 **모서리 + 가로 1 + 세로 1**의 L자를 택했다 —
+ * 경로의 두 변을 모두 끼므로 한 변만 훑는 일자 배치보다 커버가 고르다.
  */
-export const CORNER_COLS = 3;
-export const CORNER_ROWS = 2;
+export const CORNER_OFFSETS: readonly (readonly [col: number, row: number])[] = [
+  [0, 0], // 모서리 안쪽 — 두 변에 모두 가깝다
+  [1, 0], // 가로 변을 따라
+  [0, 1], // 세로 변을 따라
+];
 
 /**
  * 길의 보행 가능 반폭(px) — 경로 중심선에서 좌우로 이만큼까지 걸을 수 있다.
@@ -73,11 +82,9 @@ export const WALKABLE_HALF_WIDTH = 20;
 const CLEARANCE = WALKABLE_HALF_WIDTH + TILE / 2;
 
 const cornerBlock = (originX: number, originY: number, dx: number, dy: number): Pt[] =>
-  Array.from({ length: CORNER_COLS * CORNER_ROWS }, (_, i) => {
-    const col = i % CORNER_COLS;
-    const row = Math.floor(i / CORNER_COLS);
-    return [originX + dx * TILE * col, originY + dy * TILE * row] as const;
-  });
+  CORNER_OFFSETS.map(
+    ([col, row]) => [originX + dx * TILE * col, originY + dy * TILE * row] as const,
+  );
 
 // 네 모서리의 안쪽 한계 — 십자 세로바/가로바를 감싸는 경로선에서 CLEARANCE만큼 물러난 지점
 const innerLeft = CENTER[0] - HALF - OFFSET - CLEARANCE;

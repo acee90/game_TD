@@ -680,6 +680,11 @@ export class Game {
     const offerId = this.currentOfferId;
     const augment = this.augmentLogRef(card);
     this.hero.addAugment(card);
+    // 즉시 골드 — 등급 반영된 값(card.effect)으로 고르는 순간 지급한다
+    if (card.effect.instantMineral) {
+      this.mineral += Math.round(card.effect.instantMineral);
+      this.float(this.hero.x, this.hero.y, `+${Math.round(card.effect.instantMineral)}`, '#ffd23f');
+    }
     this.augmentChoices = [];
     this.augmentChoiceRerolls = [];
     this.record('augment_chosen', { offerId, choiceIndex: index, augment });
@@ -1728,7 +1733,7 @@ export class Game {
               (a, b) =>
                 Math.abs(hero.distance - a.distance) - Math.abs(hero.distance - b.distance),
             )
-            .slice(0, H.aggroCap(hero.stats.aggroRange))
+            .slice(0, hero.stats.aggroTargets)
         : [],
     );
 
@@ -1895,9 +1900,8 @@ export class Game {
 
   /** 몹 앞쪽 시야 안에 살아있는 영웅이 있는가 */
   private isAggroed(enemy: Enemy, hero: Hero): boolean {
-    // 어그로는 증강이 켠다 (2026-07-20) — 범위 0이면 아무도 안 붙잡는다.
-    // aggroCap이 최소 1을 보장하므로 여기서 막지 않으면 한 기가 새어 붙는다.
-    if (hero.stats.aggroRange <= 0) return false;
+    // 어그로는 증강이 켠다 (2026-07-20) — 증강이 없으면 아무도 안 붙잡는다
+    if (hero.stats.aggroTargets <= 0 || hero.stats.aggroRange <= 0) return false;
     const gap = hero.distance - enemy.distance;
     if (gap < -H.ENEMY_TOUCH_RANGE) return false; // 이미 지나쳤다
     // '도발' 계열이 어그로 범위를 넓힌다 — 더 많이 붙잡는다

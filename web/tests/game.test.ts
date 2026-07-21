@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'vitest';
 import * as B from '../src/data/balance';
 import * as S from '../src/data/score';
-import { ARM_TILES, CORNER_COLS, CORNER_ROWS, PATH_LENGTH, SLOT_POS, TILE, nearestPathDistance, pathPos } from '../src/core/map';
+import { ARM_TILES, CORNER_OFFSETS, PATH_LENGTH, SLOT_POS, TILE, nearestPathDistance, pathPos } from '../src/core/map';
 import { CREATURE, GOD_POOL_EARLY, GOD_POOL_LATE, GOD_TIER, TIER_POOLS, godPool } from '../src/data/units';
 import { damage } from '../src/game/combat';
 import { Game } from '../src/game/game';
@@ -213,9 +213,9 @@ describe('라운드 진행 — 고정 간격', () => {
     // 곱셈 앵커라 곡선 전체가 같이 올라가고 성장률은 안 바뀐다 — 구간 보정은 없다.
     expect(B.WAVE_HP_R1).toBe(572);
     // 성장률 직접 지정 (2026-07-20, 사용자 지시): 10라운드 계단으로 세분.
-    // R2~10 14% · R11~20 16% · R21~30 17% · R31~40 18% · R41~50 19% · R51+ 13%
+    // R2~30 18% · R31~40 20% · R41~50 19% · R51+ 10%
     expect(B.WAVE_RATE_SEGMENTS.map(([f, r]) => [f, Math.round(r * 100)]))
-      .toEqual([[2, 14], [11, 16], [21, 17], [31, 18], [41, 19], [51, 13]]);
+      .toEqual([[2, 18], [31, 20], [41, 19], [51, 10]]);
     // 보정 구간(R41~50)만은 실효 성장률이 다르다 — 아래에서 따로 본다.
     for (const r of [3, 8, 10]) {
       expect(B.waveTotalHp(r) / B.waveTotalHp(r - 1)).toBeCloseTo(1 + B.WAVE_EARLY_RATE, 5);
@@ -588,12 +588,29 @@ describe('소득 — 차감 없는 누적형', () => {
 
 describe('맵 — 십자 일주', () => {
   const CROSS_COUNT = 1 + ARM_TILES * 4;
-  const CORNER_COUNT = 4 * CORNER_COLS * CORNER_ROWS;
+  const CORNER_COUNT = 4 * CORNER_OFFSETS.length;
 
-  test('타워 타일은 십자 17 + 모서리 24 = 41개', () => {
+  // 41 → 29 (2026-07-21, 사용자 지시): 모서리를 3×2(6칸)에서 L자 3칸으로 줄였다.
+  // 보드가 넓으면 '수로 밀어붙이기'가 조합·티어보다 쉬워져 중반이 물러진다.
+  test('타워 타일은 십자 17 + 모서리 12 = 29개', () => {
     expect(CROSS_COUNT).toBe(17);
-    expect(CORNER_COUNT).toBe(24);
-    expect(SLOT_POS).toHaveLength(41);
+    expect(CORNER_COUNT).toBe(12);
+    expect(SLOT_POS).toHaveLength(29);
+  });
+
+  test('남긴 모서리 3칸은 경로에 가장 가까운 것들이다', () => {
+    const distToPath = (x: number, y: number): number => {
+      let min = Infinity;
+      for (let d = 0; d < PATH_LENGTH; d += 4) {
+        const [px, py] = pathPos(d);
+        min = Math.min(min, Math.hypot(px - x, py - y));
+      }
+      return min;
+    };
+    const corners = SLOT_POS.slice(CROSS_COUNT);
+    expect(corners).toHaveLength(12);
+    // 6칸이던 시절 바깥 대각 2칸은 거리 74였다 — 그것들이 빠졌는지 확인
+    for (const [x, y] of corners) expect(distToPath(x, y)).toBeLessThan(50);
   });
 
   test('모서리 타일은 경로와 겹치지 않는다', () => {

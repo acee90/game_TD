@@ -190,8 +190,17 @@ export function attributesByLevel(level: number): HeroAttributes {
   };
 }
 
-/** XP 골드 구매 (TFT식) — 1골드 = 1XP, 버튼 한 번에 20 */
-export const XP_BUY_GOLD = 20;
+/**
+ * XP 골드 구매 (TFT식). **1골드 = 1XP → 3골드 = 1XP** (2026-07-20, 사용자 지시:
+ * "XP 구매로 레벨업하는데 골드 많이 들도록").
+ *
+ * 만렙이 생기면서 구매의 성격이 바뀌었다. 어차피 모두가 만렙에 닿으므로 구매는
+ * **도달 시점만 앞당긴다** — 그런데 앞당기면 보스 사냥·증강이 다 빨라져 복리로 돌아온다.
+ * 그래서 **골드 효율은 나쁘게** 두는 것이 맞다: 값이 싸면 "무조건 사는" 정답 수순이 된다.
+ *
+ * 만렙까지 순수 구매 시 2,073골드 — R45 수입 저점(5,458)의 38%다. 큰 결심이되 불가능하진 않다.
+ */
+export const XP_BUY_GOLD = 60;
 export const XP_BUY_AMOUNT = 20;
 
 /**
@@ -226,10 +235,16 @@ export const xpToNext = (level: number): number =>
   Math.round(XP_BASE_COST * Math.pow(XP_COST_GROWTH, level));
 
 /**
- * 킬 XP는 부축이다 (0.65 → 0.3, 2026-07-11 2안 개편) — 주 연료는 골드 구매(XP_BUY_GOLD).
- * 레벨 속도 목표: 수입 20% 투자 기준 R45에 Lv ~24 (2026-07-16 D3 재정의).
+ * 킬 XP — **주 연료로 되돌린다** (0.3 → 0.5, 2026-07-20, 사용자 지시).
+ *
+ * 만렙 20(HERO_MAX_LEVEL) 도입으로 성장의 의미가 바뀌었다. 그전에는 골드 구매가
+ * 주 연료라 "돈을 안 쓰면 영영 안 큰다"였고, 실측에서 XP를 안 사면 **Lv15~16에서
+ * 멈췄다**(R40 이후 정지). 이제는 **자연 성장만으로 R45쯤 만렙에 닿는 것**이 기준선이고,
+ * 골드 구매는 그 시점을 **앞당기는** 수단이다 — 격차가 아니라 타이밍을 산다.
+ *
+ * 목표 레벨 속도: 킬+보스 XP만으로 R45 전후 Lv20.
  */
-export const XP_PER_MOB = 0.3;
+export const XP_PER_MOB = 0.5;
 export const HERO_LASTHIT_XP_MULT = 2;
 export const xpPerBoss = (level: number): number => 8 * level;
 
@@ -255,17 +270,29 @@ export const HERO_AGGRO_RANGE = 0;
 export const AGGRO_RANGE_BASE = 110;
 
 /**
- * 어그로 수 상한 (2026-07-19, 사용자 지시: "모든 몬스터가 어그로 끌릴 수는 없다").
+ * **어그로 수 상한 — 범위에서 분리한다** (2026-07-20, 사용자 지시).
  *
- * 상한 = 어그로 범위 ÷ 이 값 — 범위 22px(= 접촉 사거리, 몸 하나 폭)당 1기.
- * 기본 110px → 5기. 도발 계열 증강이 범위를 넓히면 상한도 같이 오른다
- * (도발 오라 2스택 ×2 → 10기). 상한을 넘는 몹은 영웅을 무시하고 지나간다 —
- * 어그로 탱킹의 기대값이 "전부"에서 "범위에 비례한 만큼"으로 내려간다.
- * 허수아비(미끼)는 전담 탱킹 도구라 상한을 두지 않는다.
+ * 그전에는 `범위 ÷ 22`라 범위를 넓히는 증강이 수까지 같이 올렸다. 도발 2스택이면
+ * **10기**가 되는데 웨이브가 15기니까 **67%를 무한 정지**시킨다 — 이건 슬로우를
+ * 압도하는 정도가 아니라 게임을 지운다.
+ *
+ * **어그로는 무한 슬로우다.** 슬로우는 아무리 세도 체류 시간 ×2.2가 천장이지만
+ * (속도를 0으로 못 만든다) 어그로는 시간 축을 무한대로 보낸다 — 같은 종류의 효과가
+ * 아니라 다른 등급이다. 그래서 **수를 아주 작게** 묶는 것이 유일한 안전판이다.
+ *
+ * 킹덤러쉬가 같은 문제를 푸는 방식을 참고했다: 병사 1명당 적 1기, 병영당 3명.
+ * 시간 제한 없이 **점유 수**로만 총량을 묶고, 병사가 죽으면 풀린다. 우리는 영웅
+ * 사망(12초 부활)이 그 자리를 대신하되, 회복 증강으로 안 죽을 수 있으므로 수 상한이
+ * 더 중요하다.
+ *
+ * 범위는 **어디서 끌어오나**(위치 선택), 스택은 **몇 기를 붙잡나**로 완전히 갈랐다.
+ * 15기 웨이브 기준 2기=13% · 3기=20% · 5기=33%라, 5가 슬로우와 비교 가능한 상한이다.
  */
-export const AGGRO_RANGE_PER_TARGET = 22;
-export const aggroCap = (aggroRange: number): number =>
-  Math.max(1, Math.round(aggroRange / AGGRO_RANGE_PER_TARGET));
+export const AGGRO_CAP_BY_STACKS: readonly number[] = [0, 2, 3, 5];
+
+/** 어그로 증강 스택 수 → 동시에 붙잡는 몹 수 */
+export const aggroCap = (stacks: number): number =>
+  AGGRO_CAP_BY_STACKS[Math.min(Math.max(0, Math.round(stacks)), AGGRO_CAP_BY_STACKS.length - 1)];
 /** 이만큼 붙으면 실제로 때린다 */
 export const ENEMY_TOUCH_RANGE = 22;
 export const ENEMY_ATTACK_INTERVAL = 1;
@@ -446,6 +473,11 @@ export interface AugmentEffect {
   readonly xpMult?: number;
   /** 어그로 범위 배수 — 넓을수록 더 많이 붙잡는다 */
   readonly aggroRangeMult?: number;
+  /**
+   * 어그로 스택 — 이 값이 쌓여 **동시에 붙잡는 몹 수**를 정한다(AGGRO_CAP_BY_STACKS).
+   * 범위(aggroRangeMult)와 별개다: 범위는 어디서 끌어오나, 스택은 몇 기를 붙잡나.
+   */
+  readonly aggroStack?: number;
   /** 체력이 LOW_HP_THRESHOLD 밑일 때만 걸리는 공격력 배수 */
   readonly lowHpDamageMult?: number;
   /** 성장(누적) 증강의 적립치 배수 — 성장 특화가 키운다 */
@@ -503,6 +535,8 @@ export interface AugmentEffect {
   readonly deathBlast?: number;
   /** 폭발 반경 */
   readonly deathBlastRadius?: number;
+  /** 획득 즉시 주는 금화 (일회성). 라운드마다가 아니라 고를 때 한 번 (2026-07-21) */
+  readonly instantMineral?: number;
   /** 처치당 추가 금화 */
   readonly mineralPerKill?: number;
   /** 라운드마다 금화 (고정값) */
@@ -638,7 +672,20 @@ export const RARITIES: Record<Rarity, RarityDef> = {
 
 export const RARITY_ORDER: readonly Rarity[] = ['silver', 'gold', 'platinum'];
 
-/** 가중치에 따라 등급 하나를 뽑는다 */
+/**
+ * 드래프트가 주는 기본 등급 — **언제나 실버** (2026-07-20, 사용자 지시:
+ * "증강 강화 기능을 넣었으므로 골드·플래티넘 등급은 삭제").
+ *
+ * 전에는 뽑을 때 등급이 랜덤으로 붙었다(실버 55% · 골드 33% · 플래티넘 12%).
+ * 그런데 **증강 강화**가 등급을 올리는 시스템이 되면서 등급의 출처가 둘이 됐다 —
+ * 같은 것을 두 곳에서 굴리면 어느 쪽이 내 빌드를 만들었는지 읽히지 않는다.
+ *
+ * 이제 등급은 **강화로만** 오른다. 뽑기 운은 "어떤 증강이 뜨는가"만 정하고,
+ * "얼마나 센가"는 플레이어가 골드로 정한다.
+ */
+export const DRAFT_RARITY: Rarity = 'silver';
+
+/** 가중치에 따라 등급 하나를 뽑는다 (지금은 시트·테스트 전용 — 드래프트는 안 쓴다) */
 export function rollRarity(rand: () => number): Rarity {
   const total = RARITY_ORDER.reduce((sum, r) => sum + RARITIES[r].weight, 0);
   let roll = rand() * total;
@@ -669,6 +716,8 @@ export function scaleEffect(effect: AugmentEffect, power: number): AugmentEffect
     xpMult: mult(effect.xpMult),
     waveRewardMult: mult(effect.waveRewardMult),
     aggroRangeMult: mult(effect.aggroRangeMult),
+    // 스택은 개수라 등급으로 안 키운다 — 등급이 붙잡는 수를 늘리면 상한이 무너진다
+    aggroStack: effect.aggroStack,
     lowHpDamageMult: mult(effect.lowHpDamageMult),
     growthMult: mult(effect.growthMult),
     skillDamageMult: mult(effect.skillDamageMult),
@@ -729,7 +778,7 @@ const MULT_LABELS: readonly (readonly [keyof AugmentEffect, string])[] = [
   ['damageMult', '공격력'], ['hpMult', '최대 체력'], ['rangeMult', '사거리'],
   ['attackSpeedMult', '공격 속도'], ['moveSpeedMult', '이동 속도'],
   ['towerDamageMult', '타워 공격력'], ['towerRangeMult', '타워 사거리'],
-  ['xpMult', '경험치'], ['aggroRangeMult', '어그로 범위'],
+  ['xpMult', '경험치'], ['aggroRangeMult', '어그로 범위'], ['aggroStack', '어그로 대상'],
   ['lowHpDamageMult', '위기 시 공격력'], ['growthMult', '성장 누적'],
   ['skillDamageMult', '스킬 피해'], ['manaMaxMult', '필요 마나'],
   ['manaGainMult', '마나 획득'], ['waveRewardMult', '라운드 보상'],
@@ -1089,23 +1138,28 @@ export const AUGMENTS: readonly Augment[] = [
     effect: { waveStackDamage: 0.05 }, penalty: { moveSpeedMult: 0.9 } },
 
   // ══ 경제 (econ) — 수입과 경험치. TFT 증강의 중심축(43%)이 여기다.
-  { id: 'greed', kind: 'econ', name: '탐욕', description: '처치당 금화 +2', maxStacks: 3,
-    effect: { mineralPerKill: 2 } },
-  { id: 'harvest', kind: 'econ', name: '수확', description: '라운드 보상 +40%', maxStacks: 3,
-    effect: { waveRewardMult: 1.4 } },
+  // ── 처치당 금화 계열 — **대폭 너프** (2026-07-21, 사용자 지시: "골드수급이 말도안된다")
+  // 측정: 몹 15기 기준 기본 수입(킬 미션)이 라운드당 15골드인데, 탐욕 1스택이 30,
+  // 3스택이 90, 플래티넘 강화 3스택이 **315**였다 — 증강 한 장이 게임 전체 수입의
+  // 배수로 들어왔다. 웨이브 보상을 폐지(2026-07-20)해 기본 수입을 깎아둔 터라 격차가
+  // 더 벌어졌고, 증강 강화로 등급이 오르면서 상한도 사라졌다.
+  //
+  // 처치당 금화는 **골드 → 타워 → 킬 → 골드**로 복리가 도는 자리라 특히 위험하다.
+  // 골드 증강은 **딱 둘** — 즉시 골드(일확천금)와 처치 골드(탐욕) (2026-07-21, 사용자 지시).
+  // 그전에는 처치금화 4종·라운드보상 3종이 겹쳐 9종이었는데, 라운드보상 계열은
+  // waveReward 폐지(2026-07-20)로 **0에 곱해지는 죽은 카드**였다. 축을 둘로 압축한다:
+  //   · 일확천금 = 지금 당장 목돈 (초반일수록 강함)
+  //   · 탐욕     = 잡을수록 버는 지속 수입
+  { id: 'greed', kind: 'econ', name: '탐욕', description: '10킬당 금화 +4', maxStacks: 2,
+    effect: { mineralPerKill: 0.4 } },
   { id: 'gasvein', kind: 'econ', name: '마정석 정맥', description: '라운드마다 마정석 +5', maxStacks: 3,
     effect: { gasPerWave: 5 } },
   { id: 'scholar', kind: 'econ', name: '학자', description: '경험치 획득 +40%', maxStacks: 3,
     effect: { xpMult: 1.4 } },
-  { id: 'prospector', kind: 'econ', name: '시굴자', description: '처치당 금화 +1, 라운드 보상 +25%',
-    maxStacks: 2, effect: { mineralPerKill: 1, waveRewardMult: 1.25 } },
-  { id: 'apprentice', kind: 'econ', name: '수련', description: '경험치 획득 +20%, 처치당 금화 +1',
-    maxStacks: 3, effect: { xpMult: 1.2, mineralPerKill: 1 } },
-  // 아레나 'GoH 갈망' 계열 — 힘을 팔아 돈을 산다
-  { id: 'tycoon', kind: 'econ', name: '재벌', description: '라운드 보상 +90% · 공격력 -15%',
-    maxStacks: 2, effect: { waveRewardMult: 1.9 }, penalty: { damageMult: 0.85 } },
-  { id: 'bounty', kind: 'econ', name: '현상금 사냥꾼', description: '처치당 금화 +4 · 최대 체력 -10%',
-    maxStacks: 2, effect: { mineralPerKill: 4 }, penalty: { hpMult: 0.9 } },
+  // 즉시 골드 — 고르는 순간 목돈. 라운드마다가 아니라 일회성이라 **초반에 뽑을수록**
+  // 값어치가 크다(복리로 굴릴 시간이 길다). 강화하면 목돈이 커진다(등급 배수).
+  { id: 'windfall', kind: 'econ', name: '일확천금', description: '획득 즉시 금화 +150',
+    maxStacks: 2, effect: { instantMineral: 150 } },
   { id: 'investment', kind: 'econ', name: '투자', description: '라운드마다 마정석 +8 · 부활 대기 3초 증가',
     maxStacks: 2, effect: { gasPerWave: 8 }, penalty: { respawnCut: -3 } },
 
@@ -1123,10 +1177,12 @@ export const AUGMENTS: readonly Augment[] = [
   { id: 'phoenix', kind: 'util', name: '불사조', description: '부활 대기 4초 감소', maxStacks: 2,
     effect: { respawnCut: 4 } },
   // 어그로를 넓힌다 — 영웅의 본업(몹 모으기)을 강화한다
-  { id: 'provoke', kind: 'util', name: '도발', description: '어그로 범위 +50% (더 많이 붙잡는다)',
-    maxStacks: 2, effect: { aggroRangeMult: 1.5 } },
-  { id: 'vanguard', kind: 'util', name: '선봉', description: '어그로 범위 +35%, 받는 피해 10% 감소',
-    maxStacks: 2, effect: { aggroRangeMult: 1.35, damageReduction: 0.1 } },
+  // 어그로 증강 — 스택이 붙잡는 수를 정한다 (1장 2기 · 2장 3기 · 3장 5기).
+  // 5기를 감당하려면 맞는 양도 그만큼 커지므로 방어를 함께 붙였다 (2026-07-20, 사용자 지시).
+  { id: 'provoke', kind: 'util', name: '도발', description: '몹을 붙잡는다 (누적 2·3·5기) · 받는 피해 8% 감소',
+    maxStacks: 2, effect: { aggroStack: 1, aggroRangeMult: 1.5, damageReduction: 0.08 } },
+  { id: 'vanguard', kind: 'util', name: '선봉', description: '몹을 붙잡는다 (누적 2·3·5기) · 받는 피해 12% 감소, 최대 체력 +15%',
+    maxStacks: 2, effect: { aggroStack: 1, aggroRangeMult: 1.35, damageReduction: 0.12, hpMult: 1.15 } },
   { id: 'beacon', kind: 'util', name: '봉화', description: '모든 타워 공격력 +25% · 이동 속도 -15%',
     maxStacks: 2, effect: { towerDamageMult: 1.25 }, penalty: { moveSpeedMult: 0.85 } },
   { id: 'martyr', kind: 'util', name: '순교', description: '부활 대기 6초 감소 · 최대 체력 -10%',

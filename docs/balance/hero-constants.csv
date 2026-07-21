@@ -1,5 +1,5 @@
 key,value,note
-GOD_TOWER_DPS,464,영웅 파워의 기준선 (업그레이드 없음)
+GOD_TOWER_DPS,342,영웅 파워의 기준선 (업그레이드 없음)
 HERO_BASE_STR,2,기본 힘
 HERO_BASE_AGI,8,기본 민첩
 HERO_BASE_INT,8,기본 지능
@@ -8,13 +8,13 @@ HP_PER_STR,70,힘 1당 체력
 AS_PER_AGI,0.056,민첩 1당 공속 (포화식 분자)
 AS_AGI_SOFT_CAP,23,민첩 공속 소프트캡 — 기여 상한 AS_PER_AGI×CAP
 SKILL_PER_INT,0.035,지능 1당 스킬 피해
-XP_BUY_GOLD,20,"XP 골드 구매 — 1골드=1XP, 버튼당 20 (3안 유지)"
+XP_BUY_GOLD,60,"XP 골드 구매 — 1골드=1XP, 버튼당 20 (3안 유지)"
 levelStatPoints(1),1,"레벨업당 세 스탯 총 포인트 (2+floor(L/10), 3등분)"
 HERO_ATTACK_INTERVAL,1.9034,초
 HERO_BASE_RANGE,130,
 XP_BASE_COST,14,
 XP_COST_GROWTH,1.08,지수 — 고레벨을 봉인한다
-XP_PER_MOB,0.3,
+XP_PER_MOB,0.5,
 HERO_LASTHIT_XP_MULT,2,영웅 막타 보너스
 SYNERGY_THRESHOLD,3,같은 계열 N개 → 특화
 MASTERY_THRESHOLD,5,같은 계열 N개 → 대특화

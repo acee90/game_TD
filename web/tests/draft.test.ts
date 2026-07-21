@@ -67,7 +67,7 @@ describe('적응형 드래프트', () => {
 
     const committed = new Hero();
     committed.addAugment(card('greed'));
-    committed.addAugment(card('harvest'));
+    committed.addAugment(card('gasvein'));
     const biased = offerCounts(committed, 400);
 
     const ratio = (m: Map<H.AugmentKind, number>) =>
@@ -81,7 +81,7 @@ describe('적응형 드래프트', () => {
     const committed = new Hero();
     committed.addAugment(card('greed'));
     committed.addAugment(card('greed'));
-    committed.addAugment(card('harvest'));
+    committed.addAugment(card('gasvein'));
     const counts = offerCounts(committed, 400);
 
     const others = [...counts.entries()].filter(([k]) => k !== 'econ');

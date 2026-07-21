@@ -64,6 +64,8 @@ export interface HeroStats {
 
   // ── 유틸
   readonly aggroRange: number;
+  /** 동시에 붙잡는 몹 수 — 어그로 증강 스택이 정한다 (범위와 별개) */
+  readonly aggroTargets: number;
 
   // ── 스킬 개조 (증강 효과에서 온 것 — skillMod와 별개로 접힌다)
   readonly skillDamageMult: number;
@@ -151,6 +153,7 @@ export function computeStats(
   let reviveNova = 0;
   let novaRadius = 0;
   let towerCopyTier = 0;
+  let aggroStacks = 0;
 
   // 피해 감소는 곱연산으로 쌓아 100%에 도달하지 않게 한다
   let damageTaken = 1;
@@ -196,6 +199,7 @@ export function computeStats(
     if (e.towerRangeMult) bonus.towerRange += e.towerRangeMult - 1;
     if (e.xpMult) bonus.xp += e.xpMult - 1;
     if (e.aggroRangeMult) bonus.aggro += e.aggroRangeMult - 1;
+    if (e.aggroStack) aggroStacks += e.aggroStack;
     if (e.lowHpDamageMult) bonus.lowHp += e.lowHpDamageMult - 1;
     if (e.growthMult) bonus.growth += e.growthMult - 1;
     if (e.skillDamageMult) bonus.skillDamage += e.skillDamageMult - 1;
@@ -294,12 +298,13 @@ export function computeStats(
     gasPerWave,
     xpMult: Math.max(0.1, 1 + bonus.xp),
 
-    // 어그로는 증강이 켜야 열린다 (2026-07-20, 사용자 지시) — 기본값이 0이라
-    // 배수만으로는 안 켜진다. 도발 계열을 한 장이라도 들면 기저값이 서고,
-    // 거기에 그 증강들의 배수가 곱해진다.
+    // 어그로는 증강이 켜야 열린다 (2026-07-20) — 기본값이 0이라 배수만으로는 안 켜진다.
+    // 도발 계열을 한 장이라도 들면 기저 범위가 서고, 거기에 그 증강들의 배수가 곱해진다.
+    // **범위는 어디서 끌어오나, 스택은 몇 기를 붙잡나** — 둘을 분리했다.
     aggroRange:
-      (H.HERO_AGGRO_RANGE + (bonus.aggro > 0 ? H.AGGRO_RANGE_BASE : 0)) *
+      (H.HERO_AGGRO_RANGE + (aggroStacks > 0 ? H.AGGRO_RANGE_BASE : 0)) *
       Math.max(0.2, 1 + bonus.aggro),
+    aggroTargets: H.aggroCap(aggroStacks),
 
     skillDamageMult: Math.max(0.1, 1 + bonus.skillDamage) * compound.skillDamage,
     // 최대 마나 하한 — 모으면 스킬 난사가 성립한다
@@ -630,7 +635,7 @@ export function rollAugmentChoices(hero: Hero, rand: () => number): AugmentCard[
   while (cards.length < H.AUGMENT_CHOICES && remaining.length > 0) {
     const index = weightedIndex(remaining.map(weightOf), rand);
     const augment = remaining[index];
-    cards.push(H.makeCard(augment, augment.fixedRarity ?? H.rollRarity(rand)));
+    cards.push(H.makeCard(augment, augment.fixedRarity ?? H.DRAFT_RARITY));
     remaining.splice(index, 1);
   }
   return cards;
@@ -666,5 +671,5 @@ export function rerollAugmentChoice(
     1 + H.ADAPTIVE_KIND_WEIGHT * (heldByKind.get(augment.kind) ?? 0);
 
   const picked = pool[weightedIndex(pool.map(weightOf), rand)];
-  return H.makeCard(picked, picked.fixedRarity ?? H.rollRarity(rand));
+  return H.makeCard(picked, picked.fixedRarity ?? H.DRAFT_RARITY);
 }
