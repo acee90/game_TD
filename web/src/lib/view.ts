@@ -70,7 +70,7 @@ export function selectionInfoHtml(game: Game): string {
 
   const tower = game.selected?.tower;
   if (!tower) {
-    return '<span class="dim">빈 타일 = 유닛 생성 · 유닛 타일 = 정보 · 몹/보스 클릭 = 스탯. 같은 유닛 2기가 모이면 자동 조합됩니다.</span>';
+    return '';
   }
   const towerDamage = damage(tower, game.upgrades);
   // 실제 타격과 동일하게 영웅의 전역 타워 공격력 보너스까지 포함한다.
@@ -107,63 +107,81 @@ export function selectionInfoHtml(game: Game): string {
 
 /** 보스 소환대 — 레벨별 버튼 HTML. 내용이 바뀔 때만 DOM에 반영하도록 Svelte가 관리한다. */
 export function bossGridHtml(game: Game): string {
-  const cdText = game.bossCooldown > 0 ? `쿨 ${Math.ceil(game.bossCooldown)}s` : null;
+  const cooldownRatio = Math.max(0, Math.min(1, game.bossCooldown / B.BOSS_COOLDOWN_SECONDS));
   return Array.from({ length: B.BOSS_MAX_LEVEL }, (_, i) => i + 1)
     .map((level) => {
       const open = level <= game.maxBossLevel;
       const can = game.canSummonBossLevel(level);
-      const cls = `bossbtn${can ? ' ready' : ''}${open && level === game.maxBossLevel ? ' top' : ''}`;
-      const sub = !open ? '잠김' : cdText ?? `+${bossKillMineral(level)}`;
+      const cooling = game.bossCooldown > 0 ? ' cooling' : '';
+      const cls = `bossbtn${can ? ' ready' : ''}${open && level === game.maxBossLevel ? ' top' : ''}${cooling}`;
+      const reward = `+${bossKillMineral(level)}`;
+      const status = !open
+        ? '잠김'
+        : game.bossCooldown > 0
+          ? `쿨 ${Math.ceil(game.bossCooldown)}s`
+          : '소환 가능';
       return `<button class="${cls}" data-level="${level}" ${can ? '' : 'disabled'}
-        title="${open ? `Lv${level} 적장 소환 · 처치 보상 +${bossKillMineral(level)} 금화` : `Lv${level - 1}을 처치하면 해금됩니다`}">Lv${level}\n${sub}</button>`;
+        style="--cooldown-ratio:${cooldownRatio}"
+        title="${open ? `Lv${level} 적장 소환 · 처치 보상 +${bossKillMineral(level)} 금화` : `Lv${level - 1}을 처치하면 해금됩니다 · 처치 보상 +${bossKillMineral(level)} 금화`}">Lv${level}\n${reward}\n${status}</button>`;
     })
     .join('');
 }
 
-/** 보스 처치 보상 라인 (미션 패널) */
-export function bossRewardHtml(game: Game): string {
-  const levels = Array.from({ length: B.BOSS_MAX_LEVEL }, (_, i) => i + 1);
-  return levels
-    .map((level) => {
-      const open = level <= game.maxBossLevel;
-      const text = `Lv${level} +${bossKillMineral(level)}`;
-      return open ? `<b style="color:var(--gold)">${text}</b>` : `<span class="dim">${text}</span>`;
-    })
-    .join(' · ');
+export interface MissionItemView {
+  readonly label: string;
+  readonly reward: string;
+  readonly done: boolean;
 }
 
-/** 미션 패널의 스칼라 값 — 바 너비와 텍스트 */
+/** 미션 패널의 스칼라 값 — 진행 중 항목 + 완료 목록 */
 export interface MissionView {
-  readonly repeatWidth: number;
-  readonly repeatText: string;
-  readonly milestoneWidth: number;
-  readonly milestoneText: string;
+  readonly progressWidth: number;
+  readonly progressLabel: string;
+  readonly progressText: string;
+  readonly items: readonly MissionItemView[];
 }
 
 export function missionView(game: Game): MissionView {
-  const remaining = Math.max(0, game.roundTimer);
-  const countdown = game.round > 0 ? B.roundCountdownSeconds(game.round) : B.OPENING_SECONDS;
-  const nextType = B.waveTypeOf(Math.max(1, game.round) + 1);
-  const notice = nextType.id === 'normal' ? '' : ` · 다음: ${nextType.label}!`;
-  const repeatText =
-    `R${Math.max(1, game.round)} 클리어 → +${B.waveReward(Math.max(1, game.round))}${notice}`;
-
   const milestone = nextMilestone(game.kills);
-  let milestoneWidth = 100;
-  let milestoneText = '전부 달성';
-  if (milestone) {
-    const previous = milestone.kills - 200;
-    const span = milestone.kills - Math.max(0, previous);
-    const done = game.kills - Math.max(0, previous);
-    milestoneWidth = Math.min(100, (done / span) * 100);
-    milestoneText = `${game.kills}/${milestone.kills} → +${milestone.reward}`;
-  }
+  const milestoneStep = milestone?.kills === 50 || milestone?.kills === 100
+    ? milestone.kills
+    : B.KILL_MISSION_EVERY;
+  const previous = milestone ? Math.max(0, milestone.kills - milestoneStep) : game.kills;
+  const progressWidth = milestone
+    ? Math.min(100, ((game.kills - previous) / Math.max(1, milestone.kills - previous)) * 100)
+    : 100;
+  const progressLabel = milestone
+    ? milestone.kills === 50 || milestone.kills === 100
+      ? '킬 마일스톤'
+      : '반복 미션'
+    : '킬 미션';
+  const progressText = milestone
+    ? `${game.kills}/${milestone.kills} → +${milestone.reward}`
+    : '전부 달성';
+
+  const items: MissionItemView[] = [
+    ...B.KILL_MILESTONES.map(([kills, reward]) => ({
+      label: `누적 ${kills}킬 달성`,
+      reward: `+${reward} 금화`,
+      done: game.kills >= kills,
+    })),
+    ...Array.from({ length: B.BOSS_MAX_LEVEL }, (_, i) => {
+      const level = i + 1;
+      const base = bossKillMineral(level);
+      const reward = B.BOSS_FIRST_CLEAR_BONUS ? `${base * 2} 금화 (첫 처치)` : `${base} 금화`;
+      return {
+        label: `Lv${level} 보스 첫 처치`,
+        reward: `+${reward}`,
+        done: game.bossCleared >= level,
+      };
+    }),
+  ];
 
   return {
-    repeatWidth: (1 - remaining / countdown) * 100,
-    repeatText,
-    milestoneWidth,
-    milestoneText,
+    progressWidth,
+    progressLabel,
+    progressText,
+    items,
   };
 }
 
@@ -277,6 +295,24 @@ export function augmentPanelHtml(game: Game, openKeys: ReadonlySet<string>): str
   );
 }
 
+/**
+ * 경험치 일시불('깨달음') 미리보기 — 이 카드를 고르면 어디까지 크는지 계산한다
+ * (2026-07-21, 사용자 지시: "예상 레벨 및 경험치 보여주기"). gainXp와 같은 규칙:
+ * xpToNext(level)를 넘길 때마다 레벨업. xpMult(학자 등)도 실제 지급과 똑같이 탄다.
+ */
+function instantXpPreview(game: Game, instantXp: number): string {
+  const hero = game.hero;
+  let level = hero.level;
+  let xp = hero.xp + Math.round(instantXp) * hero.stats.xpMult;
+  while (xp >= HD.xpToNext(level)) {
+    xp -= HD.xpToNext(level);
+    level++;
+  }
+  return level > hero.level
+    ? `예상: Lv${hero.level} → <b>Lv${level}</b>`
+    : `예상: Lv${level} 유지 (경험치 ${Math.round(xp)}/${HD.xpToNext(level)})`;
+}
+
 /** 증강 선택 카드 HTML (입력 잠금 상태 반영) */
 export function augmentCardsHtml(game: Game, locked: boolean): string {
   return game.augmentChoices
@@ -294,6 +330,10 @@ export function augmentCardsHtml(game: Game, locked: boolean): string {
       const actualLine = actual
         ? `<div class="d" style="color:${rarity.color}">→ 실제: ${actual}</div>`
         : '';
+      // 경험치 일시불은 "고르면 몇 레벨이 되는지"를 카드에서 바로 보여준다 (2026-07-21)
+      const xpLine = card.effect.instantXp
+        ? `<div class="d" style="color:#ffd23f">${instantXpPreview(game, card.effect.instantXp)}</div>`
+        : '';
       const used = !game.canRerollAugmentChoice(i);
       const lockStyle = locked ? ';opacity:.45;pointer-events:none' : '';
       return `<div class="augcardRow">
@@ -306,6 +346,7 @@ export function augmentCardsHtml(game: Game, locked: boolean): string {
           <div class="n">${card.augment.name}</div>
           <div class="d">${card.augment.description}</div>
           ${actualLine}
+          ${xpLine}
         </button>
         <button class="cardReroll" data-reroll="${i}" ${locked || used ? 'disabled' : ''}>
           ${used ? '사용함' : '⟳ 새로고침'}
@@ -354,7 +395,31 @@ export const SKILL_ROLE_LABEL: Record<SkillRole, { label: string; color: string 
 /**
  * 증강 강화 후보 카드 HTML — 등급이 **어떻게 오르는지**를 보여준다.
  * 지금 등급 → 다음 등급과 효과 배수를 나란히 두어, 무엇을 사는지가 읽히게 한다.
+ * 일시불 카드는 배수가 아니라 **일시금**(명목 비용 연동)을 받으므로 실제 지급액을 보여준다.
  */
+/**
+ * 일시불 카드의 강화 지급액 미리보기 — "효과 ×N" 배지는 거짓말이 되므로(일시금은 배수를
+ * 안 탄다), 명목 비용 연동 실지급액(instantUpgradeGrant)을 그대로 보여준다.
+ * 긴급 증원은 등급별 추가 타워를 보여준다. 일시불 카드가 아니면 null.
+ */
+function instantUpgradeLine(game: Game, card: HD.AugmentCard, nextRarity: HD.Rarity): string | null {
+  const color = HD.RARITIES[nextRarity].color;
+  const grant = HD.instantUpgradeGrant(card.effect, nextRarity, game.augmentUpgradeCost);
+  if (grant) {
+    const label = grant.mineral !== undefined
+      ? `즉시 금화 +${grant.mineral}`
+      : grant.gas !== undefined
+        ? `즉시 마정석 +${grant.gas}`
+        : `즉시 경험치 +${grant.xp}`;
+    return `<div class="d" style="color:${color}">→ ${label}</div>`;
+  }
+  if (card.effect.towerRoll) {
+    const roll = HD.TOWER_ROLL_UPGRADE_GRANT[nextRarity];
+    if (roll) return `<div class="d" style="color:${color}">→ 즉시 티어${roll.tier + 1} 타워 +${roll.count}</div>`;
+  }
+  return null;
+}
+
 export function upgradeChoiceCardsHtml(game: Game, locked: boolean): string {
   return game.upgradeChoices
     .map((augIndex, i) => {
@@ -371,7 +436,8 @@ export function upgradeChoiceCardsHtml(game: Game, locked: boolean): string {
         </div>
         <div class="n">${card.augment.name}</div>
         <div class="d">${card.augment.description}</div>
-        <div class="d" style="color:${next.color}">효과 ×${now.power} → <b>×${next.power}</b></div>
+        ${instantUpgradeLine(game, card, nextRarity) ??
+          `<div class="d" style="color:${next.color}">효과 ×${now.power} → <b>×${next.power}</b></div>`}
       </button>`;
     })
     .join('');
@@ -382,6 +448,15 @@ export function augmentUpgradeLabel(game: Game): { text: string; title: string; 
   const free = game.pendingFreeUpgrades > 0;
   const cost = game.augmentUpgradeCost;
   const pool = game.hero.upgradableAugments.length;
+  // 해금 전에는 왜 잠겼는지를 버튼이 직접 말한다 (2026-07-21, 모든 증강 획득 후 해금)
+  if (!game.augmentUpgradeUnlocked) {
+    const total = HD.AUGMENT_ROUNDS.length;
+    return {
+      text: `▲ 증강 강화 — 잠김 (${game.hero.augments.length}/${total})`,
+      title: `모든 증강 ${total}개를 받으면 열립니다 (증강 라운드: R${HD.AUGMENT_ROUNDS.join('·R')}).`,
+      disabled: true,
+    };
+  }
   const text = free ? '▲ 증강 강화 — 무료' : `▲ 증강 강화 — ${cost}금화`;
   const title =
     pool === 0

@@ -53,8 +53,12 @@ export interface Enemy extends EnemySpec {
   burnDps?: number;
   /** 화상 중첩 수. 스킬·도트가 쌓고, 상한이 없다. 점화는 화상이 꺼질 때 터뜨린다 */
   burnStacks?: number;
-  /** 깎인 방어력 (맹독). 실제 장갑 = armor - armorShred */
+  /** 깎인 방어력 (맹독·부식). 실제 장갑 = armor - armorShred */
   armorShred?: number;
+  /** '여파' 잔여 도트 — 초당 피해(방어력 적용). 갱신형이라 중첩 수가 없다 */
+  skillDotDps?: number;
+  /** '여파' 남은 시간 */
+  skillDotTimer?: number;
   /** 이번 프레임에 영웅/허수아비에게 붙잡혀 있는가 — 탱킹 기여 집계용 */
   held?: boolean;
 }

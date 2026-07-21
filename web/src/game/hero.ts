@@ -95,7 +95,7 @@ export interface HeroStats {
 
 /** 성장(누적) 증강이 참조하는 런타임 카운터 */
 export interface GrowthState {
-  /** 영웅이 막타를 친 몹 수 */
+  /** 죽은 몹 수 — 누가 잡았든 센다 (2026-07-21, 막타 조건 폐지) */
   readonly killStacks: number;
   /** 지나온 라운드 수 */
   readonly waveStacks: number;
@@ -145,7 +145,6 @@ export function computeStats(
   let deathBlastRadius = 0;
   let explosionRadius = 0;
   let killStackFlatDamage = 0;
-  let waveStackDamage = 0;
   let waveStackHp = 0;
   let manaOnDamaged = 0;
   let startingMana = 0;
@@ -231,7 +230,6 @@ export function computeStats(
     if (e.deathBlastRadius) deathBlastRadius += e.deathBlastRadius;
     if (e.explosionRadius) explosionRadius += e.explosionRadius;
     if (e.killStackFlatDamage) killStackFlatDamage += e.killStackFlatDamage;
-    if (e.waveStackDamage) waveStackDamage += e.waveStackDamage;
     if (e.waveStackHp) waveStackHp += e.waveStackHp;
     if (e.manaOnDamaged) manaOnDamaged += e.manaOnDamaged;
     if (e.startingMana) startingMana += e.startingMana;
@@ -244,11 +242,10 @@ export function computeStats(
   // ── 성장 누적. 성장 배수(growth 보너스 + 진화의 곱)가 누적치 자체를 키운다.
   //    성장도 가산이다 — 공격력 보너스에 합류할 뿐 따로 곱하지 않는다.
   const growthMult = (1 + bonus.growth) * compound.growth;
-  // 고정치 막타 성장 — waveStackDamage처럼 상한 없이 그대로 쌓인다. %가 아니라
-  // 최종 공격력에 그대로 더해지므로 다른 배수 보너스 계산과 분리해 아래서 가산한다.
+  // 고정치 처치 성장 — 상한 없이 그대로 쌓인다 (몹 처치는 누가 잡았든 센다, 2026-07-21).
+  // %가 아니라 최종 공격력에 그대로 더해지므로 배수 보너스 계산과 분리해 아래서 가산한다.
   let killStackFlatBonus = 0;
   if (killStackFlatDamage > 0) killStackFlatBonus = killStackFlatDamage * growth.killStacks * growthMult;
-  if (waveStackDamage > 0) bonus.damage += waveStackDamage * growth.waveStacks * growthMult;
   if (waveStackHp > 0) bonus.hp += waveStackHp * growth.waveStacks * growthMult;
 
   // 최종 = 기본 × (1 + 가산 보너스 합) × 곱연산 증강, 그 위에 고정치 성장을 더한다
@@ -351,7 +348,7 @@ export class Hero {
   mana = 0;
   /** 가스로 산 스킬 개조 횟수 */
 
-  /** 성장 증강용 — 영웅이 막타를 친 몹 수 */
+  /** 성장 증강용 — 죽은 몹 수 (누가 잡았든, 2026-07-21) */
   killStacks = 0;
   /** 성장 증강용 — 지나온 라운드 수 */
   waveStacks = 0;
@@ -596,9 +593,13 @@ export function augmentAllowed(hero: Hero, augment: H.Augment): boolean {
 
 /** 지금 이 영웅에게 뜰 수 있는 증강 목록 */
 export function draftPool(hero: Hero): H.Augment[] {
-  // 영웅 직접 캐리 축은 임시 차단 (2026-07-19, 사용자 지시 — data/hero.ts HERO_CARRY_BLOCKLIST)
+  // 영웅 직접 캐리 축은 임시 차단 (2026-07-19 HERO_CARRY_BLOCKLIST) +
+  // 회복·생존 계열 비활성 (2026-07-21 AUGMENT_DISABLED, 사용자 지시)
   return H.AUGMENTS.filter(
-    (augment) => augmentAllowed(hero, augment) && !H.HERO_CARRY_BLOCKLIST.has(augment.id),
+    (augment) =>
+      augmentAllowed(hero, augment) &&
+      !H.HERO_CARRY_BLOCKLIST.has(augment.id) &&
+      !H.AUGMENT_DISABLED.has(augment.id),
   );
 }
 

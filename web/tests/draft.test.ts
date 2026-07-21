@@ -88,11 +88,12 @@ describe('적응형 드래프트', () => {
     expect(others.length).toBeGreaterThan(2); // 다른 계열도 실제로 뜬다
   });
 
-  test('스킬 개조는 그 스킬을 든 영웅에게만 뜬다 (획득 카드는 2026-07-20에 사라졌다)', () => {
+  test('스킬 개조는 전부 범용이라 어떤 스킬을 들어도 뜬다 (2026-07-21 강화 5축)', () => {
+    const barrage = H.AUGMENTS.find((a) => a.id === 'skill_barrage')!;
     const hero = new Hero();
     hero.skillId = 'volley';
-    expect(augmentAllowed(hero, H.AUGMENTS.find((a) => a.id === 'multishot')!)).toBe(true);
+    expect(augmentAllowed(hero, barrage)).toBe(true);
     hero.skillId = 'meteor';
-    expect(augmentAllowed(hero, H.AUGMENTS.find((a) => a.id === 'multishot')!)).toBe(false);
+    expect(augmentAllowed(hero, barrage)).toBe(true);
   });
 });

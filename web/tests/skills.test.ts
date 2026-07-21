@@ -19,18 +19,6 @@ const lcg = (seed: number) => {
 };
 const card = (id: string, rarity: H.Rarity = 'silver') => H.makeCard(augment(id), rarity);
 
-/**
- * 스킬 획득이 증강을 떠났으므로(2026-07-20) 목록의 `skill_<id>`는 증강이 아니라
- * **든 스킬**을 뜻한다 — 나머지는 그대로 증강으로 붙인다.
- */
-const applyLoadout = (hero: { skillId: K.SkillId; addAugment: (c: H.AugmentCard) => void }, ids: string[]) => {
-  for (const id of ids) {
-    const skill = id.startsWith('skill_') ? id.slice(6) : null;
-    if (skill && (K.SKILL_IDS as readonly string[]).includes(skill)) hero.skillId = skill as K.SkillId;
-    else hero.addAugment(card(id));
-  }
-};
-
 
 /** 영웅 사거리 안에 잡몹 하나 */
 /** 마나를 채우고 시전한다 — 마나 전환(TFT식) 후 스킬은 0마나로 시작한다 */
@@ -260,11 +248,15 @@ describe('스킬 드래프트 — 처음으로 제대로된 스킬을 얻는다 
   });
 });
 
-describe('스킬 개조 게이트 — 수치가 아니라 관계다', () => {
-  test('개조 증강은 그 스킬을 들어야만 나온다', () => {
-    const multi = augment('multishot'); // volley 전용
-    expect(H.skillGateAllows(multi, 'volley')).toBe(true);
-    expect(H.skillGateAllows(multi, 'meteor')).toBe(false);
+describe('스킬 개조 — 전부 범용이다 (2026-07-21 강화 5축 재정리)', () => {
+  // 특정 스킬 전용 개조(연사·회오리·대재앙·도발 인형·레이저·장판)는 삭제됐다 —
+  // "유저가 스킬과 무관하게 알아서 고르는" 5축(피해/마나/투사체/범위/도트)만 남는다.
+  test('스킬 개조 증강은 전부 아무 스킬에나 붙는다', () => {
+    for (const a of AUGMENTS) {
+      if (!a.skillMod) continue;
+      expect(a.requiresSkill ?? 'any', `${a.id}는 특정 스킬 전용이다`).toBe('any');
+      expect(a.requiresZone ?? false, `${a.id}는 장판 전용이다`).toBe(false);
+    }
   });
 
   test("'any' 개조는 아무 스킬에나 붙는다 — 영웅은 항상 스킬을 든다", () => {
@@ -272,15 +264,9 @@ describe('스킬 개조 게이트 — 수치가 아니라 관계다', () => {
     for (const id of K.SKILL_IDS) expect(H.skillGateAllows(cdr, id)).toBe(true);
   });
 
-  test('장판 개조는 장판 스킬에만 — 즉발 스킬엔 붙일 데가 없다', () => {
-    const zoneMod = AUGMENTS.find((a) => a.requiresZone)!;
-    expect(H.skillGateAllows(zoneMod, 'firearrow')).toBe(true);
-    expect(H.skillGateAllows(zoneMod, 'smite')).toBe(false);
-  });
-
-  test('실제 뽑기가 게이트를 지킨다', () => {
+  test('실제 뽑기에서도 스킬 전용 카드가 나오지 않는다', () => {
     const hero = new Hero();
-    hero.skillId = 'smite'; // 장판 없음 · 전용 개조 없음
+    hero.skillId = 'smite';
     const rand = lcg(7);
     for (let i = 0; i < 200; i++) {
       for (const c of rollAugmentChoices(hero, rand)) {
@@ -289,17 +275,6 @@ describe('스킬 개조 게이트 — 수치가 아니라 관계다', () => {
         expect(c.augment.requiresZone ?? false).toBe(false);
       }
     }
-
-    // 허수아비를 들면 그 전용 개조(도발 인형)가 등장한다
-    hero.skillId = 'decoy';
-    let sawTaunt = false;
-    for (let i = 0; i < 400; i++) {
-      for (const c of rollAugmentChoices(hero, rand)) {
-        expect(c.augment.id).not.toBe('explosive_arrow'); // volley 전용
-        if (c.augment.id === 'taunt_dummy') sawTaunt = true;
-      }
-    }
-    expect(sawTaunt).toBe(true);
   });
 });
 
@@ -327,12 +302,12 @@ describe('스킬 개조 — 수치가 아니라 관계다', () => {
     expect(hero.skill!.damageMult).toBeCloseTo(base * 1.45, 5);
   });
 
-  test('연사는 화살 수를 늘린다', () => {
+  test('다중 투사는 대상 수를 늘린다', () => {
     const hero = new Hero();
     hero.skillId = 'volley';
     expect(hero.skill!.targets).toBe(K.SKILLS.volley.targets);
 
-    hero.addAugment(card('multishot'));
+    hero.addAugment(card('skill_barrage'));
     expect(hero.skill!.targets).toBe(K.SKILLS.volley.targets + 2);
   });
 
@@ -356,14 +331,22 @@ describe('스킬 개조 — 수치가 아니라 관계다', () => {
     expect(hero.skill!.targets).toBe(K.SKILLS.volley.targets + 1);
   });
 
-  test('회오리는 소용돌이에 반경과 감속을 붙인다', () => {
+  test('파장은 반경형 스킬의 반경을 늘린다 (범위 축 통합 카드)', () => {
     const hero = new Hero();
     hero.skillId = 'whirlwind';
     const base = hero.skill!.radius;
 
-    hero.addAugment(card('cyclone'));
+    hero.addAugment(card('skill_radius'));
     expect(hero.skill!.radius).toBe(base + 25);
-    expect(hero.skill!.mods.slowFactor).toBeLessThan(1);
+  });
+
+  test('파장은 레이저 길이도 늘린다 — 한 카드가 스킬 형태에 맞는 범위로 먹힌다', () => {
+    const hero = new Hero();
+    hero.skillId = 'laser';
+    const base = hero.skill!.beamLength;
+
+    hero.addAugment(card('skill_radius'));
+    expect(hero.skill!.beamLength).toBe(base + 60);
   });
 
   test('감속은 겹쳐도 가장 강한 것 하나', () => {
@@ -427,11 +410,11 @@ describe('스킬 시전', () => {
     expect(game.enemies[2].hp).toBe(before[2]); // 사거리 밖
   });
 
-  test('회오리를 쥐면 소용돌이가 적을 늦춘다', () => {
+  test('한파를 쥐면 소용돌이가 적을 늦춘다', () => {
     const game = new Game();
     game.round = 5; // 완전 템포(초반 슬로우 배제)에서 감속 지속시간 자체를 검증
     game.hero.skillId = 'whirlwind';
-    game.hero.addAugment(card('cyclone'));
+    game.hero.addAugment(card('skill_frostbite'));
     const enemy = mob(game.hero.distance - 20);
     game.enemies.push(enemy);
 
@@ -555,46 +538,8 @@ describe('허수아비 — 원거리 영웅의 탱커', () => {
     expect(game.decoy).toBeNull();
   });
 
-  test('도발 인형은 체력이 두 배다', () => {
-    const plain = new Game();
-    plain.hero.skillId = 'decoy';
-    castNow(plain);
-
-    const taunting = new Game();
-    taunting.hero.skillId = 'decoy';
-    taunting.hero.addAugment(card('taunt_dummy'));
-    castNow(taunting);
-
-    // 반올림이 한 번(최종값)만 들어가므로 ±1 오차를 허용한다
-    expect(taunting.decoy!.maxHp).toBeCloseTo(plain.decoy!.maxHp * 2, -1);
-    expect(taunting.decoy!.taunts).toBe(true);
-  });
-
-  // 영웅이 살아 있으면 영웅 어그로가 먼저 걸려 허수아비 효과를 가린다.
-  // 영웅을 죽여 허수아비만 남긴 뒤 비교한다.
-  const decoyOnly = (augments: string[]) => {
-    const game = new Game();
-    applyLoadout(game.hero, augments);
-    castNow(game);
-    game.hero.takeDamage(1e9);
-    return game;
-  };
-
-  test('도발 인형은 이미 지나친 몹도 끌어당긴다', () => {
-    const taunting = decoyOnly(['skill_decoy', 'taunt_dummy']);
-    const passed = mob(taunting.decoy!.distance + 40);
-    taunting.enemies.push(passed);
-    const before = passed.distance;
-    taunting.update(0.2);
-    expect(passed.distance).toBe(before); // 붙잡혀서 전진하지 못한다
-
-    const plain = decoyOnly(['skill_decoy']);
-    const passedPlain = mob(plain.decoy!.distance + 40);
-    plain.enemies.push(passedPlain);
-    const beforePlain = passedPlain.distance;
-    plain.update(0.2);
-    expect(passedPlain.distance).toBeGreaterThan(beforePlain); // 그냥 지나간다
-  });
+  // 도발 인형(허수아비 전용 개조) 테스트는 2026-07-21 강화 5축 재정리로 삭제 —
+  // 특정 스킬 전용 개조가 풀에서 사라졌다.
 
   test('허수아비가 없으면 몹은 그냥 흐른다', () => {
     const game = new Game();
@@ -733,65 +678,46 @@ describe('돌파와 스킬', () => {
   });
 });
 
-describe('대재앙 — 단독은 적당히, 시너지를 채워야 크게 (2026-07-15)', () => {
-  /**
-   * 유성 한 방의 실제 총 피해. 안 죽는 더미를 경로에 늘어세우고 한 번 시전한다.
-   *
-   * 반경으로 대상 수를 **어림하면 안 된다** — 경로가 1차원이라 선형일 것 같지만,
-   * 몹 무리가 유한해서 반경을 키워도 대상 수는 완만하게만 는다 (측정: 85→145에서 7→11기).
-   */
-  const meteorBurst = (ids: string[], level = 35): number => {
+describe('강화 5축의 새 축 — 여파(도트) · 부식(방깎) (2026-07-21)', () => {
+  test('여파는 스킬 명중 후 도트를 남기고, 시간이 지나면 꺼진다', () => {
     const game = new Game();
-    const hero = game.hero;
-    hero.level = level;
-    applyLoadout(hero, ids);
-    game.augmentChoices = [];
+    game.hero.skillId = 'meteor';
+    game.hero.addAugment(card('skill_dot'));
+    // 주의: 이 파일의 mob()은 세 번째 인자가 속도다 — 기본 속도로 둔다
+    const target = mob(game.hero.distance);
+    game.enemies.push(target, mob(game.hero.distance), mob(game.hero.distance));
 
-    hero.distance = PATH_LENGTH / 2;
-    hero.targetDistance = hero.distance;
-    game.enemies.length = 0;
-    for (let i = 0; i < 40; i++) {
-      game.enemies.push(mob(hero.distance + (i - 20) * 26, 1e12, 0));
-    }
+    castNow(game);
+    expect(target.skillDotDps).toBeGreaterThan(0);
+    expect(target.skillDotTimer).toBeGreaterThan(0);
 
-    hero.mana = hero.skill!.manaMax;
-    const before = game.heroDamageDealt;
-    game.useSkill();
-    return game.heroDamageDealt - before;
-  };
+    const afterCast = target.hp;
+    game.update(0.2); // 도트만 타는 구간
+    expect(target.hp).toBeLessThan(afterCast);
 
-  test('한 카드가 두 곱셈 축을 동시에 키우지 않는다 — 피해 배수는 완만하다', () => {
-    // 반경은 대상 수를, damageMult는 한 방을 키운다. 둘 다 크면 카드 하나가 곱연산이 된다.
-    // COMPOUNDING_IDS 원칙: 곱은 소수 정예여야 한다.
-    expect(augment('cataclysm').skillMod!.damageMult).toBeLessThanOrEqual(1.2);
+    // 만료 확인 — 살아 있는 영웅은 피격 마나로 자동 재시전해 도트를 갱신할 수 있으므로,
+    // 영웅을 재우고 남은 시간을 줄여 짧은 프레임 안에서 꺼지는 것을 본다
+    game.hero.takeDamage(1e9);
+    target.skillDotTimer = 0.05;
+    game.update(0.1);
+    expect(target.skillDotDps).toBeUndefined();
   });
 
-  test('대재앙 2장이 범용 스킬 카드(증폭) 2장을 압도하지 않는다', () => {
-    const cataclysm = meteorBurst(['skill_meteor', 'cataclysm', 'cataclysm']);
-    const amp = meteorBurst(['skill_meteor', 'skill_amp', 'skill_amp']);
-    // 개편 전엔 대재앙이 35% 앞서 유성 빌드의 정답이 하나뿐이었다.
-    // 전용 카드라 약간 앞서는 건 좋지만, 압도하면 드래프트가 사라진다.
-    expect(cataclysm / amp).toBeGreaterThan(0.9);
-    expect(cataclysm / amp).toBeLessThan(1.25);
+  test('부식은 스킬 명중마다 방어력을 깎는다 (스킬 쪽 방깎 — 평타 쪽은 맹독)', () => {
+    const game = new Game();
+    game.hero.skillId = 'meteor';
+    game.hero.addAugment(card('skill_shred'));
+    const target = { ...mob(game.hero.distance), armor: 50 };
+    game.enemies.push(target, mob(game.hero.distance), mob(game.hero.distance));
+
+    castNow(game);
+    expect(target.armorShred).toBe(4);
   });
 
-  test('스킬 계열을 5장까지 채우면(대특화) 파워가 대재앙 단독의 두 배로 뛴다', () => {
-    // 반경이 같은 두 빌드라 대상 수가 같다 — 차이는 순수하게 시너지가 만든 것이다.
-    const alone = new Hero();
-    alone.level = 35;
-    applyLoadout(alone, ['skill_meteor', 'cataclysm', 'cataclysm']);
-
-    const synergized = new Hero();
-    synergized.level = 35;
-    // 스킬 카드 5장 = 대특화(초월 시전). 예전엔 획득 카드(유성)가 한 장을 채웠지만
-    // 이제 스킬은 증강이 아니므로 개조 카드만으로 5장을 채운다 (2026-07-20).
-    applyLoadout(synergized,
-      ['skill_meteor', 'cataclysm', 'cataclysm', 'skill_amp', 'skill_amp', 'skill_amp']);
-
-    expect(synergized.skill!.radius).toBe(alone.skill!.radius); // 대상 수가 같다
-    // 각성(3장)에 초월 시전(5장)이 얹히면서 스킬 피해가 두 배가 된다
-    expect(synergized.skill!.damageMult / alone.skill!.damageMult).toBeGreaterThan(1.9);
-    // 시전 마나도 줄어 회전이 빨라진다 (초월 시전: 필요 마나 -30%)
-    expect(synergized.skill!.manaMax).toBeLessThan(alone.skill!.manaMax);
+  test('스킬 카드를 쌓으면 특화(3장)·대특화(5장)가 순서대로 켜진다', () => {
+    const three = ['skill_amp', 'skill_amp', 'skill_amp'].map((id) => card(id));
+    const five = [...three, card('skill_cdr'), card('skill_cdr')];
+    expect(H.activeSynergies(three)).toHaveLength(1); // 각성
+    expect(H.activeSynergies(five)).toHaveLength(2); // 각성 + 초월 시전
   });
 });

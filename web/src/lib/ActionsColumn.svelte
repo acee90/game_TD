@@ -76,7 +76,6 @@
 </script>
 
 <div class="actions">
-  <!-- 선택 정보 — 유닛/영웅/몹 스탯. 좌측에서 넓게 상시 표시 -->
   <div id="info">{@html v.info}</div>
 
   <!-- 보스 소환대 — 레벨별 버튼 -->

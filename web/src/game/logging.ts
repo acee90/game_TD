@@ -5,7 +5,7 @@ export const GAME_LOG_VERSION = 1 as const;
 
 export type LogTarget = 'web' | 'unity';
 export type FinishReason = 'game_over' | 'cleared' | 'restart' | 'quit' | 'abandoned' | 'test';
-export type XpSource = 'purchase' | 'mob_kill' | 'boss_kill';
+export type XpSource = 'purchase' | 'mob_kill' | 'boss_kill' | 'augment';
 
 export interface BuildInfo {
   readonly gitSha: string;
@@ -100,7 +100,7 @@ export interface GameEventDataMap {
     readonly semantic: 'timer_elapsed';
   };
   readonly tower_spawned: {
-    readonly source: 'purchase' | 'copy';
+    readonly source: 'purchase' | 'copy' | 'roll';
     readonly slotIndex: number;
     readonly tower: TowerLogRef;
     readonly cost: number;

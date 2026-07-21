@@ -409,6 +409,14 @@ export interface SkillMods {
   /** 스킬에 맞은 적의 이동속도 배수 (1이면 감속 없음). **모든 스킬**에 걸린다 */
   readonly slowFactor: number;
   readonly slowSeconds: number;
+  /** 스킬에 맞은 적의 방어력을 이만큼 깎는다 (중첩, '부식' — 2026-07-21 디버프 2×2) */
+  readonly armorShredAdd: number;
+  /**
+   * 스킬 명중 후 남는 도트 — 초당 영웅 공격력의 이 배수 ('여파', 2026-07-21).
+   * 갱신형(중첩 없음). 화상(burn 고정치·중첩·트루 피해)과 별개 채널로, 방어력을 적용받는다.
+   */
+  readonly dotDpsAdd: number;
+  readonly dotSeconds: number;
   /** 허수아비 체력 배수 */
   readonly decoyHpMult: number;
   /** 허수아비가 주변 몹을 강제로 끌어당기는가 */
@@ -441,6 +449,9 @@ export const NO_MODS: SkillMods = {
   freeCastChance: 0,
   slowFactor: 1,
   slowSeconds: 0,
+  armorShredAdd: 0,
+  dotDpsAdd: 0,
+  dotSeconds: 0,
   decoyHpMult: 1,
   decoyTaunts: false,
   beamLengthAdd: 0,
@@ -474,6 +485,9 @@ export function foldMods(patches: readonly SkillModPatch[]): SkillMods {
     if (p.freeCastChance) out.freeCastChance += p.freeCastChance;
     if (p.slowFactor !== undefined) out.slowFactor = Math.min(out.slowFactor, p.slowFactor);
     if (p.slowSeconds) out.slowSeconds = Math.max(out.slowSeconds, p.slowSeconds);
+    if (p.armorShredAdd) out.armorShredAdd += p.armorShredAdd;
+    if (p.dotDpsAdd) out.dotDpsAdd += p.dotDpsAdd;
+    if (p.dotSeconds) out.dotSeconds = Math.max(out.dotSeconds, p.dotSeconds);
     if (p.decoyHpMult) out.decoyHpMult *= p.decoyHpMult;
     if (p.decoyTaunts) out.decoyTaunts = true;
     if (p.beamLengthAdd) out.beamLengthAdd += p.beamLengthAdd;

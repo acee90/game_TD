@@ -451,8 +451,8 @@ describe('증강 효과 — 가산 합산이 기본, 곱연산은 소수 정예 
     expect(H.isCompounding(augment('might'))).toBe(false);
   });
 
-  test('곱연산 증강은 셋뿐이다 — 곱이 흔해지면 다시 복리가 된다', () => {
-    expect(H.COMPOUNDING_IDS).toHaveLength(3);
+  test('곱연산 증강은 둘뿐이다 — 곱이 흔해지면 다시 복리가 된다 (과부하는 2026-07-21 삭제)', () => {
+    expect(H.COMPOUNDING_IDS).toHaveLength(2);
   });
 
   test('더 몰면 더 커진다 (상한은 없다)', () => {
@@ -534,8 +534,10 @@ describe('빌드 정체성 — 방어는 버티고 강화는 때린다', () => {
   const build = (ids: string[]) =>
     computeStats(30, ids.map((id) => H.makeCard(aug(id), 'silver')));
 
-  // 계열 기능축 재편(2026-07-14) 후: 방어 3 = 불굴 특화 / 강화 3 = 완숙 특화
-  const TANK = ['plating', 'fortress', 'aegis'];
+  // 계열 기능축 재편(2026-07-14) 후: 방어 3 = 불굴 특화 / 강화 3 = 완숙 특화.
+  // 이지스는 드래프트 비활성(2026-07-21)이지만 데이터는 남아 있다 — 이 테스트는
+  // "계열의 정체성"(데이터 성질)을 재므로 그대로 쓴다. might도 같은 이유로 차단 상태다.
+  const TANK = ['plating', 'plating', 'aegis'];
   const RANGED = ['might', 'might', 'might'];
 
   /** 시뮬레이션에서 관측된 라운드별 전형적 영웅 레벨 */
@@ -553,9 +555,11 @@ describe('빌드 정체성 — 방어는 버티고 강화는 때린다', () => {
     return s.damage / s.attackInterval;
   };
 
-  test('방어가 강화보다 두 배 넘게 오래 막는다', () => {
+  test('방어가 강화보다 확실히 오래 막는다', () => {
+    // 2026-07-21 방어 축 축소(체력+피해감소 조합 카드 삭제, 방벽·재생류 비활성)로
+    // 옛 기준(2배)은 데이터상 불가능해졌다 — 정체성 하한을 1.6배로 다시 잡는다.
     const ratio = blockSeconds(TANK, 30) / blockSeconds(RANGED, 30);
-    expect(ratio).toBeGreaterThan(2);
+    expect(ratio).toBeGreaterThan(1.6);
   });
 
   test('강화가 방어보다 두 배 넘게 세게 때린다', () => {
@@ -576,7 +580,7 @@ describe('빌드 정체성 — 방어는 버티고 강화는 때린다', () => {
     // 강화(완력×3)도 완숙 특화(체력 +30%)로 체력이 붙지만 방어에 비하면 미미하다
     expect(blockSeconds(TANK, 30)).toBeGreaterThan(blockSeconds([], 30) * 2);
     expect(blockSeconds(RANGED, 30)).toBeLessThanOrEqual(blockSeconds([], 30) * 1.35);
-    expect(blockSeconds(TANK, 30)).toBeGreaterThan(blockSeconds(RANGED, 30) * 2);
+    expect(blockSeconds(TANK, 30)).toBeGreaterThan(blockSeconds(RANGED, 30) * 1.6);
   });
 });
 

@@ -549,6 +549,12 @@ export class Game {
     this.heroDamageDealt += dealt;
     enemy.lastHitByHero = true;
     this.applySlow(enemy, skill.mods.slowFactor, skill.mods.slowSeconds);
+    // 스킬 디버프 2×2의 스킬 쪽 (2026-07-21) — '부식' 방깎, '여파' 잔여 도트(갱신형)
+    if (skill.mods.armorShredAdd > 0) this.shredArmor(enemy, skill.mods.armorShredAdd);
+    if (skill.mods.dotDpsAdd > 0 && skill.mods.dotSeconds > 0) {
+      enemy.skillDotDps = this.hero.attackDamage * skill.mods.dotDpsAdd;
+      enemy.skillDotTimer = skill.mods.dotSeconds;
+    }
     this.triggerExplosion(enemy, raw);
   }
 
@@ -680,11 +686,9 @@ export class Game {
     const offerId = this.currentOfferId;
     const augment = this.augmentLogRef(card);
     this.hero.addAugment(card);
-    // 즉시 골드 — 등급 반영된 값(card.effect)으로 고르는 순간 지급한다
-    if (card.effect.instantMineral) {
-      this.mineral += Math.round(card.effect.instantMineral);
-      this.float(this.hero.x, this.hero.y, `+${Math.round(card.effect.instantMineral)}`, '#ffd23f');
-    }
+    // 일시불 계열 — 등급 반영된 값(card.effect)으로 고르는 순간 지급한다 (2026-07-21)
+    this.grantInstant(card.effect.instantMineral, card.effect.instantGas, card.effect.instantXp);
+    if (card.effect.towerRoll) this.grantRolledTowers(H.TOWER_ROLL_BY_RARITY[card.rarity]);
     this.augmentChoices = [];
     this.augmentChoiceRerolls = [];
     this.record('augment_chosen', { offerId, choiceIndex: index, augment });
@@ -698,6 +702,48 @@ export class Game {
     this.message = `[${rarity.label}] ${card.augment.name}: ${card.augment.description}`;
     this.offerAugmentIfPending();
     return true;
+  }
+
+  /**
+   * 일시불 지급 (2026-07-21) — 골드·마정석·영웅 경험치. 획득 순간과
+   * 강화 순간(차액)이 같이 쓴다. 경험치는 xpMult를 타고 레벨업 연쇄까지 그대로 흐른다.
+   */
+  private grantInstant(mineral?: number, gas?: number, xp?: number): void {
+    const { x, y } = this.hero;
+    if (mineral) {
+      this.mineral += Math.round(mineral);
+      this.float(x, y, `+${Math.round(mineral)}`, '#ffd23f');
+    }
+    if (gas) {
+      this.gas += Math.round(gas);
+      this.float(x, y, `마정석 +${Math.round(gas)}`, '#7ce7ff');
+    }
+    if (xp) this.grantXp(Math.round(xp), 'augment');
+  }
+
+  /**
+   * '긴급 증원' — 랜덤 타워를 빈 타일에 즉시 소환한다 (2026-07-21, 복제 장치 대체).
+   * 생성 비용(unitsSpawned)을 안 올린다 — 복제 장치의 값어치를 물려받았다.
+   * 빈 타일이 모자라면 모자란 만큼은 못 받는다 (조합·판매로 자리는 늘 만들 수 있다).
+   */
+  private grantRolledTowers(grant: { readonly tier: number; readonly count: number }): void {
+    for (let i = 0; i < grant.count; i++) {
+      const empty = this.slots.find((s) => !s.tower && s !== this.altarSlot);
+      if (!empty) {
+        this.message = '긴급 증원 실패 — 빈 타일이 없습니다.';
+        return;
+      }
+      const def = unitFor(grant.tier, this.rand, this.bossesKilled);
+      empty.tower = { def, tier: grant.tier, cooldown: 0 };
+      this.record('tower_spawned', {
+        source: 'roll',
+        slotIndex: this.slotIndex(empty),
+        tower: this.towerLogRef(empty.tower),
+        cost: 0,
+      });
+      this.float(empty.x, empty.y, `증원: ${def.name}`, RACE_COLOR[def.race]);
+      this.resolveMerges();
+    }
   }
 
   private offerAugmentIfPending(): void {
@@ -1130,9 +1176,20 @@ export class Game {
     return B.augmentUpgradeCost(this.augmentUpgrades);
   }
 
+  /**
+   * 증강 강화 해금 — 예정된 증강(AUGMENT_ROUNDS)을 **전부 받은 뒤**에만 (2026-07-21,
+   * 사용자 지시). 드래프트가 끝나기 전에 강화 골드가 도는 것(특히 일확천금 목돈으로
+   * 바로 강화를 돌리는 초반 연쇄)을 구조적으로 막고, "뽑기 끝 → 키우기 시작"으로
+   * 페이즈가 갈린다.
+   */
+  get augmentUpgradeUnlocked(): boolean {
+    return this.hero.augments.length >= H.AUGMENT_ROUNDS.length;
+  }
+
   get canOfferAugmentUpgrade(): boolean {
     return (
       !this.over &&
+      this.augmentUpgradeUnlocked &&
       this.upgradeChoices.length === 0 &&
       this.hero.upgradableAugments.length > 0 &&
       (this.pendingFreeUpgrades > 0 || this.mineral >= this.augmentUpgradeCost)
@@ -1145,6 +1202,11 @@ export class Game {
    */
   offerAugmentUpgrade(): boolean {
     if (this.upgradeChoices.length > 0) return false;
+    if (!this.augmentUpgradeUnlocked) {
+      this.message =
+        `증강 강화는 모든 증강(${H.AUGMENT_ROUNDS.length}개)을 받은 뒤 열립니다.`;
+      return false;
+    }
     const pool = this.hero.upgradableAugments;
     if (pool.length === 0) {
       this.message = '더 강화할 증강이 없습니다.';
@@ -1179,8 +1241,20 @@ export class Game {
     if (cost > this.mineral) return false;
 
     const before = card.rarity;
+    // 명목 강화 비용 — 카운터가 오르기 전에 읽는다. 무료 강화도 일시금은 명목가 기준.
+    const nominalCost = this.augmentUpgradeCost;
     if (!this.hero.upgradeAugment(target)) return false;
     const after = this.hero.augments[target];
+
+    // 일시불 카드 강화 — 성격대로 **일시금**을 준다 (2026-07-21, 사용자 지시). 지급액은
+    // 명목 비용 × 배수(실버→골드 1.5 / 골드→플래티넘 1.0)라 차익이 제한된다 —
+    // data/hero.ts instantUpgradeGrant 주석 참고. '긴급 증원'은 등급별 추가 타워.
+    const instant = H.instantUpgradeGrant(after.effect, after.rarity, nominalCost);
+    if (instant) this.grantInstant(instant.mineral, instant.gas, instant.xp);
+    if (after.effect.towerRoll) {
+      const grant = H.TOWER_ROLL_UPGRADE_GRANT[after.rarity];
+      if (grant) this.grantRolledTowers(grant);
+    }
 
     this.mineral -= cost;
     if (this.upgradeIsFree) this.pendingFreeUpgrades--;
@@ -1525,11 +1599,10 @@ export class Game {
     // 처치 수입은 누가 잡았든 들어온다 (경제 증강의 기존 동작 유지)
     this.mineral += this.hero.stats.mineralPerKill;
 
-    if (enemy.lastHitByHero) {
-      // 성장 증강 — 영웅 막타만 센다. 타워가 잡은 몹은 영웅을 키우지 않는다.
-      this.hero.killStacks++;
-      this.heroExplode(enemy, x, y);
-    }
+    // 성장 증강 — **누가 잡았든** 센다 (2026-07-21, 막타 조건 폐지 — 사용자 지시).
+    // 값은 data/hero.ts에서 막타 시절의 1/4로 내렸다 (killStackFlatDamage 주석 참고).
+    this.hero.killStacks++;
+    if (enemy.lastHitByHero) this.heroExplode(enemy, x, y);
     this.grantXp(
       enemy.lastHitByHero ? H.XP_PER_MOB * H.HERO_LASTHIT_XP_MULT : H.XP_PER_MOB,
       'mob_kill',
@@ -2110,6 +2183,21 @@ export class Game {
         enemy.burnDps = undefined;
         enemy.burnTimer = undefined;
         enemy.burnStacks = undefined;
+      }
+    }
+
+    // '여파' 잔여 도트 (2026-07-21) — 화상과 달리 **방어력을 적용받는다**(초당 기준으로
+    // 감산한 뒤 dt를 곱한다 — 틱마다 감산하면 armor가 도트를 통째로 먹는다).
+    for (const enemy of this.enemies) {
+      if (!enemy.skillDotTimer || enemy.skillDotTimer <= 0 || !enemy.skillDotDps) continue;
+      enemy.skillDotTimer -= dt;
+      const dealt = B.effectiveDamage(enemy.skillDotDps, this.armorOf(enemy)) * dt;
+      enemy.hp -= dealt;
+      this.heroDamageDealt += dealt;
+      enemy.lastHitByHero = true;
+      if (enemy.skillDotTimer <= 0) {
+        enemy.skillDotDps = undefined;
+        enemy.skillDotTimer = undefined;
       }
     }
   }

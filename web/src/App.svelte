@@ -217,8 +217,6 @@
     {#if !started}
       <div id="startOverlay">
         <h1>갓 타워 디펜스</h1>
-        <p class="dim">웨이브를 막고, 봉인된 적장을 사냥하고, 영웅을 키우세요.<br>
-          좌클릭 = 선택/생성 · 빈 곳 클릭 = 영웅 이동 · 스킬은 마나가 차면 자동 시전</p>
         <button id="startBtn" onclick={startGame}>게임 시작</button>
       </div>
     {/if}
