@@ -1,4 +1,4 @@
-import type { UnitDef } from '../data/units';
+import type { Race, UnitDef } from '../data/units';
 
 export interface Tower {
   readonly def: UnitDef;
@@ -101,6 +101,8 @@ export interface Shot {
   life: number;
   color: string;
   splashRadius?: number;
+  /** 쏜 타워의 병과 — 렌더러가 투사체 모양(화살·포탄·볼트·가시)을 가른다 (2026-07-21) */
+  race?: Race;
 }
 
 export interface FloatText {
@@ -109,4 +111,23 @@ export interface FloatText {
   text: string;
   color: string;
   life: number;
+}
+
+/**
+ * 시각 효과 이벤트 (2026-07-21) — 게임 로직이 렌더러에게 알리는 **순수 데이터**.
+ * shots/floats와 같은 패턴: 엔진은 DOM·프레임워크를 모르고, 렌더러(웹 캔버스·Phaser)가
+ * 프레임마다 비워 파티클·플래시·데미지 숫자로 바꾼다. 시뮬레이션은 안 비우므로
+ * Game이 큐 길이를 캡으로 자른다 (pushVfx).
+ */
+export interface VfxEvent {
+  readonly kind: 'hit' | 'kill';
+  readonly x: number;
+  readonly y: number;
+  /** hit: 실제로 들어간 피해량 (데미지 숫자용) */
+  readonly amount?: number;
+  /** hit: 치명타였나 — 렌더러가 데미지 숫자를 변형한다 (셰이크 금지, 2026-07-21 피드백) */
+  readonly crit?: boolean;
+  /** 대상/이펙트 색 (몹 typeColor·종족색 등) */
+  readonly color?: string;
+  readonly boss?: boolean;
 }

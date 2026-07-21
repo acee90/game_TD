@@ -32,7 +32,7 @@ import {
   type XpSource,
 } from './logging';
 import { findMerge, rerollUnit, unitFor, type Rand } from './merge';
-import type { Decoy, Enemy, EnemySpec, FloatText, Shot, Slot, Tower, Zone } from './types';
+import type { Decoy, Enemy, EnemySpec, FloatText, Shot, Slot, Tower, VfxEvent, Zone } from './types';
 
 export class Game {
   mineral = B.START_MINERAL;
@@ -98,6 +98,11 @@ export class Game {
   enemies: Enemy[] = [];
   shots: Shot[] = [];
   floats: FloatText[] = [];
+  /**
+   * 시각 효과 이벤트 큐 (2026-07-21) — 렌더러가 프레임마다 비운다 (types.ts VfxEvent).
+   * 시뮬레이션은 안 비우므로 pushVfx가 길이를 캡으로 자른다.
+   */
+  vfx: VfxEvent[] = [];
   /** 영웅이 세운 미끼 (허수아비 스킬) */
   decoy: Decoy | null = null;
   /** 깔려 있는 장판들 (불바다·빙판) */
@@ -573,6 +578,10 @@ export class Game {
     enemy.hp -= dealt;
     this.heroDamageDealt += dealt;
     enemy.lastHitByHero = true;
+    {
+      const [hx, hy] = pathPos(enemy.distance);
+      this.pushVfx({ kind: 'hit', x: hx, y: hy, amount: dealt, color: '#c065e0' });
+    }
     this.applySlow(enemy, skill.mods.slowFactor, skill.mods.slowSeconds);
     // 스킬 디버프 2×2의 스킬 쪽 (2026-07-21) — '부식' 방깎, '여파' 잔여 도트(갱신형)
     if (skill.mods.armorShredAdd > 0) this.shredArmor(enemy, skill.mods.armorShredAdd);
@@ -1592,6 +1601,11 @@ export class Game {
 
   private onKilled(enemy: Enemy): void {
     const [x, y] = pathPos(enemy.distance);
+    this.pushVfx({
+      kind: 'kill', x, y,
+      color: enemy.kind === 'boss' ? '#c14a2c' : (enemy.typeColor ?? '#a89a80'),
+      boss: enemy.kind === 'boss',
+    });
 
     if (enemy.kind === 'boss') {
       const level = enemy.bossLevel ?? 1;
@@ -2030,7 +2044,7 @@ export class Game {
             const [ex, ey] = pathPos(enemy.distance);
             const dist = Math.hypot(ex - tx, ey - ty);
             if (dist <= stats.splashRadius) {
-              this.heroHitEnemy(enemy, raw * B.splashFalloff(dist, stats.splashRadius), stats);
+              this.heroHitEnemy(enemy, raw * B.splashFalloff(dist, stats.splashRadius), stats, crit);
             }
           }
           this.shots.push({
@@ -2038,7 +2052,7 @@ export class Game {
             color: '#c065e0', splashRadius: stats.splashRadius,
           });
         } else {
-          this.heroHitEnemy(target, raw, stats);
+          this.heroHitEnemy(target, raw, stats, crit);
           this.shots.push({
             x: hero.x, y: hero.y, tx, ty, life: 0.1,
             color: crit ? '#ffd23f' : '#ffffff',
@@ -2150,11 +2164,20 @@ export class Game {
    * 영웅의 한 방이 적에게 닿았을 때. 피해 + 발동 효과(흡혈·처형·화상·감속)를 한곳에서 처리한다.
    * 광역이면 대상마다 불린다.
    */
-  private heroHitEnemy(enemy: Enemy, raw: number, stats: HeroStats): void {
+  /** 렌더러용 시각 이벤트 — 시뮬이 안 비워도 안전하게 캡을 건다 */
+  private pushVfx(event: VfxEvent): void {
+    if (this.vfx.length < 256) this.vfx.push(event);
+  }
+
+  private heroHitEnemy(enemy: Enemy, raw: number, stats: HeroStats, crit = false): void {
     const dealt = B.effectiveDamage(this.burnAmped(enemy, raw), this.armorOf(enemy));
     enemy.hp -= dealt;
     this.heroDamageDealt += dealt;
     enemy.lastHitByHero = true;
+    {
+      const [hx, hy] = pathPos(enemy.distance);
+      this.pushVfx({ kind: 'hit', x: hx, y: hy, amount: dealt, color: '#cdd3dc', crit });
+    }
     this.triggerExplosion(enemy, raw);
 
     if (stats.lifesteal > 0 && this.hero.alive) {
@@ -2398,8 +2421,12 @@ export class Game {
           this.towerDamageDealt += dealt;
           if (e.held) this.tankAssistDamage += dealt;
           e.lastHitByHero = false;
+          this.pushVfx({ kind: 'hit', x: pos[i][0], y: pos[i][1], amount: dealt, color });
         }
-        this.shots.push({ x: slot.x, y: slot.y, tx: cx, ty: cy, life: 0.08, color, splashRadius: blast });
+        this.shots.push({
+          x: slot.x, y: slot.y, tx: cx, ty: cy, life: 0.08, color,
+          splashRadius: blast, race: tower.def.race,
+        });
       } else {
         // 파워는 체력 최대(보스) 우선, 그 외에는 가장 멀리 간 적(돌파 임박) 우선
         const power = tower.def.tags.includes('power');
@@ -2413,7 +2440,8 @@ export class Game {
         if (target.held) this.tankAssistDamage += dealt;
         target.lastHitByHero = false;
         const [x, y] = pathPos(target.distance);
-        this.shots.push({ x: slot.x, y: slot.y, tx: x, ty: y, life: 0.08, color });
+        this.pushVfx({ kind: 'hit', x, y, amount: dealt, color });
+        this.shots.push({ x: slot.x, y: slot.y, tx: x, ty: y, life: 0.08, color, race: tower.def.race });
       }
       tower.cooldown = attackInterval(tower);
     }

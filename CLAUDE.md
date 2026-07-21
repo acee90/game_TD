@@ -19,8 +19,11 @@
 
 ## 코드
 
-- 현행 게임은 `web/` (Vite + Svelte 5). `unity/`는 동일 로직의 C# 미러 —
-  `web/src`가 바뀌면 Unity Core/도 동기화가 필요하다.
+- 현행 게임은 `web/` (Vite + Svelte 5) — **밸런스 실험실**이자 규칙의 원본.
+  `phaser/`는 프로덕션 도트 렌더러(Phaser 3) — 규칙 코드가 없고 `@engine` alias로
+  `web/src/{game,data,core}`를 그대로 import한다 (로직 이중화 금지).
+  `unity/`의 C# 미러는 **동면 중** (2026-07-21, Phaser 우선 결정) — 네이티브 이식이
+  결정되면 재개한다. 동기화 의무 없음.
   UI는 `web/src/App.svelte` + `web/src/lib/*.svelte`(HUD), 표시 문자열 로직은
   `web/src/lib/view.ts`. 게임 엔진(`core/data/game/render`)은 프레임워크와 무관하다.
 - 게임 로직(`web/src/game/`)은 DOM 없이 동작하며 시드 주입이 가능하다.
