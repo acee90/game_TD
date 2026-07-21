@@ -216,7 +216,7 @@
     <!-- 시작 게이트 — 누르기 전에는 시간이 흐르지 않는다. 보드만 덮는다 -->
     {#if !started}
       <div id="startOverlay">
-        <h1>갓 타워 디펜스</h1>
+        <h1>G-타워디펜스</h1>
         <button id="startBtn" onclick={startGame}>게임 시작</button>
       </div>
     {/if}

@@ -165,7 +165,7 @@
     <!-- 시작 게이트 — 누르기 전에는 시간이 흐르지 않는다 (?bot이면 건너뛴다) -->
     {#if !started}
       <div id="startOverlay">
-        <h1>갓 타워 디펜스</h1>
+        <h1>G-타워디펜스</h1>
         <button id="startBtn" onclick={() => (started = true)}>게임 시작</button>
       </div>
     {/if}

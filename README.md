@@ -1,4 +1,4 @@
-# 머지 가디언즈 (가제) — 랜덤 합성 타워디펜스
+# G-타워디펜스 — 랜덤 합성 타워디펜스
 
 스타크래프트 유즈맵 **갓 타워 디펜스X**를 증강 드래프트 문법으로 재해석한
 데스크탑 랜덤 합성 TD. **무한 라운드 · 점수 · 명예의 전당.**
@@ -21,7 +21,9 @@ sim/         밸런스 검증 시뮬레이터
 prototype/   코어 루프 웹 프로토타입 (단일 html, 레거시)
   index.html                          ← 브라우저로 열면 바로 플레이
   gattadi.html                        ← 갓타디 시스템 이식 1차 스케치
-web/         갓타디 프로토 (Vite + Svelte 5, 현행)
+phaser/      프로덕션 도트 렌더러 (Phaser 3 + Vite) — 규칙 코드 없음.
+             @engine alias로 web/src의 게임 로직·HUD를 그대로 import한다
+web/         밸런스 실험실 · 규칙의 원본 (Vite + Svelte 5)
   src/data/units.ts                   ← 유닛 로스터 39종 + 고정 태그
   src/data/hero.ts                    ← 영웅·증강 15종·시너지·등급
   tools/gen-balance-csv.ts            ← docs/balance/*.csv 생성 (npm run gen:balance)
@@ -63,7 +65,7 @@ web/         갓타디 프로토 (Vite + Svelte 5, 현행)
 (보상 160+16r · 시작 300골드 · 뽑기 40골드 · 타일 24개 · HP 계수 1.22).
 출시 밸런스는 문서 §7의 GA 확정치(뽑기 60 · HP 1.29)를 따른다.
 
-## 갓타디 프로토 (web/) 실행
+## 밸런스 실험실 (web/) 실행
 
 ```bash
 cd web
