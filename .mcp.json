@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "svelte-grab": {
+      "command": "npx",
+      "args": ["--prefix", "phaser", "svelte-grab-mcp", "--stdio"]
+    }
+  }
+}
