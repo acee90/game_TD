@@ -137,6 +137,10 @@
     return () => {
       window.removeEventListener('keydown', onKeydown);
       window.removeEventListener('pagehide', onPageHide);
+      // SPA 언마운트로 나가는 경로에서도 런을 마감한다 — 전체 로드로 나가면
+      // pagehide가 먼저 처리하고, 이 정리는 실행되지 않는다.
+      game.finishRun('quit');
+      void runStore.flush();
       phaser.destroy(true);
     };
   });
