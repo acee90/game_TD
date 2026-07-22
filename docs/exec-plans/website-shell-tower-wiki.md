@@ -248,6 +248,18 @@ Wiki는 타워를 `{ def, tier, cooldown: 0 }` 형태로 구성하고 병과 업
 - 알려진 모든 타워 ID를 상세 페이지 정적 엔트리로 생성한다.
 - `TowerPreview`와 `TowerPreviewScene`을 연결하고 가시성·reduced-motion 일시정지를 구현한다.
 - **게이트:** 모든 타워 상세가 열리고 네 병과의 투사체와 착탄이 올바르게 구분된다.
+- **기록 (2026-07-22, 완료):** 39개 상세 URL 전부 프리렌더·200 확인, 없는 ID는 404.
+  목록: 병과·티어 필터 + 카드(`TowerCatalog`), 상세의 "같은 병과 목록"은 `?race=N`으로
+  진입 시 필터 초기화. 상세: 프리뷰 좌·정보 우(모바일 스택), 이전/다음 내비.
+  `TowerPreviewScene`은 M4 컨트롤러의 spawn/update만 호출 — 실게임 발사 이벤트와 같은
+  필드(색=RACE_COLOR, race, speed 태그, 실제 splashRadius)를 넘긴다. 발사 주기만
+  0.6~2.4s로 클램프(화면에 명시). 프리뷰 확인: 정규군 화살 리본, 포병 포탄 회전·연기
+  트레일·플립북 착탄, 마법대 볼트 헤일로·스플래시 링, 소환대 가시 — 네 병과 구분 OK.
+  reduced-motion은 수동 재생, 뷰포트 밖·백그라운드 탭은 IntersectionObserver·
+  visibilitychange로 정지. 조작은 다시 보기·일시정지·0.5×/1×만 노출.
+  **함정 두 건 기록:** ① Phaser.Scene은 `this.input`(InputPlugin)을 예약한다 — 씬 필드명
+  input 금지(cfg로 개명) ② `Number(null)===0`이라 없는 쿼리 파라미터가 필터 0(정규군)으로
+  잠겼었다 — null 체크 후 변환할 것.
 
 ### M6. 대시보드·랭킹 뼈대 · 규모 S
 

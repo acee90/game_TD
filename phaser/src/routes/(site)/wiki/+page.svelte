@@ -15,7 +15,6 @@
 <section aria-label="Wiki 카테고리">
   <div class="card-grid">
     <a class="card" href="{base}/wiki/towers">
-      <span class="card-badge">준비 중</span>
       <h3>타워 정보</h3>
       <p>네 병과의 타워 목록과 상세 수치, 투사체·착탄 프리뷰.</p>
     </a>
