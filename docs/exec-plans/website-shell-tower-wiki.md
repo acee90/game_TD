@@ -188,6 +188,15 @@ Wiki는 타워를 `{ def, tier, cooldown: 0 }` 형태로 구성하고 병과 업
 - 정적 호스팅의 fallback에 의존하지 않고 모든 알려진 경로를 prerender한다.
 - **게이트:** 각 URL 직접 접근·새로고침이 성공하고 홈페이지 번들에 Phaser가 포함되지
   않으며, 런 로그의 빌드 정보(git SHA·target)가 전환 전과 동일하게 기록된다.
+- **기록 (2026-07-22, 완료):** 배포 대상은 **루트 경로 정적 호스팅을 기본**으로 확정
+  (`paths.base = BASE_PATH ?? ''` — 서브패스 배포가 결정되면 env 하나로 전환).
+  `trailingSlash: 'always'`로 경로마다 `index.html`을 생성해 어떤 정적 호스트에서도
+  직접 URL이 동작한다. 게이트 검증: 8개 경로 전부 200 · 홈에서 Phaser 청크(1.48MB)
+  미로드 · `run_started.build` 동일 기록 · `?bot`·두 랩 회귀 없음 · 콘솔 에러 0.
+  구조 결정: 루트 레이아웃은 비우고 사이트 크롬은 `(site)` 그룹에만 — `/game`·`/dev/*`는
+  자기 전역 CSS(app.css·랩 스타일)를 갖는 별도 세계라 `data-sveltekit-reload` 전체 로드
+  경계로 격리했다 (SPA 내비게이션 시 전역 CSS 누적 오염 방지). Phaser 씬의 상대 에셋
+  경로는 `load.setBaseURL('/')`로 루트 고정 (트레일링 슬래시 경로에서 깨지지 않게).
 
 ### M2. 게임 페이지 격리 · 규모 M
 

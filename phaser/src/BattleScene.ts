@@ -111,6 +111,8 @@ export class BattleScene extends Phaser.Scene {
   private walkClock = 0;
 
   preload(): void {
+    // /game/ 라우트 기준 상대 경로가 깨지지 않게 루트 고정 — 서브패스 배포 시 paths.base 주입
+    this.load.setBaseURL('/');
     // 정식 도트 에셋을 기존 애니메이션 키에 연결한다. 프레임별 PNG가 생기기 전까지는
     // 같은 텍스처를 재사용해 현재 애니메이션/틴트 파이프라인을 그대로 유지한다.
     for (const frame of [0, 1]) {

@@ -4,6 +4,7 @@
   // HUD 로직 이중화 없음. 픽셀 스타일 재단장은 나중에 CSS 교체로 한다 (issue #23과 별개).
   import { onMount } from 'svelte';
   import Phaser from 'phaser';
+  import '@engine/app.css'; // HUD 스타일도 단일 원본 — 픽셀 재단장은 나중에 덮어쓴다
   import { Game } from '@engine/game/game';
   import { createSeededRand } from '@engine/game/random';
   import { createBrowserRunContext, createBrowserSeed } from '@engine/logging/browser-run';
@@ -18,7 +19,7 @@
   import GameOverOverlay from '@engine/lib/GameOverOverlay.svelte';
   import MenuOverlay from '@engine/lib/MenuOverlay.svelte';
   import * as hallOfFame from '@engine/ui/hall-of-fame';
-  import { BattleScene } from './BattleScene';
+  import { BattleScene } from '../../BattleScene';
 
   // 시드·런 로깅 — web과 동일 배선 (기록 다운로드·명예의 전당까지 같은 경로)
   const runSeed = createBrowserSeed();

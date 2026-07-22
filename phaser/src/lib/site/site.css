@@ -1,0 +1,276 @@
+/* 사이트 셸 전역 스타일 — 게임 HUD(app.css)와 같은 중세 판타지 팔레트.
+   모든 규칙을 .site 아래에 두어 /game의 app.css 전역 규칙과 충돌하지 않는다.
+   (색은 플레이버 — engine/src/app.css :root와 같은 값) */
+
+.site {
+  --bg: #15110c;
+  --bg2: #0d0a06;
+  --panel: #241d14;
+  --panel2: #31271a;
+  --line: #4d3d28;
+  --line2: #6b5638;
+  --text: #ece2cb;
+  --dim: #9d8c6f;
+  --gold: #e3b23e;
+  --danger: #c14a2c;
+  --serif: 'Iowan Old Style', 'Palatino Linotype', 'Nanum Myeongjo', Georgia, 'Times New Roman', serif;
+
+  width: 100%;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  color: var(--text);
+  font-family: -apple-system, 'Noto Sans KR', sans-serif;
+  background: radial-gradient(130% 90% at 50% 0%, #241c12 0%, var(--bg) 46%, var(--bg2) 100%) fixed;
+}
+
+.site * {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+.site a {
+  color: inherit;
+  text-decoration: none;
+}
+
+/* ── 헤더 ── */
+.site-header {
+  border-bottom: 1px solid var(--line);
+  background: rgba(13, 10, 6, 0.72);
+  backdrop-filter: blur(6px);
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.site-header-inner {
+  width: min(1080px, 100% - 32px);
+  margin: 0 auto;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 20px;
+  padding: 12px 0;
+}
+
+.site-logo {
+  font-family: var(--serif);
+  font-weight: 700;
+  font-size: 19px;
+  color: var(--gold);
+  letter-spacing: 0.02em;
+}
+
+.site-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  margin-left: auto;
+}
+
+.site-nav a {
+  display: inline-block;
+  padding: 7px 12px;
+  border-radius: 6px;
+  font-size: 14px;
+  color: var(--dim);
+  border: 1px solid transparent;
+}
+
+.site-nav a:hover {
+  color: var(--text);
+  background: var(--panel);
+}
+
+.site-nav a[aria-current='page'] {
+  color: var(--text);
+  background: var(--panel);
+  border-color: var(--line);
+}
+
+.site-nav a.nav-play {
+  color: #1c1508;
+  background: var(--gold);
+  font-weight: 700;
+}
+
+.site-nav a.nav-play:hover {
+  background: #f0c65a;
+}
+
+/* ── 본문 ── */
+.site-main {
+  flex: 1;
+  width: min(1080px, 100% - 32px);
+  margin: 0 auto;
+  padding: 40px 0 64px;
+}
+
+.site h1 {
+  font-family: var(--serif);
+  font-size: clamp(26px, 5vw, 40px);
+  color: var(--text);
+  line-height: 1.25;
+}
+
+.site h2 {
+  font-family: var(--serif);
+  font-size: 20px;
+  color: var(--text);
+  margin-bottom: 12px;
+}
+
+.site .page-lead {
+  margin-top: 10px;
+  color: var(--dim);
+  font-size: 15px;
+  line-height: 1.7;
+  max-width: 620px;
+}
+
+.site section {
+  margin-top: 40px;
+}
+
+/* 카드 그리드 — 특징·Wiki 카테고리 공용 */
+.card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 14px;
+  margin-top: 16px;
+}
+
+.card {
+  display: block;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 18px;
+  box-shadow: inset 0 1px 0 rgba(255, 230, 180, 0.05);
+}
+
+.card h3 {
+  font-size: 15px;
+  color: var(--text);
+  margin-bottom: 8px;
+  font-family: var(--serif);
+}
+
+.card p {
+  font-size: 13px;
+  color: var(--dim);
+  line-height: 1.65;
+}
+
+a.card:hover {
+  border-color: var(--line2);
+  background: var(--panel2);
+}
+
+.card .card-badge {
+  display: inline-block;
+  margin-bottom: 10px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  color: var(--dim);
+  border: 1px solid var(--line);
+}
+
+.card.card-disabled {
+  opacity: 0.55;
+}
+
+/* 빈 상태 — 가짜 데이터 대신 실제 빈 상태를 보여준다 */
+.empty-state {
+  margin-top: 16px;
+  padding: 36px 24px;
+  border: 1px dashed var(--line2);
+  border-radius: 10px;
+  text-align: center;
+  color: var(--dim);
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+.empty-state b {
+  color: var(--text);
+}
+
+/* CTA 버튼 */
+.btn-primary {
+  display: inline-block;
+  margin-top: 20px;
+  padding: 12px 26px;
+  border-radius: 8px;
+  background: var(--gold);
+  color: #1c1508;
+  font-weight: 700;
+  font-size: 15px;
+  border: 1px solid #8a6a20;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+}
+
+.btn-primary:hover {
+  background: #f0c65a;
+}
+
+.btn-ghost {
+  display: inline-block;
+  margin-top: 20px;
+  margin-left: 10px;
+  padding: 12px 22px;
+  border-radius: 8px;
+  color: var(--text);
+  font-size: 15px;
+  border: 1px solid var(--line2);
+}
+
+.btn-ghost:hover {
+  background: var(--panel);
+}
+
+/* ── 푸터 ── */
+.site-footer {
+  border-top: 1px solid var(--line);
+  padding: 18px 0;
+}
+
+.site-footer-inner {
+  width: min(1080px, 100% - 32px);
+  margin: 0 auto;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 18px;
+  font-size: 12px;
+  color: var(--dim);
+}
+
+/* 모바일 — 360px에서 가로 스크롤 없이 */
+@media (max-width: 560px) {
+  .site-header-inner {
+    padding: 10px 0;
+  }
+
+  .site-nav {
+    margin-left: 0;
+    width: 100%;
+    overflow-x: auto;
+    flex-wrap: nowrap;
+    scrollbar-width: none;
+  }
+
+  .site-nav::-webkit-scrollbar {
+    display: none;
+  }
+
+  .site-nav a {
+    white-space: nowrap;
+  }
+
+  .site-main {
+    padding: 28px 0 48px;
+  }
+}

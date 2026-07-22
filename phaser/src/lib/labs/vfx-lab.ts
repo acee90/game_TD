@@ -1,6 +1,5 @@
 import Phaser from 'phaser';
-import { makeGlowTextures, makeTextures } from './sprites';
-import './vfx-lab.css';
+import { makeGlowTextures, makeTextures } from '../../sprites';
 
 interface Variant {
   id: string;
@@ -56,6 +55,8 @@ class VfxLabScene extends Phaser.Scene {
   private launchTimer = 0;
 
   preload(): void {
+    // /dev/vfx-lab/ 라우트 기준 상대 경로가 깨지지 않게 루트 고정 — 서브패스 배포 시 paths.base 주입
+    this.load.setBaseURL('/');
     this.load.image('arrow', 'assets/sprites/arrow.png');
   }
 
@@ -215,14 +216,17 @@ class VfxLabScene extends Phaser.Scene {
   }
 }
 
-new Phaser.Game({
-  type: Phaser.AUTO,
-  parent: 'lab',
-  width: 960,
-  height: 610,
-  pixelArt: true,
-  roundPixels: true,
-  backgroundColor: '#100d09',
-  scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH },
-  scene: [VfxLabScene],
-});
+/** /dev/vfx-lab 라우트가 onMount에서 생성하고 언마운트 시 destroy(true)한다 */
+export function createVfxLab(parent: HTMLElement): Phaser.Game {
+  return new Phaser.Game({
+    type: Phaser.AUTO,
+    parent,
+    width: 960,
+    height: 610,
+    pixelArt: true,
+    roundPixels: true,
+    backgroundColor: '#100d09',
+    scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH },
+    scene: [VfxLabScene],
+  });
+}

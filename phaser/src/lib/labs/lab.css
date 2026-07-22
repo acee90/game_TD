@@ -1,0 +1,77 @@
+/* 개발자용 VFX 랩 공용 스타일 — /dev/* 라우트 전용.
+   전부 .lab-page 아래에 두어 다른 페이지에 새지 않는다. */
+@import url('https://fonts.googleapis.com/css2?family=Gowun+Dodum&family=Rajdhani:wght@600;700&display=swap');
+
+.lab-page {
+  font-family: 'Gowun Dodum', sans-serif;
+  color: #e8e2d0;
+  min-height: 100vh;
+  background:
+    radial-gradient(circle at 50% -10%, rgba(188, 137, 57, 0.22), transparent 42%),
+    repeating-linear-gradient(135deg, rgba(255, 255, 255, 0.018) 0 1px, transparent 1px 12px),
+    #0b0907;
+}
+
+.lab-page * {
+  box-sizing: border-box;
+  margin: 0;
+}
+
+.lab-page main {
+  width: min(1040px, calc(100% - 28px));
+  margin: auto;
+  padding: 36px 0 48px;
+}
+
+.lab-page header {
+  display: grid;
+  gap: 7px;
+  margin-bottom: 18px;
+}
+
+.lab-page .eyebrow {
+  color: #c89f55;
+  font: 700 12px 'Rajdhani', sans-serif;
+  letter-spacing: 0.2em;
+}
+
+.lab-page h1 {
+  color: #f0d392;
+  font: 700 clamp(28px, 5vw, 46px) 'Rajdhani', sans-serif;
+  letter-spacing: 0.04em;
+}
+
+.lab-page header > p:last-child {
+  color: #a89e8c;
+  font-size: 13px;
+}
+
+.lab-page .lab-host {
+  overflow: hidden;
+  border: 1px solid rgba(220, 181, 105, 0.32);
+  border-radius: 12px;
+  background: #100d09;
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.45), inset 0 1px rgba(255, 255, 255, 0.04);
+}
+
+.lab-page .lab-host canvas {
+  display: block;
+  width: 100%;
+  height: auto;
+  image-rendering: pixelated;
+}
+
+.lab-page nav {
+  display: flex;
+  gap: 18px;
+  flex-wrap: wrap;
+}
+
+.lab-page a {
+  display: inline-block;
+  margin-top: 18px;
+  color: #d8b66f;
+  text-decoration: none;
+  font-size: 13px;
+  border-bottom: 1px solid #765f36;
+}

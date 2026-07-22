@@ -1,5 +1,4 @@
 import Phaser from 'phaser';
-import './vfx-lab.css';
 
 const WIDTH = 960;
 const HEIGHT = 1390;
@@ -24,6 +23,8 @@ const CANDIDATES: Candidate[] = [
 
 class ProjectileVfxLabScene extends Phaser.Scene {
   preload(): void {
+    // /dev/projectile-vfx-lab/ 라우트 기준 상대 경로가 깨지지 않게 루트 고정
+    this.load.setBaseURL('/');
     this.load.spritesheet('explosion-02', 'assets/vfx-preview/explosion-candidate-02.png?v=02-75', {
       frameWidth: 48,
       frameHeight: 48,
@@ -176,14 +177,17 @@ class ProjectileVfxLabScene extends Phaser.Scene {
   }
 }
 
-new Phaser.Game({
-  type: Phaser.AUTO,
-  parent: 'lab',
-  width: WIDTH,
-  height: HEIGHT,
-  pixelArt: false,
-  roundPixels: false,
-  backgroundColor: '#100d09',
-  scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH },
-  scene: [ProjectileVfxLabScene],
-});
+/** /dev/projectile-vfx-lab 라우트가 onMount에서 생성하고 언마운트 시 destroy(true)한다 */
+export function createProjectileVfxLab(parent: HTMLElement): Phaser.Game {
+  return new Phaser.Game({
+    type: Phaser.AUTO,
+    parent,
+    width: WIDTH,
+    height: HEIGHT,
+    pixelArt: false,
+    roundPixels: false,
+    backgroundColor: '#100d09',
+    scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH },
+    scene: [ProjectileVfxLabScene],
+  });
+}
