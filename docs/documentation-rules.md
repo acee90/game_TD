@@ -40,14 +40,14 @@
 ## 3. 수치의 원본은 코드다
 
 ```
-web/src/data/*.ts   ← 유일한 원본. 수치는 여기만 고친다
+engine/src/data/*.ts ← 유일한 원본. 수치는 여기만 고친다
    ↓ npm run gen:balance
 docs/balance/*.csv  ← 자동 생성. 손으로 고치지 않는다
    ↓ 업로드 (요청 시)
 구글 시트            ← 열람·공유용 읽기 전용 사본
 ```
 
-- `web/tests/balance-csv.test.ts`가 코드-시트 일치를 강제한다.
+- `engine/tests/balance-csv.test.ts`가 코드-시트 일치를 강제한다.
 - 역방향(시트 → 코드) 동기화는 하지 않는다.
 - 이 방침은 밸런스를 만지는 사람 = 코드를 만지는 사람인 동안 유효하다.
   비개발 기획자가 합류하면 "시트가 원본, 게임이 import" 모델로 전환을 검토한다.

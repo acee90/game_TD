@@ -1,7 +1,7 @@
 // ───────── 전투 씬 — 엔진 상태를 도트로 그린다 ─────────
-// 게임 규칙은 전부 @engine(web/src)의 Game 클래스가 굴린다. 이 씬은
+// 게임 규칙은 전부 @engine(engine/src)의 Game 클래스가 굴린다. 이 씬은
 // ① 상태를 스프라이트로 비추고 ② vfx/shots/floats 큐를 파티클·연출로 바꾼다.
-// 규칙 코드는 여기 없다 — 이게 /web(밸런스 실험실)과 규칙이 영원히 같은 이유다.
+// 규칙 코드는 여기 없다 — 이게 engine/(밸런스 실험실)과 규칙이 영원히 같은 이유다.
 
 import Phaser from 'phaser';
 import { Game } from '@engine/game/game';

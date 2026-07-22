@@ -8,7 +8,7 @@
     "noEmit": true,
     "isolatedModules": true,
     "types": ["vite/client"],
-    "paths": { "@engine/*": ["../web/src/*"] }
+    "paths": { "@engine/*": ["../engine/src/*"] }
   },
   "include": ["src"]
 }

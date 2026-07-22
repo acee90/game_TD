@@ -1,6 +1,6 @@
 <script lang="ts">
   // ───────── 프로덕션 셸 — Phaser 보드 + 기존 Svelte HUD (단일 원본 이식) ─────────
-  // 레이아웃·컴포넌트·클릭 규칙·단축키는 web/src(App.svelte)의 것을 그대로 가져온다 —
+  // 레이아웃·컴포넌트·클릭 규칙·단축키는 은퇴한 웹 프로토(App.svelte)에서 이어받았다 —
   // HUD 로직 이중화 없음. 픽셀 스타일 재단장은 나중에 CSS 교체로 한다 (issue #23과 별개).
   import { onMount } from 'svelte';
   import Phaser from 'phaser';

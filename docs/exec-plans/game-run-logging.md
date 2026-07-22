@@ -1,6 +1,9 @@
 # 실행 계획 — Web·Unity 공통 게임 런 로그
 
-> 상태: **초안** (P0·P1·P2·P3 완료, P4 미착수) · 작성일: 2026-07-18 · 최종 갱신: 2026-07-19
+> 상태: **초안** (P0·P1·P2·P3 완료, P4 미착수) · 작성일: 2026-07-18 · 최종 갱신: 2026-07-22
+> 2026-07-22 재편: `web/`이 `engine/`으로 rename되고 웹 프로토 앱(App.svelte·LogViewer)은
+> 은퇴·삭제됐다. 본문 경로는 engine 기준으로 갱신했으며, P4의 로그 뷰어 UI는 홈페이지
+> 대시보드([website-shell-tower-wiki.md](website-shell-tower-wiki.md))로 이관 예정.
 > 상위 이슈: [#12 게임 로그 기록 시스템 도입](https://github.com/acee90/game_TD/issues/12)
 > 하위 이슈: [#13 P0 스키마](https://github.com/acee90/game_TD/issues/13) →
 > [#15 P1 Web](https://github.com/acee90/game_TD/issues/15) →
@@ -67,7 +70,7 @@ Game의 성공한 상태 변경
 
 ### 1.1 Web
 
-- 코어 `Game`은 [`web/src/game/game.ts`](../../web/src/game/game.ts)에 있고 DOM 의존성이 없다.
+- 코어 `Game`은 [`engine/src/game/game.ts`](../../engine/src/game/game.ts)에 있고 DOM 의존성이 없다.
 - 생성자는 `Rand` 함수만 받는다. 실제 seed는 보존하지 않으므로 현재 상태로는 로그에 seed를
   적어도 판을 재현할 수 없다.
 - 상태 변경 지점은 이미 `summonBoss`, `spawnUnit`, `resolveMerges`, `chooseAugment`,
@@ -252,10 +255,10 @@ ISO-8601 필드로만 별도 보존한다.
 
 예상 파일:
 
-- `web/src/game/logging.ts` — `GameEvent`, payload union, `GameEventSink`, `RunSummary`,
+- `engine/src/game/logging.ts` — `GameEvent`, payload union, `GameEventSink`, `RunSummary`,
   `RunContext`, no-op/memory sink.
-- `web/src/game/random.ts` — 버전 고정 seed PRNG.
-- `web/src/game/game.ts` — 시간·seq·`record()`·`finishRun()`과 성공 상태 변경 훅.
+- `engine/src/game/random.ts` — 버전 고정 seed PRNG.
+- `engine/src/game/game.ts` — 시간·seq·`record()`·`finishRun()`과 성공 상태 변경 훅.
 
 작업:
 
@@ -271,11 +274,11 @@ ISO-8601 필드로만 별도 보존한다.
 
 예상 파일:
 
-- `web/src/logging/indexed-db-run-store.ts` — run/event/summary 저장.
-- `web/src/logging/download-run.ts` — 정렬된 이벤트를 JSONL Blob으로 내보내기.
-- `web/src/logging/build-info.ts` — Vite가 주입한 빌드 메타를 `RunContext`로 변환.
-- `web/vite.config.ts` — package version, git/CI env, build timestamp를 `define`으로 주입.
-- `web/src/App.svelte`, `GameOverOverlay.svelte` 또는 `MenuOverlay.svelte` — 현재 run 내보내기와
+- `engine/src/logging/indexed-db-run-store.ts` — run/event/summary 저장.
+- `engine/src/logging/download-run.ts` — 정렬된 이벤트를 JSONL Blob으로 내보내기.
+- `engine/src/logging/build-info.ts` — Vite가 주입한 빌드 메타를 `RunContext`로 변환.
+- `engine/vite.config.ts` — package version, git/CI env, build timestamp를 `define`으로 주입.
+- `engine/src/App.svelte`, `GameOverOverlay.svelte` 또는 `MenuOverlay.svelte` — 현재 run 내보내기와
   마지막 run 내보내기 진입점.
 
 프레임워크/라이브러리 선택:
@@ -308,7 +311,7 @@ ISO-8601 필드로만 별도 보존한다.
 통과 명령:
 
 ```bash
-cd web
+cd engine
 npx tsc --noEmit
 npx vitest run
 npm run build
@@ -383,14 +386,14 @@ Player 뷰 계층에서는 `Platformer/3D_Tile_Top_01` 번들 누락과 연쇄 T
 
 예상 파일:
 
-- `web/tools/analyze-run-logs.ts`
-- `web/src/logging/validate-run-log.ts` 또는 tools 전용 validator
-- `web/tests/fixtures/game-logs/web-v1.jsonl`
-- `web/tests/fixtures/game-logs/unity-v1.jsonl`
-- `web/tests/game-run-log-schema.test.ts`
-- `web/package.json`의 `logs:analyze` script
-- `web/src/log-viewer/` — 파일 로더, run 비교, 타임라인, 빌드 요약 Svelte 컴포넌트
-- `web/src/LogViewer.svelte`와 별도 진입 경로 — 게임 UI와 상태를 공유하지 않는 viewer shell
+- `engine/tools/analyze-run-logs.ts`
+- `engine/src/logging/validate-run-log.ts` 또는 tools 전용 validator
+- `engine/tests/fixtures/game-logs/web-v1.jsonl`
+- `engine/tests/fixtures/game-logs/unity-v1.jsonl`
+- `engine/tests/game-run-log-schema.test.ts`
+- `engine/package.json`의 `logs:analyze` script
+- `engine/src/log-viewer/` — 파일 로더, run 비교, 타임라인, 빌드 요약 Svelte 컴포넌트
+- `engine/src/LogViewer.svelte`와 별도 진입 경로 — 게임 UI와 상태를 공유하지 않는 viewer shell
 
 프레임워크/라이브러리 선택:
 
@@ -402,7 +405,7 @@ Player 뷰 계층에서는 `Platformer/3D_Tile_Top_01` 번들 누락과 연쇄 T
 입력/출력 예:
 
 ```bash
-cd web
+cd engine
 npm run logs:analyze -- ../runs/*.jsonl --out ../tmp/run-report
 ```
 
@@ -426,7 +429,7 @@ viewer는 서버 없이 정적 빌드만으로 작동하고, P4 admin 패널이 
 - 보안: 파일은 브라우저 메모리에서만 파싱하며 P4 전에는 어디에도 업로드하지 않는다.
 
 viewer와 CLI가 서로 다른 계산을 하지 않도록 parser와 summary projector를
-`web/src/logging/analysis/`의 DOM 없는 모듈로 공유한다. UI는 그 결과만 렌더링한다.
+`engine/src/logging/analysis/`의 DOM 없는 모듈로 공유한다. UI는 그 결과만 렌더링한다.
 
 ### 7.3 회귀 게이트
 

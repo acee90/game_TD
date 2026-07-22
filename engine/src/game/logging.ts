@@ -3,7 +3,7 @@ import type { SkillId, SkillRole } from '../data/skills';
 
 export const GAME_LOG_VERSION = 1 as const;
 
-export type LogTarget = 'web' | 'unity';
+export type LogTarget = 'web' | 'unity' | 'phaser';
 export type FinishReason = 'game_over' | 'cleared' | 'restart' | 'quit' | 'abandoned' | 'test';
 export type XpSource = 'purchase' | 'mob_kill' | 'boss_kill' | 'augment';
 

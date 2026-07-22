@@ -1,13 +1,9 @@
 {
-  "name": "g-td-web",
+  "name": "g-td-engine",
   "private": true,
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "svelte-check --tsconfig ./tsconfig.json && vite build",
-    "preview": "vite preview",
-    "start": "vite preview",
     "check": "svelte-check --tsconfig ./tsconfig.json",
     "test": "vitest run",
     "gen:balance": "vite-node tools/gen-balance-csv.ts",

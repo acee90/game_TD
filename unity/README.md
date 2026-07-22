@@ -3,7 +3,7 @@
 > 2026-07-21 결정: 프로덕션 렌더러는 `phaser/`로 간다 — 이 C# 미러는 **동기화 중단**.
 > 3D·Steam/콘솔·네이티브 필요가 확정되면 재개한다 (명세 §11 결정 기록).
 
-`web/src`의 웹 타워디펜스 프로토타입을 Unity 2022.3 LTS로 1:1 포팅한 것이다.
+`engine/src`(구 web/src)의 타워디펜스 규칙 원본을 Unity 2022.3 LTS로 1:1 포팅한 것이다.
 에셋·씬·프리팹이 전혀 없다 — 코드만으로 열자마자 실행된다.
 
 ## 여는 법
@@ -102,25 +102,25 @@ unity/
 ├── ProjectSettings/ProjectVersion.txt
 └── Assets/Scripts/
     ├── Core/    # 순수 C# 시뮬레이션 — UnityEngine 의존 없음, 테스트 가능
-    │   ├── MapData.cs      # ← web/src/core/map.ts
-    │   ├── Balance.cs      # ← web/src/data/balance.ts
-    │   ├── Units.cs        # ← web/src/data/units.ts
-    │   ├── HeroData.cs     # ← web/src/data/hero.ts (상수·커브)
-    │   ├── Augments.cs     # ← web/src/data/hero.ts (증강·등급·시너지·적응형 가중치)
-    │   ├── Skills.cs       # ← web/src/data/skills.ts
-    │   ├── Score.cs        # ← web/src/data/score.ts
-    │   ├── GameTypes.cs    # ← web/src/game/types.ts
-    │   ├── Combat.cs       # ← web/src/game/combat.ts
-    │   ├── Economy.cs      # ← web/src/game/economy.ts
-    │   ├── Merge.cs        # ← web/src/game/merge.ts
-    │   ├── Hero.cs         # ← web/src/game/hero.ts
-    │   ├── Game.cs         # ← web/src/game/game.ts
-    │   └── Game.Skills.cs  # ← web/src/game/game.ts (스킬 시전 부분, partial)
+    │   ├── MapData.cs      # ← engine/src/core/map.ts
+    │   ├── Balance.cs      # ← engine/src/data/balance.ts
+    │   ├── Units.cs        # ← engine/src/data/units.ts
+    │   ├── HeroData.cs     # ← engine/src/data/hero.ts (상수·커브)
+    │   ├── Augments.cs     # ← engine/src/data/hero.ts (증강·등급·시너지·적응형 가중치)
+    │   ├── Skills.cs       # ← engine/src/data/skills.ts
+    │   ├── Score.cs        # ← engine/src/data/score.ts
+    │   ├── GameTypes.cs    # ← engine/src/game/types.ts
+    │   ├── Combat.cs       # ← engine/src/game/combat.ts
+    │   ├── Economy.cs      # ← engine/src/game/economy.ts
+    │   ├── Merge.cs        # ← engine/src/game/merge.ts
+    │   ├── Hero.cs         # ← engine/src/game/hero.ts
+    │   ├── Game.cs         # ← engine/src/game/game.ts
+    │   └── Game.Skills.cs  # ← engine/src/game/game.ts (스킬 시전 부분, partial)
     └── View/    # UnityEngine 레이어
         ├── Bootstrap.cs    # 진입점 (RuntimeInitializeOnLoadMethod)
-        ├── GameView.cs     # ← web/src/render/render.ts + main.ts (카메라·조명·씬·입력)
+        ├── GameView.cs     # ← engine/src/render/render.ts + main.ts (카메라·조명·씬·입력)
         ├── GameViewFx.cs   # 연출 — 파티클·투사체·펄스/링·TextMesh·월드 HP바
-        └── GameHud.cs      # ← web/src/ui/ui.ts (OnGUI 즉시모드 HUD, 반투명 패널)
+        └── GameHud.cs      # ← engine/src/ui/ui.ts (OnGUI 즉시모드 HUD, 반투명 패널)
 ```
 
 - Core는 `System.Random` 주입(`Func<double>`)으로 난수를 받아 시드 고정 테스트가 가능하다.
@@ -167,7 +167,7 @@ unity/
 
 미포팅:
 
-- **명예의 전당 영속 저장** (web/src/ui/hall-of-fame.ts) — localStorage 기반이라 제외.
+- **명예의 전당 영속 저장** (engine/src/ui/hall-of-fame.ts) — localStorage 기반이라 제외.
   게임오버 화면에 이번 판 점수·기록만 띄운다.
 - 웹 HUD의 진행 바 연출 일부(반복 보상 바 등)는 텍스트로 축약
 

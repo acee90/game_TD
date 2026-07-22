@@ -1,6 +1,6 @@
 # docs — 문서 지도
 
-> 상태: **현행** (새 문서는 여기에 등록한다) · 최종 갱신: 2026-07-18
+> 상태: **현행** (새 문서는 여기에 등록한다) · 최종 갱신: 2026-07-22
 > 규칙: [documentation-rules.md](documentation-rules.md) · 상태가 **현행**인 문서만 기준으로 삼는다.
 
 ```
@@ -65,10 +65,12 @@ docs/
 | [game-run-logging.md](exec-plans/game-run-logging.md) | 초안 | GitHub #12~#16 — Web·Unity 공통 JSONL 게임 로그, 저장·분석·회귀 검증 실행 계획 |
 | [hero-point-movement.md](exec-plans/hero-point-movement.md) | 초안 | 클릭 지점 영웅 이동 모델 + 목적지·경로 표시 |
 | [economy-power-rebalance.md](exec-plans/economy-power-rebalance.md) | 구현됨 | 영웅 비용 스케일링 + 가스 업그레이드 개편 — 시뮬 검증 완료, 사람 플레이테스트 대기 |
+| [projectile-vfx-asset-brief.md](exec-plans/projectile-vfx-asset-brief.md) | 초안 | Phaser 투사체 VFX 에셋 발주·후처리·통합·검증 규격 |
+| [website-shell-tower-wiki.md](exec-plans/website-shell-tower-wiki.md) | 초안 | 홈페이지 셸·게임 진입·타워 Wiki 정보와 Phaser 프리뷰 구현 계획 |
 
 ## balance/ — 자동 생성 시트
 
-`cd web && npm run gen:balance`로 생성. 손으로 고치지 않는다.
+`cd engine && npm run gen:balance`로 생성. 손으로 고치지 않는다.
 구글 시트 사본: [갓타디 밸런스시트](https://drive.google.com/drive/folders/1of5Pi467weNx7QtvwaEYSnbhEj-UGZII) (읽기 전용, 요청 시 갱신)
 
 | 파일 | 내용 |

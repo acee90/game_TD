@@ -22,15 +22,15 @@ prototype/   코어 루프 웹 프로토타입 (단일 html, 레거시)
   index.html                          ← 브라우저로 열면 바로 플레이
   gattadi.html                        ← 갓타디 시스템 이식 1차 스케치
 phaser/      프로덕션 도트 렌더러 (Phaser 3 + Vite) — 규칙 코드 없음.
-             @engine alias로 web/src의 게임 로직·HUD를 그대로 import한다
-web/         밸런스 실험실 · 규칙의 원본 (Vite + Svelte 5)
+             @engine alias로 engine/src의 게임 로직·HUD를 그대로 import한다
+engine/      규칙의 원본 · 헤드리스 밸런스 실험실 (구 web/, 프로토 앱은 은퇴)
   src/data/units.ts                   ← 유닛 로스터 39종 + 고정 태그
   src/data/hero.ts                    ← 영웅·증강 15종·시너지·등급
   tools/gen-balance-csv.ts            ← docs/balance/*.csv 생성 (npm run gen:balance)
   src/data/balance.ts                 ← 밸런스 테이블 ([원본확정] / [프로토] 구분)
   src/core/map.ts                     ← 십자 일주 경로 + 타워 타일 17개
   src/game/game.ts                    ← DOM 없는 게임 로직 (vitest 커버)
-  App.svelte · lib/*.svelte           ← HUD (엔진과 분리, view.ts가 표시 문자열)
+  src/lib/*.svelte                    ← HUD (phaser가 소비, view.ts가 표시 문자열)
   tests/game.test.ts                  ← 로직 테스트 32종
 ```
 
@@ -65,18 +65,18 @@ web/         밸런스 실험실 · 규칙의 원본 (Vite + Svelte 5)
 (보상 160+16r · 시작 300골드 · 뽑기 40골드 · 타일 24개 · HP 계수 1.22).
 출시 밸런스는 문서 §7의 GA 확정치(뽑기 60 · HP 1.29)를 따른다.
 
-## 밸런스 실험실 (web/) 실행
+## 밸런스 실험실 (engine/) 실행
 
 ```bash
-cd web
+cd engine
 npm install
-npm run dev     # http://localhost:5173
-npm test        # 게임 로직 스모크 테스트
-npm run check   # svelte-check 타입 검사 (.svelte + .ts)
-npm run build   # 타입체크 + 프로덕션 빌드
+npm test               # 게임 로직 테스트 (vitest)
+npm run check          # svelte-check 타입 검사 (.svelte + .ts)
+npm run sim:ga         # 실제 Game 클래스 기반 GA 시뮬 (-- --quick 축소판)
+npm run gen:balance    # docs/balance/*.csv 생성
 ```
 
-십자가 맵 · 스플/파워 변환 · 보스 직접 소환 · 일꾼 경제 검증용.
+플레이는 `cd phaser && npm run dev` (http://localhost:5199).
 설계 근거: docs/reference/god-td-ops-layer-analysis-v0.1.md
 
 ## 시뮬레이터 실행
