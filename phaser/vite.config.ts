@@ -41,5 +41,14 @@ export default defineConfig({
   server: {
     port: 5199,
     fs: { allow: ['..'] }, // ../engine/src를 읽는다
+    // 배포본은 사이트와 API가 한 Worker라 동일 출처다(루트 wrangler.jsonc).
+    // 개발 서버에서도 같은 조건을 만들어 두어야 CORS 없이 /api/*를 부를 수 있다.
+    // 사전 실행: 루트에서 `npm run dev:worker` (wrangler dev, 8787)
+    proxy: {
+      '/api': {
+        target: 'http://127.0.0.1:8787',
+        changeOrigin: true,
+      },
+    },
   },
 });

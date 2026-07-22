@@ -9,6 +9,8 @@ import { contentFingerprint, sha256Hex } from './validate';
 
 export interface Env {
   DB: D1Database;
+  /** 정적 자산 계층 — API가 아닌 요청을 되돌려준다 (루트 wrangler.jsonc의 assets.binding) */
+  ASSETS: Fetcher;
   /** 선택 — 설정하면 이 값과 일치하는 요청만 admin 경로를 쓸 수 있다 */
   ADMIN_TOKEN?: string;
 }

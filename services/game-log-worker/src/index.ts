@@ -1,8 +1,15 @@
-// ───────── 게임 런 로그 수집 Worker ─────────
+// ───────── G-타워디펜스 통합 Worker ─────────
 // 계획: docs/exec-plans/run-log-db-and-ranking.md M1
 //
+// 정적 사이트와 API를 한 Worker로 배포한다(2026-07-22 사용자 결정, 루트 wrangler.jsonc).
+// Cloudflare가 정적 자산을 먼저 찾고, 없을 때만 이 스크립트를 부른다. 그래서 여기서는
+// **API 경로만 처리하고 나머지는 ASSETS로 되돌려준다** — 안 그러면 오타 URL에서
+// 우리 404 페이지 대신 JSON 404가 뜬다.
+//
+// 동일 출처이므로 CORS 헤더를 두지 않는다. 로컬 개발은 vite 프록시가 같은 출처를 만든다
+// (phaser/vite.config.ts server.proxy).
+//
 // 이 단계(M1)의 범위는 **적재**뿐이다. 랭킹 조회 API와 화면은 M3에서 붙인다.
-// 저장 범위는 "모든 판" — 중단 런도 complete=0으로 적재한다(§2).
 
 import { ingestRun, recentUploadCount, type Env } from './db';
 import { DEFAULT_LIMITS, ValidationError, sha256Hex, validateUpload } from './validate';
@@ -10,37 +17,28 @@ import { DEFAULT_LIMITS, ValidationError, sha256Hex, validateUpload } from './va
 /** 같은 client_token이 1시간에 올릴 수 있는 런 수 (M0 실측 후 조정) */
 const RATE_LIMIT_PER_HOUR = 60;
 
-const json = (body: unknown, status = 200, extra: HeadersInit = {}): Response =>
+const json = (body: unknown, status = 200): Response =>
   new Response(JSON.stringify(body), {
     status,
-    headers: { 'content-type': 'application/json; charset=utf-8', ...corsHeaders(), ...extra },
+    headers: { 'content-type': 'application/json; charset=utf-8' },
   });
-
-function corsHeaders(): Record<string, string> {
-  // 정적 사이트(다른 오리진)에서 호출하므로 CORS가 필요하다.
-  // 업로드는 공개 엔드포인트이고 쿠키를 쓰지 않으므로 credentials는 허용하지 않는다.
-  return {
-    'access-control-allow-origin': '*',
-    'access-control-allow-methods': 'POST, GET, OPTIONS',
-    'access-control-allow-headers': 'content-type',
-    'access-control-max-age': '86400',
-  };
-}
 
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
 
-    if (request.method === 'OPTIONS') {
-      return new Response(null, { status: 204, headers: corsHeaders() });
+    if (url.pathname === '/api/v1/runs' && request.method === 'POST') {
+      return handleUpload(request, env);
     }
 
-    if (url.pathname === '/health') {
+    if (url.pathname === '/api/health') {
       return json({ ok: true });
     }
 
-    if (url.pathname === '/api/v1/runs' && request.method === 'POST') {
-      return handleUpload(request, env);
+    // API가 아닌 경로 — 정적 자산 계층으로 되돌린다.
+    // (여기 왔다는 건 매칭되는 파일이 없었다는 뜻이므로 보통 404.html이 나간다)
+    if (!url.pathname.startsWith('/api/')) {
+      return env.ASSETS.fetch(request);
     }
 
     return json({ error: 'not_found' }, 404);

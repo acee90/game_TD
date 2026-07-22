@@ -1,0 +1,17 @@
+{
+  "name": "game-td",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "정적 사이트(phaser/build)와 로그 API를 하나의 Worker로 배포한다 — 설정은 루트 wrangler.jsonc",
+  "scripts": {
+    "build": "npm --prefix phaser ci && npm --prefix phaser run build",
+    "dev:worker": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "db:apply:local": "wrangler d1 migrations apply game-td-run-logs --local",
+    "db:apply:remote": "wrangler d1 migrations apply game-td-run-logs --remote"
+  },
+  "devDependencies": {
+    "wrangler": "^4.113.0"
+  }
+}

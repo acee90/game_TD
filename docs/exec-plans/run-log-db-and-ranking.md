@@ -76,20 +76,34 @@ JSONL·summary를 내려받을 수 있으며, 공통 JSON Schema(`schemas/game-r
 
 ## 4. 아키텍처
 
+**정적 사이트와 API를 하나의 Worker로 배포한다** (2026-07-22 사용자 결정).
+Cloudflare가 정적 자산을 먼저 찾고 없을 때만 Worker 스크립트를 부르므로, Worker는
+`/api/*`만 처리하고 나머지는 `env.ASSETS`로 되돌린다 — 그래야 오타 URL에서 JSON 404가
+아니라 `404.html`이 나간다. **동일 출처라 업로드에 CORS가 필요 없다.**
+
+설정은 저장소 **루트 `wrangler.jsonc`** 하나다 (`assets.directory = phaser/build`,
+`main = services/game-log-worker/src/index.ts`, D1 바인딩 `DB`).
+로컬 개발은 vite 프록시(`/api` → `127.0.0.1:8787`)가 같은 출처 조건을 재현한다.
+
 ```text
 브라우저 (phaser/)
   Game ──> IndexedDbRunStore (로컬 원본, 기존 + 업로드 상태)
               │
               ├─ 완주: 게임오버 화면에서 즉시 ─┐
-              │                              ├─> POST /api/v1/runs
+              │                              ├─> POST /api/v1/runs (동일 출처)
               └─ 중단: 다음 방문 때 동기화 ────┘        │
-                                          Cloudflare Worker (형식 검사)
-                                                       │
-                                                      D1
-                                                       │
-                                GET /api/v1/ranking ───┴─── GET /api/v1/runs/:id
-                                          │                        │
-                                     /ranking 화면            랭킹 상세(선택 기록)
+                                                      ▼
+                        ┌──────────── 단일 Worker (game-td) ────────────┐
+                        │  정적 자산(phaser/build) ── 매칭되면 그대로 서빙  │
+                        │  /api/* ── 형식 검사 → D1 적재                 │
+                        │  그 외   ── env.ASSETS로 되돌림(404.html)       │
+                        └───────────────────┬───────────────────────────┘
+                                            ▼
+                                           D1
+                                            │
+                      GET /api/v1/ranking ──┴── GET /api/v1/runs/:id
+                                │                        │
+                           /ranking 화면            랭킹 상세(선택 기록)
 ```
 
 ### 4.1 "모든 판 저장"의 관문 — pagehide 유실 회피
@@ -191,7 +205,15 @@ JSONL·summary를 내려받을 수 있으며, 공통 JSON Schema(`schemas/game-r
   ⑥ 랭킹 필터(`complete=1 AND build_dirty=0`)가 중단 런을 제외, 저장은 2건 모두 유지.
   재업로드 동일성은 이벤트 열 지문(seq·type·score·round)으로 판정하므로 **표시명만 바꾼
   재전송은 conflict가 아니다.** client_token은 원문을 저장하지 않고 SHA-256 해시만 남긴다.
-  **미완료:** remote D1 생성·`database_id` 기입·remote 마이그레이션은 계정 소유자 작업으로 남음.
+  **통합 배포로 전환 (2026-07-22, 사용자 결정):** 처음엔 Worker를 정적 사이트와 별도
+  배포로 잡았으나, 동일 출처 이점(CORS 불필요)과 단일 배포를 택해 **루트 `wrangler.jsonc`
+  하나로 합쳤다**(§4). 검증: `deploy --dry-run`이 정적 자산 170개 + `env.DB` + `env.ASSETS`를
+  한 Worker로 인식 · 로컬에서 같은 포트로 홈/Wiki 상세 200, `/api/health` 정상,
+  없는 경로는 `404.html` 원본 그대로 서빙(JSON 404 아님), 업로드 201·재업로드 200,
+  응답에 CORS 헤더 없음. 개발 서버는 vite 프록시로 동일 출처를 재현한다.
+  **함정:** 로컬 D1 상태는 `database_id`·설정 파일 위치별로 갈린다 — ID를 바꾸거나 설정을
+  옮기면 `d1 migrations apply --local`을 다시 돌려야 한다(`no such table` 발생).
+  **미완료:** remote D1 마이그레이션과 `wrangler deploy`는 계정 소유자 작업으로 남음.
 
 ### M2. 클라이언트 업로드·동기화 · 규모 M
 
