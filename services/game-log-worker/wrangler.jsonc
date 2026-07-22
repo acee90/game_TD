@@ -1,22 +1,26 @@
 {
-  // 게임 런 로그 수집 Worker (계획: docs/exec-plans/run-log-db-and-ranking.md M1)
-  //
-  // 사전 준비 — D1 데이터베이스는 계정 소유자가 한 번 만들어야 한다:
-  //   bunx wrangler d1 create game-td-run-logs
-  // 출력된 database_id를 아래 값에 채운 뒤 마이그레이션을 적용한다:
-  //   bunx wrangler d1 migrations apply game-td-run-logs --local    (로컬)
-  //   bunx wrangler d1 migrations apply game-td-run-logs --remote   (운영)
-  "name": "game-td-run-logs",
-  "main": "src/index.ts",
-  "compatibility_date": "2026-07-22",
-  "observability": { "enabled": true },
-  "d1_databases": [
-    {
-      "binding": "DB",
-      "database_name": "game-td-run-logs",
-      // wrangler d1 create 출력값으로 교체할 것 (비어 있으면 remote 배포가 실패한다)
-      "database_id": "REPLACE_WITH_D1_DATABASE_ID",
-      "migrations_dir": "migrations"
-    }
-  ]
+	// 게임 런 로그 수집 Worker (계획: docs/exec-plans/run-log-db-and-ranking.md M1)
+	//
+	// 사전 준비 — D1 데이터베이스는 계정 소유자가 한 번 만들어야 한다:
+	//   bunx wrangler d1 create game-td-run-logs
+	// 출력된 database_id를 아래 값에 채운 뒤 마이그레이션을 적용한다:
+	//   bunx wrangler d1 migrations apply game-td-run-logs --local    (로컬)
+	//   bunx wrangler d1 migrations apply game-td-run-logs --remote   (운영)
+	"name": "game-td-run-logs",
+	"main": "src/index.ts",
+	"compatibility_date": "2026-07-22",
+	"observability": {
+		"enabled": true
+	},
+	"d1_databases": [
+		{
+			// binding은 코드에서 DB를 꺼내는 변수명이다 — src/db.ts의 env.DB와 반드시 같아야 한다.
+			// 이름을 바꾸려면 Env 인터페이스와 사용처를 함께 고쳐야 한다.
+			"binding": "DB",
+			"database_name": "game-td-run-logs",
+			"database_id": "d8247466-8237-4293-a56c-e39f662a8961",
+			// d1 migrations apply가 이 폴더를 읽는다
+			"migrations_dir": "migrations"
+		}
+	]
 }
