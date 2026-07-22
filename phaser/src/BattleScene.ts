@@ -154,7 +154,8 @@ export class BattleScene extends Phaser.Scene {
       this.towers.push({ img, label, key: '' });
     }
 
-    this.heroImg = this.add.sprite(0, 0, 'hero0').setDepth(DEPTH.hero);
+    // 초기 0.5배 기준의 1.5배 크기. 직전 2배(1.0)는 보드에서 지나치게 컸다.
+    this.heroImg = this.add.sprite(0, 0, 'hero0').setScale(0.75).setDepth(DEPTH.hero);
     this.heroImg.play('hero-idle');
     this.heroLabel = this.add
       .text(0, 0, '', {

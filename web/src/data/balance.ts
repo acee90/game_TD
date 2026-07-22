@@ -386,6 +386,10 @@ export const BOSS_HP_TOP_GROWTH = 2.6;
  */
 export const BOSS_LOW_LEVEL_HP_CUT = 0.85;
 export const BOSS_LOW_LEVEL_UNTIL = 3;
+/** 플레이테스트 조정: 중상위 보스 Lv3~8만 체력 -5%. Lv1~2 앵커와 Lv9+는 유지한다. */
+export const BOSS_MID_LEVEL_HP_MULT = 0.95;
+export const BOSS_MID_LEVEL_HP_FROM = 3;
+export const BOSS_MID_LEVEL_HP_UNTIL = 8;
 
 export const bossHP = (level: number): number => {
   const capped = Math.min(level, BOSS_HP_TOP_FROM);
@@ -393,7 +397,11 @@ export const bossHP = (level: number): number => {
   const full = level <= BOSS_HP_TOP_FROM
     ? base
     : base * Math.pow(BOSS_HP_TOP_GROWTH, level - BOSS_HP_TOP_FROM);
-  return level <= BOSS_LOW_LEVEL_UNTIL ? full * BOSS_LOW_LEVEL_HP_CUT : full;
+  const lowLevel = level <= BOSS_LOW_LEVEL_UNTIL ? BOSS_LOW_LEVEL_HP_CUT : 1;
+  const midLevel = level >= BOSS_MID_LEVEL_HP_FROM && level <= BOSS_MID_LEVEL_HP_UNTIL
+    ? BOSS_MID_LEVEL_HP_MULT
+    : 1;
+  return full * lowLevel * midLevel;
 };
 export const bossArmor = (level: number): number => 1.1 * level; // 기본공 3 동행
 // BOSS_SPEED는 위 '보스 소환' 절로 옮겼다 — 쿨타임이 이 값에서 유도되기 때문이다.
@@ -804,6 +812,9 @@ export const TAG_EFFECT: Record<Tag, { damage: number; interval: number; range: 
   speed: { damage: 1.0, interval: 0.5, range: 0.7 },
 };
 
+/** 병과별 최종 사거리 배율 — 정규군은 태그 사거리 계산 후 15% 증가. */
+export const RACE_RANGE_MULT = [1.15, 1, 1, 1] as const;
+
 /**
  * 스플래시 폭발 반경 = 타워 사거리 × 이 값 (2026-07-19, 사용자 지시).
  *
@@ -811,6 +822,8 @@ export const TAG_EFFECT: Record<Tag, { damage: number; interval: number; range: 
  * 사거리 안 모든 몹을 때렸다. 실제 폭발 반경을 따로 두어야 "감쇠 강화"가 의미를 갖는다.
  */
 export const SPLASH_RADIUS_MULT = 0.55;
+/** 마법대 스플래시만 공용 폭발 반경의 절반으로 제한한다. */
+export const MAGIC_SPLASH_RADIUS_MULT = 0.5;
 
 /**
  * 스플래시 피해 감쇠 — 3단계 계단식. 2026-07-19 (사용자 지시) 감쇠 강화:

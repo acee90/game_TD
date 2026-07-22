@@ -13,7 +13,7 @@ import {
 } from '../core/map';
 import { GOD_TIER, RACES, RACE_COLOR, tagLabel, type Race } from '../data/units';
 import type { AugmentCard } from '../data/hero';
-import { attackInterval, damage, isSplash, range, slowFactor, type UpgradeLevels } from './combat';
+import { attackInterval, damage, isSplash, range, slowFactor, splashRadius, type UpgradeLevels } from './combat';
 import { bossKillMineral, killIncome } from './economy';
 import { Hero, rerollAugmentChoice, rollAugmentChoices, type HeroStats } from './hero';
 import {
@@ -2396,7 +2396,7 @@ export class Game {
 
       if (isSplash(tower)) {
         // 폭발 반경은 사거리 전체가 아니라 그 일부다 (SPLASH_RADIUS_MULT, 2026-07-19).
-        const blast = reach * B.SPLASH_RADIUS_MULT;
+        const blast = splashRadius(tower, reach);
         const pos = inReach.map((e) => pathPos(e.distance));
         // 폭심 = 반경 안에 몹이 가장 많이 들어오는 지점. 반경이 좁아진 만큼
         // 아무 몹이나 잡으면 1~2기밖에 못 때린다 — 밀집을 노려야 제값을 한다.

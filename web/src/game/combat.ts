@@ -45,8 +45,12 @@ export function attackInterval(tower: Tower): number {
 }
 
 export function range(tower: Tower): number {
-  return B.TIER_RANGE[tower.tier] * combine(tower.def.tags, 'range');
+  return B.TIER_RANGE[tower.tier] * combine(tower.def.tags, 'range') * B.RACE_RANGE_MULT[tower.def.race];
 }
+
+/** 마법대는 밀집 제어력이 높아 같은 스플래시 태그라도 폭발 범위가 절반이다. */
+export const splashRadius = (tower: Tower, reach = range(tower)): number =>
+  reach * B.SPLASH_RADIUS_MULT * (tower.def.race === 2 ? B.MAGIC_SPLASH_RADIUS_MULT : 1);
 
 export const isSplash = (tower: Tower): boolean => hasTag(tower.def, 'splash');
 export const isCreature = (tower: Tower): boolean => tower.def.race === CREATURE;
