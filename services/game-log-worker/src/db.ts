@@ -36,10 +36,17 @@ export async function ingestRun(
     .first<{ content_hash: string }>();
 
   if (existing) {
-    // 같은 내용의 재전송(네트워크 재시도 등)은 성공으로 취급한다
-    return existing.content_hash === contentHash
-      ? { status: 'duplicate', runId: run.runId }
-      : { status: 'conflict', runId: run.runId };
+    if (existing.content_hash !== contentHash) {
+      return { status: 'conflict', runId: run.runId };
+    }
+    // 같은 내용의 재전송(네트워크 재시도, 이름 저장 후 재전송)은 성공으로 취급한다.
+    // 이벤트 열은 그대로이므로 표시명만 갱신한다 — 지문에 표시명은 들어가지 않는다.
+    if (run.displayName !== null) {
+      await env.DB.prepare('UPDATE runs SET display_name = ? WHERE run_id = ?')
+        .bind(run.displayName, run.runId)
+        .run();
+    }
+    return { status: 'duplicate', runId: run.runId };
   }
 
   const summary = run.summary;

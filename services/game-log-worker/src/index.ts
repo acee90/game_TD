@@ -12,6 +12,7 @@
 // 이 단계(M1)의 범위는 **적재**뿐이다. 랭킹 조회 API와 화면은 M3에서 붙인다.
 
 import { ingestRun, recentUploadCount, type Env } from './db';
+import { runDetail, topRanking } from './ranking';
 import { DEFAULT_LIMITS, ValidationError, sha256Hex, validateUpload } from './validate';
 
 /** 같은 client_token이 1시간에 올릴 수 있는 런 수 (M0 실측 후 조정) */
@@ -33,6 +34,20 @@ export default {
 
     if (url.pathname === '/api/health') {
       return json({ ok: true });
+    }
+
+    if (url.pathname === '/api/v1/ranking' && request.method === 'GET') {
+      // 내 기록 표시용 — 토큰은 조회 조건이 아니라 표시 플래그로만 쓴다
+      const token = url.searchParams.get('clientToken');
+      const tokenHash = token ? await sha256Hex(token) : null;
+      return json({ rows: await topRanking(env, url, tokenHash) });
+    }
+
+    const detailMatch = url.pathname.match(/^\/api\/v1\/runs\/([A-Za-z0-9_-]{1,128})$/);
+    if (detailMatch && request.method === 'GET') {
+      const detail = await runDetail(env, detailMatch[1]);
+      // 중단 판·개발 빌드는 존재해도 공개하지 않는다 (§5.2)
+      return detail ? json(detail) : json({ error: 'not_found' }, 404);
     }
 
     // API가 아닌 경로 — 정적 자산 계층으로 되돌린다.

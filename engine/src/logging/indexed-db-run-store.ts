@@ -1,9 +1,23 @@
 import type { GameEventSink, GameRunEvent, RunSummary } from '../game/logging';
 
 const DB_NAME = 'game-td-run-logs';
-const DB_VERSION = 1;
+/** v2 — 업로드 상태 스토어 신설 (M2, 서버 동기화) */
+const DB_VERSION = 2;
 const EVENT_STORE = 'events';
 const SUMMARY_STORE = 'summaries';
+const UPLOAD_STORE = 'uploads';
+
+/**
+ * 업로드 진행 상태. 로컬 기록이 원본이고 업로드는 실패해도 되는 계층이므로,
+ * 여기 없는 런은 "아직 안 올린 것"으로 본다 (별도 pending 표시를 두지 않는다).
+ */
+export interface RunUploadState {
+  readonly runId: string;
+  readonly status: 'uploaded' | 'failed';
+  readonly attempts: number;
+  readonly updatedAt: string;
+  readonly error?: string;
+}
 
 function openRunLogDatabase(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
@@ -17,6 +31,9 @@ function openRunLogDatabase(): Promise<IDBDatabase> {
       }
       if (!db.objectStoreNames.contains(SUMMARY_STORE)) {
         db.createObjectStore(SUMMARY_STORE, { keyPath: 'runId' });
+      }
+      if (!db.objectStoreNames.contains(UPLOAD_STORE)) {
+        db.createObjectStore(UPLOAD_STORE, { keyPath: 'runId' });
       }
     };
     request.onsuccess = () => resolve(request.result);
@@ -66,6 +83,57 @@ export async function listRunSummaries(): Promise<RunSummary[]> {
     transaction.objectStore(SUMMARY_STORE).getAll(),
   ) as RunSummary[];
   return summaries.sort((a, b) => b.startedAt.localeCompare(a.startedAt));
+}
+
+// ───────── 업로드 동기화 (M2) ─────────
+// 로컬 IndexedDB가 원본이고 서버 업로드는 실패해도 되는 계층이다.
+// 이탈 순간에는 쓰기가 유실되므로(실측 확인) **다음 방문 때** 밀린 런을 올린다.
+
+/** 업로드 결과를 기록한다 */
+export async function markUploadState(state: RunUploadState): Promise<void> {
+  const db = await openRunLogDatabase();
+  await put(db, UPLOAD_STORE, state);
+}
+
+export async function getUploadState(runId: string): Promise<RunUploadState | null> {
+  const db = await openRunLogDatabase();
+  const transaction = db.transaction(UPLOAD_STORE, 'readonly');
+  const state = (await requestResult(
+    transaction.objectStore(UPLOAD_STORE).get(runId),
+  )) as RunUploadState | undefined;
+  return state ?? null;
+}
+
+/**
+ * 아직 서버에 올리지 않은 런 ID — 이벤트는 있는데 uploaded 표시가 없는 것들.
+ * 오래된 것부터 돌려준다(먼저 시작한 판을 먼저 올린다).
+ *
+ * `exclude`로 진행 중인 런을 빼면 플레이 도중에 부분 업로드되는 일을 막는다.
+ */
+export async function listPendingRunIds(exclude: readonly string[] = []): Promise<string[]> {
+  const db = await openRunLogDatabase();
+  const transaction = db.transaction([EVENT_STORE, UPLOAD_STORE], 'readonly');
+
+  // run_started(seq 1)만 모으면 런 목록과 시작 순서를 한 번에 얻는다
+  const starts = (await requestResult(
+    transaction.objectStore(EVENT_STORE).index('type').getAll(IDBKeyRange.only('run_started')),
+  )) as GameRunEvent[];
+  const uploaded = (await requestResult(
+    transaction.objectStore(UPLOAD_STORE).getAll(),
+  )) as RunUploadState[];
+
+  const done = new Set(uploaded.filter((u) => u.status === 'uploaded').map((u) => u.runId));
+  const skip = new Set(exclude);
+
+  return starts
+    .filter((e) => !done.has(e.runId) && !skip.has(e.runId))
+    .sort((a, b) => a.elapsedSeconds - b.elapsedSeconds)
+    .map((e) => e.runId);
+}
+
+/** 업로드 페이로드 — 한 런의 이벤트 전체를 seq 순서로 */
+export async function loadRunForUpload(runId: string): Promise<GameRunEvent[]> {
+  return loadRunEvents(runId);
 }
 
 function downloadText(filename: string, content: string, type: string): void {

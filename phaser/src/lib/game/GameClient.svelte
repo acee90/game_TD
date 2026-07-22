@@ -19,13 +19,15 @@
   import GameOverOverlay from './GameOverOverlay.svelte';
   import MenuOverlay from './MenuOverlay.svelte';
   import * as hallOfFame from './hall-of-fame';
+  import { displayName, setDisplayName, syncPendingRuns, uploadRun } from './run-upload';
   import { BattleScene } from '../../BattleScene';
 
   // 시드·런 로깅 — web과 동일 배선 (기록 다운로드·명예의 전당까지 같은 경로)
   const runSeed = createBrowserSeed();
   const runStore = new IndexedDbRunStore();
+  const runContext = createBrowserRunContext(runSeed);
   const game = new Game(createSeededRand(runSeed), {
-    context: createBrowserRunContext(runSeed),
+    context: runContext,
     sink: runStore,
   });
 
@@ -52,6 +54,10 @@
     myRank: number | null;
   }
   let gameOverData = $state<GameOverData | null>(null);
+  /** 서버 업로드 진행 표시 — 실패해도 게임오버 화면을 막지 않는다 */
+  let uploadStatus = $state<'idle' | 'sending' | 'done' | 'failed'>('idle');
+  let playerName = $state(displayName() ?? '');
+
   function captureGameOver(): void {
     const mine: hallOfFame.Record = {
       score: game.score,
@@ -67,6 +73,22 @@
       records,
       myRank: hallOfFame.rankOf(records, mine),
     };
+    // 정상 종료 판이므로 지금 올린다 — 문서가 살아 있는 유일하게 안전한 시점이다.
+    // 실패해도 상태만 남기고 넘어간다(다음 방문에 재시도).
+    void sendRun();
+  }
+
+  async function sendRun(): Promise<void> {
+    uploadStatus = 'sending';
+    // run_finished가 IndexedDB에 실제로 들어간 뒤에 읽어야 완전한 로그가 올라간다
+    await runStore.flush();
+    const result = await uploadRun(runContext.runId, playerName.trim() || null);
+    uploadStatus = result.ok ? 'done' : 'failed';
+  }
+
+  function saveNameAndResend(): void {
+    setDisplayName(playerName);
+    void sendRun();
   }
 
   function restart(): void {
@@ -103,6 +125,11 @@
   let host: HTMLDivElement;
 
   onMount(() => {
+    // 지난 방문에서 못 올린 판(중단·오프라인)을 여기서 올린다 — 이탈 시점 쓰기는
+    // 유실되므로 이게 유일하게 신뢰할 수 있는 동기화 지점이다.
+    // 진행 중인 이 판은 제외하고, 실패해도 게임 시작을 막지 않는다.
+    void syncPendingRuns(runContext.runId);
+
     const scene = new BattleScene({
       game,
       speed: () => gameSpeed,
@@ -220,6 +247,9 @@
     myRank={gameOverData.myRank}
     onDownloadLog={() => runStore.downloadJsonl()}
     onDownloadSummary={() => runStore.downloadSummary()}
+    bind:playerName
+    {uploadStatus}
+    onSaveName={saveNameAndResend}
   />
 {/if}
 
