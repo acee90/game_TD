@@ -1,0 +1,16 @@
+{
+  // Cloudflare Workers 정적 자산 배포 설정 — 대시보드에 "Build output directory"
+  // 필드가 없는 이유가 이 파일이다. 새 Workers Git 연동은 산출물 경로를
+  // 대시보드 텍스트칸이 아니라 이 wrangler 설정에서 읽는다 (구 Pages 방식과 다름).
+  //
+  // name은 Cloudflare 대시보드에서 이미 만든 Worker 이름과 정확히 같아야 한다 —
+  // 다르면 배포가 엉뚱한 Worker를 만들거나 실패한다. 대시보드 이름에 맞춰 고쳐 쓸 것.
+  "name": "g-td-phaser",
+  "compatibility_date": "2026-07-22",
+  "assets": {
+    // svelte.config.js의 adapter-static 출력 폴더 (npm run build 산출물)
+    "directory": "./build",
+    // 404.html(fallback, phaser/svelte.config.js)을 그대로 커스텀 404로 사용한다
+    "not_found_handling": "404-page"
+  }
+}
