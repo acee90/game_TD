@@ -1,161 +1,209 @@
 <script lang="ts">
-  // 타워 카탈로그 — 병과·티어 필터와 상세 링크 (§3.3 TowerCatalog)
-  import { browser } from '$app/environment';
+  // 타워 카탈로그 — 병과별로 묶고, 같은 계열은 Lv1→Lv4 순서로 나열해 진화형을 보여준다.
+  // 계열 그룹핑은 tower-lines.ts의 명칭 기준 참고 구성 — 실제 합성은 무작위다(주석 참조).
   import { base } from '$app/paths';
-  import { page } from '$app/state';
-  import { RACES, TIER_LABEL } from '@engine/data/units';
-  import type { TowerWikiView } from '@engine/lib/tower-wiki';
+  import type { RaceGroupView } from './tower-lines';
 
-  let { towers }: { towers: readonly TowerWikiView[] } = $props();
-
-  // 상세의 "같은 병과 목록" 링크가 ?race=N으로 들어온다 (프리렌더 HTML은 전체 → 하이드레이션 후 적용)
-  const raceParam = browser ? page.url.searchParams.get('race') : null;
-  const initialRace = raceParam === null ? NaN : Number(raceParam);
-  let raceFilter = $state<number | null>(
-    Number.isInteger(initialRace) && initialRace >= 0 && initialRace <= 3 ? initialRace : null,
-  );
-  let tierFilter = $state<number | null>(null);
-
-  const tiers = TIER_LABEL.map((label, tier) => ({ tier, label }));
-
-  let filtered = $derived(
-    towers.filter(
-      (t) =>
-        (raceFilter === null || t.race === raceFilter) &&
-        (tierFilter === null || t.tier === tierFilter),
-    ),
-  );
+  let { raceGroups }: { raceGroups: readonly RaceGroupView[] } = $props();
 </script>
 
-<div class="filters" role="group" aria-label="병과 필터">
-  <button class:active={raceFilter === null} onclick={() => (raceFilter = null)}>전체</button>
-  {#each RACES as race, index (race)}
-    <button class:active={raceFilter === index} onclick={() => (raceFilter = index)}>{race}</button>
+<nav class="race-jump" aria-label="병과 바로가기">
+  {#each raceGroups as group (group.race)}
+    <a href="#race-{group.race}" style="color: {group.raceColor}">{group.raceLabel}</a>
   {/each}
-</div>
-<div class="filters" role="group" aria-label="티어 필터">
-  <button class:active={tierFilter === null} onclick={() => (tierFilter = null)}>전체</button>
-  {#each tiers as { tier, label } (tier)}
-    <button class:active={tierFilter === tier} onclick={() => (tierFilter = tier)}>{label}</button>
-  {/each}
-</div>
+</nav>
 
-<p class="count" aria-live="polite">{filtered.length}종</p>
+<p class="lines-note">
+  같은 계열(예: 궁병 계열)은 <b>명칭을 기준으로 묶은 참고용 구성</b>입니다. 실제 합성은
+  같은 이름 타워 2기가 모이면 다음 티어 <b>전체 풀에서 무작위로</b> 나옵니다 — 병과·계열은
+  결과를 보장하지 않습니다.
+</p>
 
-<ul class="cards">
-  {#each filtered as tower (tower.id)}
-    <li>
-      <a href="{base}/wiki/towers/{tower.id}">
-        <span class="card-head">
-          <b style="color: {tower.raceColor}">{tower.name}</b>
-          <span class="tier">{tower.tierLabel}</span>
-        </span>
-        <span class="card-tags">{tower.raceLabel} · 【 {tower.tagText} 】</span>
-        <span class="card-stats">
-          공격력 {tower.text.damage} · 공속 {tower.text.attacksPerSecond}/초 · 사거리 {tower.text.range}
-        </span>
-      </a>
-    </li>
-  {/each}
-</ul>
-{#if filtered.length === 0}
-  <p class="empty">이 조건에 맞는 타워가 없습니다.</p>
-{/if}
+{#each raceGroups as group (group.race)}
+  <section id="race-{group.race}" class="race-group">
+    <h2 style="color: {group.raceColor}">{group.raceLabel}</h2>
+
+    <div class="lines">
+      {#each group.lines as line (line.id)}
+        <div class="line">
+          <h3 class="line-label">{line.label}</h3>
+          <div class="line-row">
+            {#each line.steps as tower, index (tower.id)}
+              {#if index > 0}<span class="line-arrow" aria-hidden="true">→</span>{/if}
+              <a class="tower-card" href="{base}/wiki/towers/{tower.id}">
+                <span class="tower-card-tier">{tower.tierLabel}</span>
+                <b style="color: {tower.raceColor}">{tower.name}</b>
+                <span class="tower-card-stats">
+                  DPS {tower.text.dps} · 사거리 {tower.text.range}
+                </span>
+              </a>
+            {/each}
+          </div>
+        </div>
+      {/each}
+    </div>
+
+    {#if group.godTowers.length > 0}
+      <div class="line god-line">
+        <h3 class="line-label">GOD 등급 <span class="god-note">— 라인의 연장이 아닌 별도 풀</span></h3>
+        <div class="line-row">
+          {#each group.godTowers as tower (tower.id)}
+            <a class="tower-card god-card" href="{base}/wiki/towers/{tower.id}">
+              <span class="tower-card-tier god-badge">
+                {tower.godUnlock === 'early' ? '기본' : '보스 6처치'}
+              </span>
+              <b style="color: {tower.raceColor}">{tower.name}</b>
+              <span class="tower-card-stats">
+                DPS {tower.text.dps} · 사거리 {tower.text.range}
+              </span>
+            </a>
+          {/each}
+        </div>
+      </div>
+    {/if}
+  </section>
+{/each}
 
 <style>
-  .filters {
+  .race-jump {
     display: flex;
     flex-wrap: wrap;
-    gap: 6px;
-    margin-top: 12px;
+    gap: 6px 14px;
+    margin-top: 14px;
   }
 
-  .filters button {
-    padding: 6px 13px;
-    border-radius: 999px;
-    border: 1px solid var(--line2, #6b5638);
-    background: transparent;
+  .race-jump a {
+    font-size: 13.5px;
+    font-weight: 700;
+    padding: 4px 2px;
+    border-bottom: 2px solid transparent;
+  }
+
+  .race-jump a:hover {
+    border-bottom-color: currentColor;
+  }
+
+  .lines-note {
+    margin-top: 14px;
+    padding: 12px 14px;
+    border: 1px solid var(--line, #4d3d28);
+    border-radius: 8px;
+    background: var(--panel, #241d14);
     color: var(--dim, #9d8c6f);
-    font-size: 13px;
-    cursor: pointer;
+    font-size: 12.5px;
+    line-height: 1.7;
+    max-width: 720px;
   }
 
-  .filters button:hover {
+  .lines-note b {
     color: var(--text, #ece2cb);
   }
 
-  .filters button.active {
-    background: var(--gold, #e3b23e);
-    border-color: var(--gold, #e3b23e);
-    color: #1c1508;
+  .race-group {
+    margin-top: 40px;
+    scroll-margin-top: 70px;
+  }
+
+  .race-group h2 {
+    font-size: 21px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--line, #4d3d28);
+  }
+
+  .lines {
+    display: grid;
+    gap: 20px;
+    margin-top: 18px;
+  }
+
+  .line-label {
+    font-size: 13px;
     font-weight: 700;
+    color: var(--text, #ece2cb);
+    margin-bottom: 8px;
   }
 
-  .count {
-    margin: 14px 0 0;
-    font-size: 12px;
+  .god-note {
+    font-weight: 400;
     color: var(--dim, #9d8c6f);
+    font-size: 11.5px;
   }
 
-  .cards {
-    list-style: none;
-    padding: 0;
-    margin: 10px 0 0;
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
-    gap: 12px;
+  .line-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
   }
 
-  .cards a {
+  .line-arrow {
+    color: var(--line2, #6b5638);
+    font-size: 16px;
+    flex: 0 0 auto;
+  }
+
+  .tower-card {
     display: grid;
-    gap: 7px;
-    padding: 14px 16px;
+    gap: 4px;
+    flex: 1 1 150px;
+    min-width: 150px;
+    max-width: 220px;
+    padding: 10px 13px;
     background: var(--panel, #241d14);
     border: 1px solid var(--line, #4d3d28);
-    border-radius: 10px;
+    border-radius: 9px;
     text-decoration: none;
     color: inherit;
   }
 
-  .cards a:hover {
+  .tower-card:hover {
     border-color: var(--line2, #6b5638);
     background: var(--panel2, #31271a);
   }
 
-  .card-head {
-    display: flex;
-    align-items: baseline;
-    justify-content: space-between;
-    gap: 8px;
-  }
-
-  .card-head b {
-    font-size: 15px;
-  }
-
-  .tier {
-    font-size: 11px;
+  .tower-card-tier {
+    justify-self: start;
+    font-size: 10.5px;
     color: var(--gold, #e3b23e);
     border: 1px solid var(--line2, #6b5638);
     border-radius: 4px;
     padding: 1px 6px;
-    white-space: nowrap;
   }
 
-  .card-tags {
-    font-size: 12px;
-    color: var(--dim, #9d8c6f);
+  .tower-card b {
+    font-size: 14px;
   }
 
-  .card-stats {
-    font-size: 12px;
+  .tower-card-stats {
+    font-size: 11.5px;
     color: var(--dim, #9d8c6f);
     font-variant-numeric: tabular-nums;
   }
 
-  .empty {
+  .god-line {
     margin-top: 20px;
+    padding-top: 16px;
+    border-top: 1px dashed var(--line, #4d3d28);
+  }
+
+  .god-badge {
     color: var(--dim, #9d8c6f);
-    font-size: 14px;
+  }
+
+  /* 좁은 화면 — 계열이 세로로 흐르게, 화살표는 아래 방향으로 */
+  @media (max-width: 560px) {
+    .line-row {
+      flex-direction: column;
+      align-items: stretch;
+    }
+
+    .tower-card {
+      max-width: none;
+    }
+
+    .line-arrow {
+      align-self: center;
+      transform: rotate(90deg);
+    }
   }
 </style>

@@ -35,13 +35,17 @@
 
 <nav class="pager" aria-label="타워 이동">
   {#if data.prev}
-    <a class="pager-link" href="{base}/wiki/towers/{data.prev.id}">← {data.prev.name}</a>
+    <a class="pager-link" href="{base}/wiki/towers/{data.prev.id}">
+      ← {data.prev.name} ({data.prev.tierLabel})
+    </a>
   {:else}
     <span></span>
   {/if}
-  <a class="pager-link" href="{base}/wiki/towers?race={data.view.race}">같은 병과 목록</a>
+  <a class="pager-link" href="{base}/wiki/towers#race-{data.view.race}">같은 병과 목록</a>
   {#if data.next}
-    <a class="pager-link" href="{base}/wiki/towers/{data.next.id}">{data.next.name} →</a>
+    <a class="pager-link" href="{base}/wiki/towers/{data.next.id}">
+      {data.next.name} ({data.next.tierLabel}) →
+    </a>
   {:else}
     <span></span>
   {/if}
