@@ -24,6 +24,11 @@ export const CREATURE: Race = 3;
 export const RACE_COLOR = ['#6d86ab', '#bf7a3a', '#9a6ea6', '#8a9a5b'] as const;
 
 export interface UnitDef {
+  /**
+   * 표시명과 독립인 안정 ID — Wiki URL·keyed each가 사용한다 (영문 kebab-case,
+   * `병과-이름` 꼴). 표시명을 리네이밍해도 이 ID는 바꾸지 않는다 — 기존 링크가 깨진다.
+   */
+  readonly id: string;
   readonly name: string;
   readonly race: Race;
   readonly tags: readonly Tag[];
@@ -41,44 +46,44 @@ export const TIER_LABEL = ['Lv1', 'Lv2', 'Lv3', 'Lv4', 'GOD'] as const;
 export const TIER_POOLS: readonly (readonly UnitDef[])[] = [
   // Lv1 — strings:321,322,323,324,527,567,516
   [
-    { name: '견습 궁병', race: 0, tags: ['speed'] }, // 마린
-    { name: '종자', race: 0, tags: ['speed'] }, // 메딕
-    { name: '소형 투석기', race: 1, tags: ['power'] }, // 히드라
-    { name: '소형 노포', race: 1, tags: ['power'] }, // 저글링
-    { name: '견습 마법사', race: 2, tags: ['splash'] }, // 질럿
-    { name: '견습 정령술사', race: 2, tags: ['splash'] }, // 다크템플러
-    { name: '미니 골렘', race: CREATURE, tags: ['power'] }, // 벵갈라스
+    { id: 'army-apprentice-archer', name: '견습 궁병', race: 0, tags: ['speed'] }, // 마린
+    { id: 'army-squire', name: '종자', race: 0, tags: ['speed'] }, // 메딕
+    { id: 'artillery-small-catapult', name: '소형 투석기', race: 1, tags: ['power'] }, // 히드라
+    { id: 'artillery-small-ballista', name: '소형 노포', race: 1, tags: ['power'] }, // 저글링
+    { id: 'magic-apprentice-mage', name: '견습 마법사', race: 2, tags: ['splash'] }, // 질럿
+    { id: 'magic-apprentice-elementalist', name: '견습 정령술사', race: 2, tags: ['splash'] }, // 다크템플러
+    { id: 'summon-mini-golem', name: '미니 골렘', race: CREATURE, tags: ['power'] }, // 벵갈라스
   ],
   // Lv2 — trigger #496~#502, N=1..7 순서 그대로
   [
-    { name: '가고일', race: CREATURE, tags: ['speed'] }, // 어사돈
-    { name: '마법사', race: 2, tags: ['splash'] }, // 하이템플러
-    { name: '궁병', race: 0, tags: ['speed'] }, // 고스트
+    { id: 'summon-gargoyle', name: '가고일', race: CREATURE, tags: ['speed'] }, // 어사돈
+    { id: 'magic-mage', name: '마법사', race: 2, tags: ['splash'] }, // 하이템플러
+    { id: 'army-archer', name: '궁병', race: 0, tags: ['speed'] }, // 고스트
     // 디파일러의 태그 문자열만 원본 strings에서 확인되지 않는다(§11.4). 저그 파워로 채움. [프로토]
-    { name: '망고넬', race: 1, tags: ['power'] }, // 디파일러
-    { name: '원소술사', race: 2, tags: ['splash'] }, // 드라군
-    { name: '기사', race: 0, tags: ['speed'] }, // 파이어벳
-    { name: '발리스타', race: 1, tags: ['power'] }, // 울트라리스크
+    { id: 'artillery-mangonel', name: '망고넬', race: 1, tags: ['power'] }, // 디파일러
+    { id: 'magic-elementalist', name: '원소술사', race: 2, tags: ['splash'] }, // 드라군
+    { id: 'army-knight', name: '기사', race: 0, tags: ['speed'] }, // 파이어벳
+    { id: 'artillery-ballista', name: '발리스타', race: 1, tags: ['power'] }, // 울트라리스크
   ],
   // Lv3 — 태그는 [원본확정](strings:308/315/316/317/318/319/644), N 순서는 [프로토]
   [
-    { name: '장궁병', race: 0, tags: ['speed'] }, // 골리앗
-    { name: '소드 엑스퍼트', race: 0, tags: ['speed'] }, // 시저탱크
-    { name: '트레뷰셋', race: 1, tags: ['power'] }, // 뮤탈리스크
-    { name: '중발리스타', race: 1, tags: ['power'] }, // 가디언
-    { name: '매그마 골렘', race: CREATURE, tags: ['splash'] }, // 라이나돈
-    { name: '마도사', race: 2, tags: ['splash'] }, // 다크아칸
-    { name: '원소 마도사', race: 2, tags: ['splash'] }, // 아칸
+    { id: 'army-longbowman', name: '장궁병', race: 0, tags: ['speed'] }, // 골리앗
+    { id: 'army-sword-expert', name: '소드 엑스퍼트', race: 0, tags: ['speed'] }, // 시저탱크
+    { id: 'artillery-trebuchet', name: '트레뷰셋', race: 1, tags: ['power'] }, // 뮤탈리스크
+    { id: 'artillery-heavy-ballista', name: '중발리스타', race: 1, tags: ['power'] }, // 가디언
+    { id: 'summon-magma-golem', name: '매그마 골렘', race: CREATURE, tags: ['splash'] }, // 라이나돈
+    { id: 'magic-sorcerer', name: '마도사', race: 2, tags: ['splash'] }, // 다크아칸
+    { id: 'magic-elemental-sorcerer', name: '원소 마도사', race: 2, tags: ['splash'] }, // 아칸
   ],
   // Lv4 — trigger #507~#513, N=1..7 순서 그대로
   [
-    { name: '거석 투석기', race: 1, tags: ['power'] }, // 럴커
-    { name: '룬 골렘', race: CREATURE, tags: ['power', 'speed'] }, // 카카루
-    { name: '아크메이지', race: 2, tags: ['splash'] }, // 캐리어
-    { name: '신궁', race: 0, tags: ['speed'] }, // 레이스
-    { name: '연발 발리스타', race: 1, tags: ['power'] }, // 디바우러
-    { name: '대원소술사', race: 2, tags: ['splash'] }, // 커세어
-    { name: '소드마스터', race: 0, tags: ['speed'] }, // 배틀크루져
+    { id: 'artillery-megalith-catapult', name: '거석 투석기', race: 1, tags: ['power'] }, // 럴커
+    { id: 'summon-rune-golem', name: '룬 골렘', race: CREATURE, tags: ['power', 'speed'] }, // 카카루
+    { id: 'magic-archmage', name: '아크메이지', race: 2, tags: ['splash'] }, // 캐리어
+    { id: 'army-master-archer', name: '신궁', race: 0, tags: ['speed'] }, // 레이스
+    { id: 'artillery-repeating-ballista', name: '연발 발리스타', race: 1, tags: ['power'] }, // 디바우러
+    { id: 'magic-grand-elementalist', name: '대원소술사', race: 2, tags: ['splash'] }, // 커세어
+    { id: 'army-sword-master', name: '소드마스터', race: 0, tags: ['speed'] }, // 배틀크루져
   ],
 ];
 
@@ -90,21 +95,21 @@ export const TIER_POOLS: readonly (readonly UnitDef[])[] = [
  * 태그는 전부 [원본확정] (§4.3).
  */
 export const GOD_POOL_EARLY: readonly UnitDef[] = [
-  { name: '공성 거탑', race: 1, tags: ['power'] }, // 오버로드
-  { name: '리치', race: 2, tags: ['splash'] }, // 리버
-  { name: '발키리', race: 0, tags: ['speed'] }, // 발키리
-  { name: '아이언 콜로서스', race: CREATURE, tags: ['power'] }, // 라그나소어
+  { id: 'artillery-siege-tower', name: '공성 거탑', race: 1, tags: ['power'] }, // 오버로드
+  { id: 'magic-lich', name: '리치', race: 2, tags: ['splash'] }, // 리버
+  { id: 'army-valkyrie', name: '발키리', race: 0, tags: ['speed'] }, // 발키리
+  { id: 'summon-iron-colossus', name: '아이언 콜로서스', race: CREATURE, tags: ['power'] }, // 라그나소어
 ];
 
 export const GOD_POOL_LATE: readonly UnitDef[] = [
   ...GOD_POOL_EARLY,
-  { name: '왕립 대노포', race: 1, tags: ['speed', 'power'] }, // 사라 케리건
-  { name: '팔라딘', race: 0, tags: ['speed', 'splash'] }, // 짐 레이너
-  { name: '대현자', race: 2, tags: ['splash', 'power'] }, // 제라툴
-  { name: '파멸의 투석기', race: 1, tags: ['power', 'speed'] }, // 인페스티드 케리건
-  { name: '폭풍 노포', race: 1, tags: ['power', 'splash'] }, // 헌터 킬러
-  { name: '원소 군주', race: 2, tags: ['splash', 'speed'] }, // 테사다
-  { name: '미아즈마 로드', race: CREATURE, tags: ['splash'] }, // 스칸티드
+  { id: 'artillery-royal-grand-ballista', name: '왕립 대노포', race: 1, tags: ['speed', 'power'] }, // 사라 케리건
+  { id: 'army-paladin', name: '팔라딘', race: 0, tags: ['speed', 'splash'] }, // 짐 레이너
+  { id: 'magic-grand-sage', name: '대현자', race: 2, tags: ['splash', 'power'] }, // 제라툴
+  { id: 'artillery-doom-catapult', name: '파멸의 투석기', race: 1, tags: ['power', 'speed'] }, // 인페스티드 케리건
+  { id: 'artillery-storm-ballista', name: '폭풍 노포', race: 1, tags: ['power', 'splash'] }, // 헌터 킬러
+  { id: 'magic-elemental-lord', name: '원소 군주', race: 2, tags: ['splash', 'speed'] }, // 테사다
+  { id: 'summon-miasma-lord', name: '미아즈마 로드', race: CREATURE, tags: ['splash'] }, // 스칸티드
 ];
 
 /** 확장 GOD 풀이 열리는 처치 보스 수. trigger #534의 `AtLeast, 6`. [원본확정] */

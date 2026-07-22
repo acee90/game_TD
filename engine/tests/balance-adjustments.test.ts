@@ -5,7 +5,7 @@ import { range, splashRadius } from '../src/game/combat';
 import type { Tower } from '../src/game/types';
 
 const tower = (race: Race, tags: readonly Tag[] = ['splash']): Tower => ({
-  def: { name: '테스트 타워', race, tags },
+  def: { id: 'test-tower', name: '테스트 타워', race, tags },
   tier: 2,
   cooldown: 0,
 });

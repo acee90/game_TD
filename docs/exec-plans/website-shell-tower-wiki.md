@@ -219,6 +219,13 @@ Wiki는 타워를 `{ def, tier, cooldown: 0 }` 형태로 구성하고 병과 업
   인덱스·GOD 풀 소속에서 각 타워의 tier를 파생해 함께 담는다.
 - 업그레이드 0 기준 정보 view-model과 표시 포맷 테스트를 만든다.
 - **게이트:** Wiki 숫자가 같은 입력의 `combat.ts` 결과와 일치하고 하드코딩된 밸런스 수치가 없다.
+- **기록 (2026-07-22, 완료):** `UnitDef.id` 39종 부여(`병과접두사-영문명`, 예:
+  `artillery-mangonel`) — 접두사=병과 일치도 테스트로 고정. `data/tower-catalog.ts`
+  (GOD 중복 제거 39종, tier·godUnlock(early/late) 파생, `towerById`),
+  `lib/tower-wiki.ts`(업그레이드 0 기준 view-model — 원시 수치 + 게임 내 패널과 동일한
+  반올림의 표시 문자열). 테스트 11개 추가: ID 유일성·형식·접두사, 카탈로그 파생,
+  전 타워 combat.ts 전수 일치, 포맷 규칙. 359 테스트 통과 · 타입 검사 0 에러 ·
+  balance-csv 영향 없음 · phaser 빌드 통과.
 
 ### M4. 공용 투사체 VFX 추출 · 규모 L
 
