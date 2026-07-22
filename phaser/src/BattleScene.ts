@@ -17,6 +17,7 @@ import { HERO_RADIUS } from '@engine/data/hero';
 import { SKILLS } from '@engine/data/skills';
 import { ParticlePool, TextPool, UI_FONT, UI_RES } from './fx';
 import { makeAnims, makeGlowTextures, makeTextures, tint } from './sprites';
+import { ProjectileFxController } from './projectile-fx';
 import { PreviewBot } from './bot';
 
 const PATH_WIDTH = (WALKABLE_HALF_WIDTH + 10) * 2;
@@ -27,43 +28,6 @@ const DEPTH = {
 };
 
 interface TowerView { img: Phaser.GameObjects.Image; label: Phaser.GameObjects.Text; key: string }
-
-type ProjStyle = 'arrow' | 'shell' | 'bolt' | 'seed' | 'bullet';
-
-/** 날아가는 투사체 — 병과마다 모양·속도·꼬리가 다르다 (2026-07-21, 사용자 피드백) */
-interface Proj {
-  img: Phaser.GameObjects.Image;
-  /** HD-2D 글로우 헤일로 — 마법 볼트·포탄이 빛을 끌고 다닌다 */
-  halo?: Phaser.GameObjects.Image;
-  ribbon?: Phaser.GameObjects.Graphics;
-  ribbonPoints: Phaser.Math.Vector2[];
-  x0: number; y0: number; tx: number; ty: number;
-  t: number; dur: number;
-  style: ProjStyle;
-  color: string;
-  splashRadius?: number;
-  arcHeight: number;
-  spin: number;
-  trailTimer: number;
-  prevX: number;
-  prevY: number;
-}
-
-/** 병과 → 투사체 스타일. 정규군 화살은 일부러 느리다 — 긴 꼬리가 살도록. */
-const RACE_PROJ: Record<number, { style: ProjStyle; speed: number }> = {
-  0: { style: 'arrow', speed: 188 }, // 정규군 — 화살 (기존 대비 0.8배)
-  1: { style: 'shell', speed: 205 }, // 포병 — 곡사 포탄
-  2: { style: 'bolt', speed: 330 }, // 마법대 — 매직 볼트
-  3: { style: 'seed', speed: 430 }, // 소환대 — 가시
-};
-
-const TRAIL: Record<ProjStyle, { interval: number; life: number; scale: number; gravity: number }> = {
-  arrow: { interval: 0.016, life: 0.6, scale: 0.42, gravity: 0 }, // 리본은 별도 Graphics로 처리
-  shell: { interval: 0.03, life: 0.45, scale: 0.8, gravity: -30 }, // 연기가 살짝 뜬다
-  bolt: { interval: 0.02, life: 0.3, scale: 0.8, gravity: 0 },
-  seed: { interval: 0.05, life: 0.2, scale: 0.7, gravity: 0 },
-  bullet: { interval: 0.04, life: 0.18, scale: 0.7, gravity: 0 },
-};
 
 /** 씬 바깥(Svelte HUD)과 공유하는 의존성 */
 export interface SceneDeps {
@@ -93,7 +57,8 @@ export class BattleScene extends Phaser.Scene {
   private flashUntil = new Map<Enemy, number>();
   private seenShots = new WeakSet<object>();
   private seenFloats = new WeakSet<object>();
-  private projectiles: Proj[] = [];
+  /** 공용 투사체 VFX — 프리뷰 씬과 같은 컨트롤러 (M4 추출) */
+  private projectileFx!: ProjectileFxController;
   /** 장판의 가산 광원 — HD-2D 빛웅덩이 */
   private zoneGlows = new Map<object, Phaser.GameObjects.Image>();
 
@@ -121,11 +86,7 @@ export class BattleScene extends Phaser.Scene {
     for (const frame of [0, 1, 2, 3]) {
       this.load.image(`boss${frame}`, 'assets/sprites/boss-dragon.png');
     }
-    this.load.image('arrow', 'assets/sprites/arrow.png');
-    this.load.spritesheet('artillery-explosion', 'assets/sprites/explosion.png', {
-      frameWidth: 48,
-      frameHeight: 48,
-    });
+    ProjectileFxController.preload(this); // 화살 본체 + 포병 착탄 플립북
     // SparkSet 파티클 팩 — 감속 눈꽃만 채택 (별·섬광은 기존 톤과 안 맞아 반려, 2026-07-22)
     this.load.image('fx-snow', 'assets/fx/snow.png');
   }
@@ -135,14 +96,8 @@ export class BattleScene extends Phaser.Scene {
     makeGlowTextures(this); // HD-2D 이펙트 — 월드는 NEAREST, 글로우는 LINEAR
     makeAnims(this);
 
-    // 승인된 후보 04 — 포병 착탄에만 쓰는 3D 볼류메트릭 플립북.
-    this.textures.get('artillery-explosion').setFilter(Phaser.Textures.FilterMode.LINEAR);
-    this.anims.create({
-      key: 'artillery-impact',
-      frames: this.anims.generateFrameNumbers('artillery-explosion', { start: 0, end: 7 }),
-      frameRate: 24,
-      repeat: 0,
-    });
+    // 승인된 후보 04 — 포병 착탄에만 쓰는 3D 볼류메트릭 플립북 (공용 컨트롤러가 등록)
+    ProjectileFxController.createAnimations(this);
 
     // SparkSet 눈꽃 — 글로우 계열이라 LINEAR
     if (this.textures.exists('fx-snow')) {
@@ -185,6 +140,7 @@ export class BattleScene extends Phaser.Scene {
     this.particles = new ParticlePool(this, DEPTH.particle);
     this.embers = new ParticlePool(this, DEPTH.particle - 1, 120);
     this.texts = new TextPool(this, DEPTH.text);
+    this.projectileFx = new ProjectileFxController(this, this.particles, DEPTH.shot);
 
     this.hud = this.add
       .text(4, 3, '', { fontFamily: UI_FONT, fontStyle: 'bold', fontSize: 9, color: '#e8e2d0', stroke: '#0d0a06', strokeThickness: 3 })
@@ -286,7 +242,7 @@ export class BattleScene extends Phaser.Scene {
     this.syncHero();
     this.syncDecoy();
     this.consumeShots();
-    this.stepProjectiles(dt);
+    this.projectileFx.update(dt, this.walkClock);
     this.consumeVfx();
     this.consumeFloats();
     this.drawOverlay();
@@ -399,233 +355,15 @@ export class BattleScene extends Phaser.Scene {
     this.decoyImg.setPosition(x, y).setTint(tint('#d97a2e')).setVisible(true);
   }
 
-  /** shots(발사 이벤트)를 실제 날아가는 투사체로 — 병과별 모양·속도·꼬리 */
+  /** shots(발사 이벤트)를 공용 컨트롤러의 투사체로 — 병과별 모양·속도·꼬리 */
   private consumeShots(): void {
     for (const shot of this.game_.shots) {
       if (this.seenShots.has(shot)) continue;
       this.seenShots.add(shot);
-
-      const dist = Math.hypot(shot.tx - shot.x, shot.ty - shot.y);
-      // 제자리 폭발 (유성·초신성·폭사) — 비행 없이 바로 터진다
-      if (dist < 4) {
-        if (shot.splashRadius) this.explode(shot.tx, shot.ty, shot.splashRadius, shot.color);
-        continue;
-      }
-
-      const conf = shot.source === 'hero'
-        ? { style: 'arrow' as ProjStyle, speed: 312 }
-        : shot.speed
-          ? { style: 'arrow' as ProjStyle, speed: 312 }
-          : shot.race !== undefined
-            ? RACE_PROJ[shot.race]
-            : { style: 'bullet' as ProjStyle, speed: 520 };
-      const img = this.add
-        .image(shot.x, shot.y, conf.style === 'bullet' ? 'shot' : conf.style)
-        .setTint(tint(shot.color))
-        .setScale(conf.style === 'arrow' ? 0.7 : 0.5)
-        .setDepth(DEPTH.shot);
-      const arcHeight = conf.style === 'shell' ? 10 + dist * 0.12 : conf.style === 'arrow' ? 6 + dist * 0.07 : 0;
-      const ribbon = conf.style === 'arrow'
-        ? this.add.graphics().setDepth(DEPTH.shot - 1).setBlendMode(Phaser.BlendModes.ADD)
-        : undefined;
-      // 마법 볼트·포탄은 가산 글로우를 끌고 다닌다 (HD-2D)
-      const halo = conf.style === 'bolt' || conf.style === 'shell'
-        ? this.add
-            .image(shot.x, shot.y, 'glow')
-            .setBlendMode(Phaser.BlendModes.ADD)
-            .setTint(tint(shot.color))
-            .setScale(0.35)
-            .setAlpha(0.8)
-            .setDepth(DEPTH.shot - 1)
-        : undefined;
-      this.projectiles.push({
-        img,
-        halo,
-        ribbon,
-        ribbonPoints: [new Phaser.Math.Vector2(shot.x, shot.y)],
-        x0: shot.x, y0: shot.y, tx: shot.tx, ty: shot.ty,
-        t: 0,
-        dur: Math.max(0.08, Math.min(0.7, dist / conf.speed)),
-        style: conf.style,
-        color: shot.color,
-        splashRadius: shot.splashRadius,
-        // 포탄과 화살은 포물선 — 화살은 낮고 빠른 곡사다.
-        arcHeight,
-        spin: 0,
-        trailTimer: 0,
-        prevX: shot.x,
-        prevY: shot.y,
-      });
+      this.projectileFx.spawn(shot);
     }
   }
 
-  /** 투사체 비행 — 포물선·회전·꼬리, 도착하면 임팩트/폭발 */
-  private stepProjectiles(dt: number): void {
-    for (let i = this.projectiles.length - 1; i >= 0; i--) {
-      const p = this.projectiles[i];
-      p.t = Math.min(1, p.t + dt / p.dur);
-      const u = p.t;
-      const x = p.x0 + (p.tx - p.x0) * u;
-      const y = p.y0 + (p.ty - p.y0) * u - Math.sin(Math.PI * u) * p.arcHeight;
-      p.img.setPosition(x, y);
-      p.halo?.setPosition(x, y).setScale(0.32 + 0.06 * Math.sin(this.walkClock * 22));
-
-      if (p.style === 'shell' || p.style === 'seed') {
-        p.spin += dt * (p.style === 'seed' ? 18 : 9);
-        p.img.setRotation(p.spin);
-      } else {
-        // 실제 프레임 이동 벡터로 기수를 돌린다 — 곡사 중 상승·하강 각도가 그대로 반영된다.
-        const vx = x - p.prevX;
-        const vy = y - p.prevY;
-        if (vx !== 0 || vy !== 0) p.img.setRotation(Math.atan2(vy, vx));
-      }
-
-      if (p.style === 'arrow') {
-        const last = p.ribbonPoints[p.ribbonPoints.length - 1];
-        if (Phaser.Math.Distance.Between(last.x, last.y, x, y) >= 1.5) {
-          p.ribbonPoints.push(new Phaser.Math.Vector2(x, y));
-          if (p.ribbonPoints.length > 36) p.ribbonPoints.shift();
-          this.drawArrowRibbon(p);
-        }
-      }
-
-      p.prevX = x;
-      p.prevY = y;
-
-      // 화살은 흰 발광 파티클을 쓰고 나머지 탄만 도트 꼬리를 남긴다.
-      const trail = TRAIL[p.style];
-      if (p.style !== 'arrow') p.trailTimer -= dt;
-      if (p.style !== 'arrow' && p.trailTimer <= 0) {
-        p.trailTimer = trail.interval;
-        this.particles.burst(x, y, p.color, 1, {
-          speed: 6, life: trail.life, gravity: trail.gravity, scale: trail.scale,
-        });
-      }
-
-      if (u >= 1) {
-        if (p.style === 'shell') this.artilleryImpact(p.tx, p.ty, p.splashRadius);
-        else if (p.splashRadius) this.explode(p.tx, p.ty, p.splashRadius, p.color);
-        else if (p.style === 'arrow') this.arrowImpact(p.tx, p.ty, p.color);
-        else {
-          this.particles.burst(p.tx, p.ty, p.color, 2, { speed: 40, life: 0.2, gravity: 0, scale: 0.8 });
-        }
-        p.img.destroy();
-        p.halo?.destroy();
-        if (p.ribbon) {
-          const ribbon = p.ribbon;
-          this.tweens.add({ targets: ribbon, alpha: 0, duration: 260, ease: 'Sine.In', onComplete: () => ribbon.destroy() });
-        }
-        this.projectiles.splice(i, 1);
-      }
-    }
-  }
-
-  /** 화살마다 Graphics 하나만 사용해 외곽 광과 흰 코어가 이어진 곡선 리본을 그린다. */
-  private drawArrowRibbon(p: Proj): void {
-    const ribbon = p.ribbon;
-    if (!ribbon || p.ribbonPoints.length < 2) return;
-    ribbon.clear();
-    const points = p.ribbonPoints;
-    for (let i = 1; i < points.length; i++) {
-      const strength = i / (points.length - 1);
-      const from = points[i - 1];
-      const to = points[i];
-      ribbon.lineStyle(4.2 * strength, 0xffffff, 0.06 + strength * 0.12);
-      ribbon.beginPath();
-      ribbon.moveTo(from.x, from.y);
-      ribbon.lineTo(to.x, to.y);
-      ribbon.strokePath();
-      ribbon.lineStyle(0.65 + strength * 0.85, 0xffffff, 0.2 + strength * 0.75);
-      ribbon.beginPath();
-      ribbon.moveTo(from.x, from.y);
-      ribbon.lineTo(to.x, to.y);
-      ribbon.strokePath();
-    }
-  }
-
-  /** 긴 비행 연출을 짧고 강한 섬광으로 닫는다. */
-  private arrowImpact(x: number, y: number, color: string): void {
-    const flash = this.add.image(x, y, 'glow')
-      .setBlendMode(Phaser.BlendModes.ADD)
-      .setTint(tint(color))
-      .setScale(0.2)
-      .setAlpha(1)
-      .setDepth(DEPTH.shot);
-    this.tweens.add({ targets: flash, alpha: 0, scale: 0.48, duration: 150, ease: 'Cubic.Out', onComplete: () => flash.destroy() });
-    this.particles.burst(x, y, '#ffffff', 4, { speed: 55, life: 0.22, gravity: 0, scale: 0.65 });
-  }
-
-  /** 포병 전용 착탄 — 고유색 플립북은 틴트하지 않고 실제 범위 링만 공용으로 쓴다. */
-  private artilleryImpact(x: number, y: number, radius?: number): void {
-    if (radius) this.showRangeBoundary(x, y, radius, '#bf7a3a');
-
-    const flash = this.add.image(x, y, 'glow')
-      .setBlendMode(Phaser.BlendModes.ADD)
-      .setTint(0xffc36b)
-      .setScale(0.24)
-      .setAlpha(0.72)
-      .setDepth(DEPTH.shot);
-    this.tweens.add({
-      targets: flash, alpha: 0, scale: 0.42, duration: 120, ease: 'Cubic.Out',
-      onComplete: () => flash.destroy(),
-    });
-
-    const explosion = this.add.sprite(x, y, 'artillery-explosion')
-      .setDepth(DEPTH.shot + 1)
-      .play('artillery-impact');
-    explosion.once(Phaser.Animations.Events.ANIMATION_COMPLETE, () => explosion.destroy());
-  }
-
-  /** 피해 반경을 읽는 선명한 경계 링. 공용 폭발과 포병 플립북이 함께 사용한다. */
-  private showRangeBoundary(x: number, y: number, radius: number, color: string): void {
-    const boundary = this.add.circle(x, y, radius)
-      .setStrokeStyle(1.5, tint(color), 0.5)
-      .setDepth(DEPTH.shot);
-    this.tweens.add({
-      targets: boundary, alpha: 0, duration: 620, ease: 'Sine.In',
-      onComplete: () => boundary.destroy(),
-    });
-  }
-
-  /**
-   * 스플래시 폭발 — HD-2D 글로우 (2026-07-21, 사용자 지시: "vfx만 HD-2D 스타일").
-   * ① 경계 링(픽셀 선명)이 실제 반경에 즉시 떠서 머문다 — 범위를 읽는 축은 유지
-   * ② 가산 섬광이 확 피었다 죽고 ③ 소프트 링 충격파가 천천히 퍼진다
-   * ④ 글로우 스파크가 흩날린다.
-   */
-  private explode(x: number, y: number, radius: number, color: string): void {
-    const c = tint(color);
-    // 범위 경계 — 선명한 선 (사용자: "범위 명확히 보이는 건 좋다")
-    this.showRangeBoundary(x, y, radius, color);
-
-    // 가산 섬광 — 터지는 순간의 빛
-    const flash = this.add
-      .image(x, y, 'glow')
-      .setBlendMode(Phaser.BlendModes.ADD)
-      .setTint(c)
-      .setScale((radius * 1.1) / 32)
-      .setAlpha(0.95)
-      .setDepth(DEPTH.shot);
-    this.tweens.add({ targets: flash, alpha: 0, scale: (radius * 1.5) / 32, duration: 260, ease: 'Cubic.Out', onComplete: () => flash.destroy() });
-
-    // 소프트 링 충격파 — 반경까지 천천히 퍼진다
-    const wave = this.add
-      .image(x, y, 'ring')
-      .setBlendMode(Phaser.BlendModes.ADD)
-      .setTint(c)
-      .setScale(0.1)
-      .setAlpha(0.9)
-      .setDepth(DEPTH.shot);
-    this.tweens.add({
-      targets: wave, scale: (radius * 2) / 128, alpha: 0, duration: 460, ease: 'Sine.Out',
-      onComplete: () => wave.destroy(),
-    });
-
-    this.particles.burst(x, y, color, 10, { speed: 85, life: 0.5, gravity: 30, glow: true, scale: 1.2 });
-    this.particles.burst(x, y, color, 6, { speed: 70, life: 0.4, gravity: 60 }); // 픽셀 파편도 약간
-    // 셰이크 없음 — 폭발은 매 라운드 수십 번 터진다. 셰이크는 저빈도 사건(보스 처치)의
-    // 전유물로 남긴다 (2026-07-21, 사용자 피드백: "너무 자주 흔들린다")
-  }
 
   /** 엔진 vfx 큐 — 피격 플래시·데미지 숫자·처치 팝·보스 셰이크 */
   private consumeVfx(): void {

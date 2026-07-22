@@ -233,6 +233,14 @@ Wiki는 타워를 `{ def, tier, cooldown: 0 }` 형태로 구성하고 병과 업
 - [투사체 VFX 에셋 지시서](projectile-vfx-asset-brief.md)의 스타일·틴트·착탄 라우팅 계약을 적용한다.
 - BattleScene 회귀와 독립적인 PreviewScene fixture를 만든다.
 - **게이트:** 동일 렌더 입력에 게임과 프리뷰가 같은 본체·궤적·착탄 함수를 사용한다.
+- **기록 (2026-07-22, 완료):** `phaser/src/projectile-fx.ts`의 `ProjectileFxController`로
+  추출 (기존 `fx.ts`와 폴더명 충돌을 피해 단일 모듈). BattleScene의 Proj·RACE_PROJ·TRAIL·
+  spawn(구 consumeShots 본문)·update(구 stepProjectiles)·리본·arrow/artillery 임팩트·
+  경계 링·explode를 **코드 그대로 이동** — 파라미터는 scene·ParticlePool·depth만 주입.
+  입력 타입은 엔진 `Shot`의 시각 필드 부분집합(`ProjectileShot`) — 피해·타깃 계산 없음.
+  플립북 로드·등록은 static `preload`/`createAnimations`로 두 씬이 공유. BattleScene은
+  seenShots 중복 제거 후 `spawn()` 위임만 남음. 검증: 빌드·tsc 0 에러, `?bot` 런타임에서
+  투사체·트레일·착탄·FX 계측 정상. PreviewScene fixture는 M5의 TowerPreviewScene이 겸한다.
 
 ### M5. 타워 목록·상세와 Phaser 프리뷰 · 규모 L
 
