@@ -5,9 +5,11 @@ import { vitePreprocess } from '@sveltejs/vite-plugin-svelte';
 const config = {
   preprocess: vitePreprocess(),
   kit: {
-    // 정적 사이트 — fallback 없이 모든 알려진 경로를 prerender한다
-    // (exec-plans/website-shell-tower-wiki.md §3.1, M1 게이트)
-    adapter: adapter(),
+    // 정적 사이트 — 모든 알려진 경로를 prerender한다 (exec-plans/website-shell-tower-wiki.md
+    // §3.1, M1 게이트). fallback은 그 뒤에 추가로만 생성되는 파일이라 이 전제를 안 바꾼다 —
+    // 존재하지 않는 URL(오타·삭제된 타워 ID)에서 Cloudflare 기본 404 대신 우리 +error.svelte를
+    // 보여주기 위한 SPA 쉘이다. Cloudflare Pages가 build/404.html을 커스텀 404로 인식한다.
+    adapter: adapter({ fallback: '404.html' }),
     // 기존 Phaser 에셋 경로(public/assets/…)를 그대로 쓴다
     files: { assets: 'public' },
     // 엔진 단일 원본 — 게임 로직·데이터·HUD는 engine/src를 그대로 import (이중화 없음)
