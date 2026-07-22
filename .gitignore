@@ -12,8 +12,8 @@ unity/Assets/Screenshots/
 unity/Assets/Screenshots.meta
 unity/Captures/
 
-# 일회성 측정 스크립트 — 리포트에 표를 남기고 스크립트는 커밋하지 않는다
-web/tools/scratch-*.ts
+# 일회성 측정 스크립트 — 리포트에 표를 남기고 스크립트는 커밋하지 않는다 (구 web/tools/)
+engine/tools/scratch-*.ts
 
 # Unity Asset Store 에셋 — 공개 저장소에 원본 커밋 금지 (worldbuilding §8).
 # 코드는 Resources.Load 실패 시 코드 생성 FX로 폴백하므로 클론/CI에서도 동작한다.
@@ -26,6 +26,10 @@ unity/Assets/AssetHunts!.meta
 
 # 외부 에셋 킷 원본 다운로드(Kenney CC0) — 실제 사용분만 Resources에 커밋한다
 resources/kenney_tower-defense-kit/
+
+# SparkSet 파티클 팩 원본 — 라이선스가 독립 에셋 재배포를 금지한다.
+# 게임에 통합된 사용분(phaser/public/assets/fx/)만 커밋한다.
+resources/SparkSet Particle Pack Vol 1/
 
 # 의존성 — vitest 캐시(results.json)가 실수로 커밋된 이력이 있다
 node_modules/

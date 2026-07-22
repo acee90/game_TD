@@ -13,4 +13,5 @@ header>p:last-child{margin:0;color:#a89e8c;font-size:13px}
 #lab{overflow:hidden;border:1px solid rgba(220,181,105,.32);border-radius:12px;background:#100d09;
   box-shadow:0 24px 70px rgba(0,0,0,.45),inset 0 1px rgba(255,255,255,.04)}
 #lab canvas{display:block;width:100%;height:auto;image-rendering:pixelated}
+nav{display:flex;gap:18px;flex-wrap:wrap}
 a{display:inline-block;margin-top:18px;color:#d8b66f;text-decoration:none;font-size:13px;border-bottom:1px solid #765f36}

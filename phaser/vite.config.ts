@@ -53,6 +53,7 @@ export default defineConfig({
       input: {
         game: fileURLToPath(new URL('./index.html', import.meta.url)),
         vfxLab: fileURLToPath(new URL('./vfx-lab.html', import.meta.url)),
+        projectileVfxLab: fileURLToPath(new URL('./projectile-vfx-lab.html', import.meta.url)),
       },
     },
   },

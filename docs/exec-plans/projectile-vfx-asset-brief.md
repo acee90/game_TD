@@ -79,12 +79,21 @@
 | # | 에셋 | 파일명 | 프레임 크기 | 프레임 | 전체 PNG | 비고 |
 |---|---|---|---:|---:|---:|---|
 | B1 | 포탄 본체 | `shell.png` | 16×16 | 1 | 16×16 | 돌/무쇠 구체. 코드가 회전 처리 |
-| B2 | 폭발 플립북 | `explosion.png` | 48×48 | 8 | 384×48 | 3D 볼류메트릭 섬광→화구→연기→소멸, LINEAR |
+| B2 | 폭발 플립북 | `explosion.png` | 48×48 | 8 | 384×48 | 소형 3D 볼류메트릭 섬광→얇은 화염·연기, LINEAR |
 | B3 | 연기 퍼프 | `smoke.png` | 64×64 | 1 | 64×64 | `assets/fx/`에 배치, 흰색 소프트 텍스처 |
 | B4 | 돌 파편 3종 | `debris.png` | 8×8 | 3 | 24×8 | 애니메이션이 아닌 변형 3종 |
 
 프롬프트 예시 (B2):
-> stylized 3D volumetric explosion animation sprite sheet, exactly 8 frames in one horizontal strip, small cannonball impact: intense white flash, luminous orange fireball with dimensional shading, expanding soft gray smoke with convincing volume and depth, dissipate, fixed center, transparent background, HD-2D game VFX, top-down friendly, no pixel-art treatment, no ground shadow
+> restrained realistic 3D impact VFX flipbook, exactly 8 frames in one horizontal strip, tiny cannonball hit: brief pinpoint flash, a thin lick of orange flame and heat distortion, a small translucent dust-and-smoke wisp that clears immediately, fixed center, transparent background, HD-2D game VFX, top-down friendly, no pixel-art treatment, no spherical fireball, no mushroom-cloud silhouette, no ground shadow
+
+- 피크 프레임의 주요 불투명 영역은 48×48 캔버스 안 지름 약 21px 이내로 둔다. 기존 후보 대비
+  중심 기준 75% 크기이며, 캔버스 전체를
+  채우는 화구·먹구름은 반려한다.
+- 1× 재생은 24fps(약 0.33초)를 기준으로 하고, 후반 연기는 몬스터 실루엣을 읽을 수 있을 만큼
+  얇고 반투명해야 한다. 이 기준은 “다발 착탄에서 몬스터를 가린다”는 사용자 프리뷰 관찰을 반영한다.
+- 방사형 폭발 뒤 연기는 원점으로 다시 수축하지 않는다. 5프레임에서 잡힌 위치·크기·윤곽을
+  6~8프레임까지 고정하고 알파만 단계적으로 낮춘다. 옆으로 흐르거나 중심으로 복귀하는 이동,
+  2D 애니메이션처럼 보이는 역방향 실루엣 재생은 반려한다.
 
 프롬프트 예시 (B3):
 > soft white smoke puff, single centered wisp, white on transparent background, radial alpha falloff, no hard edge, no shadow, game particle texture

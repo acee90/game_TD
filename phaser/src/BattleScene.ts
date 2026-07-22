@@ -120,6 +120,10 @@ export class BattleScene extends Phaser.Scene {
       this.load.image(`boss${frame}`, 'assets/sprites/boss-dragon.png');
     }
     this.load.image('arrow', 'assets/sprites/arrow.png');
+    this.load.spritesheet('artillery-explosion', 'assets/sprites/explosion.png', {
+      frameWidth: 48,
+      frameHeight: 48,
+    });
     // SparkSet 파티클 팩 — 감속 눈꽃만 채택 (별·섬광은 기존 톤과 안 맞아 반려, 2026-07-22)
     this.load.image('fx-snow', 'assets/fx/snow.png');
   }
@@ -128,6 +132,15 @@ export class BattleScene extends Phaser.Scene {
     makeTextures(this);
     makeGlowTextures(this); // HD-2D 이펙트 — 월드는 NEAREST, 글로우는 LINEAR
     makeAnims(this);
+
+    // 승인된 후보 04 — 포병 착탄에만 쓰는 3D 볼류메트릭 플립북.
+    this.textures.get('artillery-explosion').setFilter(Phaser.Textures.FilterMode.LINEAR);
+    this.anims.create({
+      key: 'artillery-impact',
+      frames: this.anims.generateFrameNumbers('artillery-explosion', { start: 0, end: 7 }),
+      frameRate: 24,
+      repeat: 0,
+    });
 
     // SparkSet 눈꽃 — 글로우 계열이라 LINEAR
     if (this.textures.exists('fx-snow')) {
@@ -488,7 +501,8 @@ export class BattleScene extends Phaser.Scene {
       }
 
       if (u >= 1) {
-        if (p.splashRadius) this.explode(p.tx, p.ty, p.splashRadius, p.color);
+        if (p.style === 'shell') this.artilleryImpact(p.tx, p.ty, p.splashRadius);
+        else if (p.splashRadius) this.explode(p.tx, p.ty, p.splashRadius, p.color);
         else if (p.style === 'arrow') this.arrowImpact(p.tx, p.ty, p.color);
         else {
           this.particles.burst(p.tx, p.ty, p.color, 2, { speed: 40, life: 0.2, gravity: 0, scale: 0.8 });
@@ -539,6 +553,38 @@ export class BattleScene extends Phaser.Scene {
     this.particles.burst(x, y, '#ffffff', 4, { speed: 55, life: 0.22, gravity: 0, scale: 0.65 });
   }
 
+  /** 포병 전용 착탄 — 고유색 플립북은 틴트하지 않고 실제 범위 링만 공용으로 쓴다. */
+  private artilleryImpact(x: number, y: number, radius?: number): void {
+    if (radius) this.showRangeBoundary(x, y, radius, '#bf7a3a');
+
+    const flash = this.add.image(x, y, 'glow')
+      .setBlendMode(Phaser.BlendModes.ADD)
+      .setTint(0xffc36b)
+      .setScale(0.24)
+      .setAlpha(0.72)
+      .setDepth(DEPTH.shot);
+    this.tweens.add({
+      targets: flash, alpha: 0, scale: 0.42, duration: 120, ease: 'Cubic.Out',
+      onComplete: () => flash.destroy(),
+    });
+
+    const explosion = this.add.sprite(x, y, 'artillery-explosion')
+      .setDepth(DEPTH.shot + 1)
+      .play('artillery-impact');
+    explosion.once(Phaser.Animations.Events.ANIMATION_COMPLETE, () => explosion.destroy());
+  }
+
+  /** 피해 반경을 읽는 선명한 경계 링. 공용 폭발과 포병 플립북이 함께 사용한다. */
+  private showRangeBoundary(x: number, y: number, radius: number, color: string): void {
+    const boundary = this.add.circle(x, y, radius)
+      .setStrokeStyle(1.5, tint(color), 0.5)
+      .setDepth(DEPTH.shot);
+    this.tweens.add({
+      targets: boundary, alpha: 0, duration: 620, ease: 'Sine.In',
+      onComplete: () => boundary.destroy(),
+    });
+  }
+
   /**
    * 스플래시 폭발 — HD-2D 글로우 (2026-07-21, 사용자 지시: "vfx만 HD-2D 스타일").
    * ① 경계 링(픽셀 선명)이 실제 반경에 즉시 떠서 머문다 — 범위를 읽는 축은 유지
@@ -548,8 +594,7 @@ export class BattleScene extends Phaser.Scene {
   private explode(x: number, y: number, radius: number, color: string): void {
     const c = tint(color);
     // 범위 경계 — 선명한 선 (사용자: "범위 명확히 보이는 건 좋다")
-    const boundary = this.add.circle(x, y, radius).setStrokeStyle(1.5, c, 0.5).setDepth(DEPTH.shot);
-    this.tweens.add({ targets: boundary, alpha: 0, duration: 620, ease: 'Sine.In', onComplete: () => boundary.destroy() });
+    this.showRangeBoundary(x, y, radius, color);
 
     // 가산 섬광 — 터지는 순간의 빛
     const flash = this.add
@@ -746,9 +791,14 @@ export class BattleScene extends Phaser.Scene {
       this.pickBanner.setVisible(false);
       return;
     }
+    const particles = this.particles.metrics;
+    const embers = this.embers.metrics;
+    const fps = Math.round(this.game.loop.actualFps);
     this.hud.setText(
       `R${game.round}  금화 ${Math.floor(game.mineral)}  마정석 ${Math.floor(game.gas)}  ` +
-      `라이프 ${game.lives}  킬 ${game.kills}  영웅 Lv${game.hero.level}${game.hero.atMaxLevel ? '(만렙)' : ''}`,
+      `라이프 ${game.lives}  킬 ${game.kills}  영웅 Lv${game.hero.level}${game.hero.atMaxLevel ? '(만렙)' : ''}\n` +
+      `FPS ${fps}  FX ${particles.active}/${particles.peak}/${particles.dropped} (cap ${particles.cap})  ` +
+      `EMBER ${embers.active}/${embers.peak}/${embers.dropped} (cap ${embers.cap})`,
     );
     this.msg.setText(game.message.length > 52 ? game.message.slice(0, 52) + '…' : game.message);
 

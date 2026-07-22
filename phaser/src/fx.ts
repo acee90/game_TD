@@ -23,6 +23,9 @@ interface Particle {
 
 export class ParticlePool {
   private pool: Particle[] = [];
+  private activeCount = 0;
+  private peakCount = 0;
+  private droppedCount = 0;
 
   constructor(private scene: Phaser.Scene, private depth: number, private cap = 240) {}
 
@@ -35,11 +38,16 @@ export class ParticlePool {
       speed?: number; life?: number; gravity?: number; up?: boolean; scale?: number;
       /** HD-2D 가산 글로우 낱알 — 픽셀 파편('px') 대신 부드러운 'spark'를 ADD로 */
       glow?: boolean;
+      /** 커스텀 텍스처 키 (SparkSet 별·눈꽃 등) — 지정하면 scale을 보정 없이 그대로 쓴다 */
+      tex?: string;
     } = {},
   ): void {
-    const { speed = 60, life = 0.45, gravity = 90, up = false, scale = 1, glow = false } = opts;
+    const { speed = 60, life = 0.45, gravity = 90, up = false, scale = 1, glow = false, tex } = opts;
     for (let i = 0; i < count; i++) {
-      if (this.pool.filter((p) => p.life > 0).length >= this.cap) return;
+      if (this.activeCount >= this.cap) {
+        this.droppedCount += count - i;
+        return;
+      }
       const p = this.acquire();
       const angle = up
         ? -Math.PI / 2 + (Math.random() - 0.5) * 0.9
@@ -49,12 +57,14 @@ export class ParticlePool {
       p.vy = Math.sin(angle) * v;
       p.life = p.max = life * (0.6 + Math.random() * 0.7);
       p.gravity = gravity;
+      this.activeCount += 1;
+      this.peakCount = Math.max(this.peakCount, this.activeCount);
       p.img
-        .setTexture(glow ? 'spark' : 'px')
+        .setTexture(tex ?? (glow ? 'spark' : 'px'))
         .setBlendMode(glow ? Phaser.BlendModes.ADD : Phaser.BlendModes.NORMAL)
         .setPosition(x, y)
         .setTint(tint(color))
-        .setScale(glow ? scale * 0.8 : scale)
+        .setScale(tex ? scale : glow ? scale * 0.8 : scale)
         .setVisible(true)
         .setAlpha(1);
     }
@@ -74,6 +84,7 @@ export class ParticlePool {
       if (p.life <= 0) continue;
       p.life -= dt;
       if (p.life <= 0) {
+        this.activeCount -= 1;
         p.img.setVisible(false);
         continue;
       }
@@ -82,6 +93,16 @@ export class ParticlePool {
       p.img.y += p.vy * dt;
       p.img.setAlpha(Math.min(1, (p.life / p.max) * 1.6));
     }
+  }
+
+  /** 개발용 성능 HUD에서만 읽는 계측값. 렌더 결과와 게임 규칙에는 관여하지 않는다. */
+  get metrics(): Readonly<{ active: number; peak: number; dropped: number; cap: number }> {
+    return {
+      active: this.activeCount,
+      peak: this.peakCount,
+      dropped: this.droppedCount,
+      cap: this.cap,
+    };
   }
 }
 
