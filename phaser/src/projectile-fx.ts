@@ -34,7 +34,8 @@ const TRAIL: Record<ProjStyle, { interval: number; life: number; scale: number; 
  */
 export type ProjectileShot = Pick<
   Shot,
-  'x' | 'y' | 'tx' | 'ty' | 'color' | 'splashRadius' | 'race' | 'speed' | 'source'
+  | 'x' | 'y' | 'tx' | 'ty' | 'color' | 'splashRadius' | 'targetRadius'
+  | 'race' | 'speed' | 'source'
 >;
 
 /** 날아가는 투사체 — 병과마다 모양·속도·꼬리가 다르다 (2026-07-21, 사용자 피드백) */
@@ -45,6 +46,8 @@ interface Proj {
   ribbon?: Phaser.GameObjects.Graphics;
   ribbonPoints: Phaser.Math.Vector2[];
   x0: number; y0: number; tx: number; ty: number;
+  /** 실제 판정 중심 — 범위 링은 여기에 남고 비행·착탄 그림만 tx/ty로 흩어진다. */
+  hitX: number; hitY: number;
   t: number; dur: number;
   style: ProjStyle;
   color: string;
@@ -58,6 +61,7 @@ interface Proj {
 
 export class ProjectileFxController {
   private projectiles: Proj[] = [];
+  private impactSerial = 0;
 
   constructor(
     private scene: Phaser.Scene,
@@ -104,6 +108,7 @@ export class ProjectileFxController {
         : shot.race !== undefined
           ? RACE_PROJ[shot.race]
           : { style: 'bullet' as ProjStyle, speed: 520 };
+    const [impactX, impactY] = this.visualImpactPoint(shot.tx, shot.ty, shot.targetRadius);
     const img = this.scene.add
       .image(shot.x, shot.y, conf.style === 'bullet' ? 'shot' : conf.style)
       .setTint(tint(shot.color))
@@ -129,7 +134,8 @@ export class ProjectileFxController {
       halo,
       ribbon,
       ribbonPoints: [new Phaser.Math.Vector2(shot.x, shot.y)],
-      x0: shot.x, y0: shot.y, tx: shot.tx, ty: shot.ty,
+      x0: shot.x, y0: shot.y, tx: impactX, ty: impactY,
+      hitX: shot.tx, hitY: shot.ty,
       t: 0,
       dur: Math.max(0.08, Math.min(0.7, dist / conf.speed)),
       style: conf.style,
@@ -192,8 +198,11 @@ export class ProjectileFxController {
       }
 
       if (u >= 1) {
-        if (p.style === 'shell') this.artilleryImpact(p.tx, p.ty, p.splashRadius);
-        else if (p.splashRadius) this.explode(p.tx, p.ty, p.splashRadius, p.color);
+        if (p.style === 'shell') {
+          this.artilleryImpact(p.tx, p.ty, p.splashRadius, p.hitX, p.hitY);
+        } else if (p.splashRadius) {
+          this.explode(p.tx, p.ty, p.splashRadius, p.color, p.hitX, p.hitY);
+        }
         else if (p.style === 'arrow') this.arrowImpact(p.tx, p.ty, p.color);
         else {
           this.particles.burst(p.tx, p.ty, p.color, 2, { speed: 40, life: 0.2, gravity: 0, scale: 0.8 });
@@ -207,6 +216,19 @@ export class ProjectileFxController {
         this.projectiles.splice(i, 1);
       }
     }
+  }
+
+  /**
+   * 판정과 분리된 착탄 좌표. 순번 기반 결정론 값이라 게임 RNG·시드에는 손대지 않는다.
+   * sqrt 분포로 원 면적에 고르게 흩고 작은 몹은 히트박스 안쪽 45%까지만 사용한다.
+   */
+  private visualImpactPoint(x: number, y: number, targetRadius?: number): [number, number] {
+    if (!targetRadius || targetRadius <= 0) return [x, y];
+    const serial = ++this.impactSerial;
+    const angle = serial * 2.399963229728653; // golden angle — 연속 발사의 방향 반복을 줄인다
+    const hash = Math.imul(serial ^ 0x9e3779b9, 0x85ebca6b) >>> 0;
+    const distance = Math.sqrt(hash / 0x100000000) * Math.min(5, targetRadius * 0.45);
+    return [x + Math.cos(angle) * distance, y + Math.sin(angle) * distance];
   }
 
   /** 화살마다 Graphics 하나만 사용해 외곽 광과 흰 코어가 이어진 곡선 리본을 그린다. */
@@ -245,8 +267,14 @@ export class ProjectileFxController {
   }
 
   /** 포병 전용 착탄 — 고유색 플립북은 틴트하지 않고 실제 범위 링만 공용으로 쓴다. */
-  private artilleryImpact(x: number, y: number, radius?: number): void {
-    if (radius) this.showRangeBoundary(x, y, radius, '#bf7a3a');
+  private artilleryImpact(
+    x: number,
+    y: number,
+    radius?: number,
+    rangeX = x,
+    rangeY = y,
+  ): void {
+    if (radius) this.showRangeBoundary(rangeX, rangeY, radius, '#bf7a3a');
 
     const flash = this.scene.add.image(x, y, 'glow')
       .setBlendMode(Phaser.BlendModes.ADD)
@@ -282,10 +310,17 @@ export class ProjectileFxController {
    * ② 가산 섬광이 확 피었다 죽고 ③ 소프트 링 충격파가 천천히 퍼진다
    * ④ 글로우 스파크가 흩날린다.
    */
-  explode(x: number, y: number, radius: number, color: string): void {
+  explode(
+    x: number,
+    y: number,
+    radius: number,
+    color: string,
+    rangeX = x,
+    rangeY = y,
+  ): void {
     const c = tint(color);
     // 범위 경계 — 선명한 선 (사용자: "범위 명확히 보이는 건 좋다")
-    this.showRangeBoundary(x, y, radius, color);
+    this.showRangeBoundary(rangeX, rangeY, radius, color);
 
     // 가산 섬광 — 터지는 순간의 빛
     const flash = this.scene.add

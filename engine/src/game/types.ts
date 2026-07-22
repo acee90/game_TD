@@ -101,6 +101,8 @@ export interface Shot {
   life: number;
   color: string;
   splashRadius?: number;
+  /** 렌더 전용 표적 히트박스 반경 — 피해 좌표는 고정하고 착탄 그림만 내부에 흩는다. */
+  targetRadius?: number;
   /** 쏜 타워의 병과 — 렌더러가 투사체 모양(화살·포탄·볼트·가시)을 가른다 (2026-07-21) */
   race?: Race;
   /** 스피드 태그 타워는 병과와 무관하게 화살 투사체를 쓴다. */

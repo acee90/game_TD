@@ -558,7 +558,9 @@ export class Game {
       this.skillHit(enemy, skill);
       if (enemy.hp <= 0) killed = true;
       const [tx, ty] = pathPos(enemy.distance);
-      this.shots.push({ x: hero.x, y: hero.y, tx, ty, life: 0.12, color: '#ff5a3c' });
+      this.shots.push({
+        x: hero.x, y: hero.y, tx, ty, life: 0.12, color: '#ff5a3c', targetRadius: enemy.radius,
+      });
     }
 
     // 처치하면 마나가 그대로 남는다 — 잘 고르면 연쇄 처형이 된다
@@ -643,7 +645,9 @@ export class Game {
     for (const target of inReach) {
       this.skillHit(target, skill);
       const [tx, ty] = pathPos(target.distance);
-      this.shots.push({ x: hero.x, y: hero.y, tx, ty, life: 0.16, color: '#e3b23e' });
+      this.shots.push({
+        x: hero.x, y: hero.y, tx, ty, life: 0.16, color: '#e3b23e', targetRadius: target.radius,
+      });
     }
     this.float(hero.x, hero.y, `강타 x${inReach.length}`, '#e3b23e');
   }
@@ -671,7 +675,9 @@ export class Game {
     for (const target of inReach) {
       this.skillHit(target, skill);
       const [tx, ty] = pathPos(target.distance);
-      this.shots.push({ x: hero.x, y: hero.y, tx, ty, life: 0.14, color: '#4ea3ff' });
+      this.shots.push({
+        x: hero.x, y: hero.y, tx, ty, life: 0.14, color: '#4ea3ff', targetRadius: target.radius,
+      });
     }
     this.float(hero.x, hero.y, `일제 사격 x${skill.targets}`, '#4ea3ff');
   }
@@ -2049,13 +2055,14 @@ export class Game {
           }
           this.shots.push({
             x: hero.x, y: hero.y, tx, ty, life: 0.1,
-            color: '#c065e0', splashRadius: stats.splashRadius, source: 'hero',
+            color: '#c065e0', splashRadius: stats.splashRadius,
+            targetRadius: target.radius, source: 'hero',
           });
         } else {
           this.heroHitEnemy(target, raw, stats, crit);
           this.shots.push({
             x: hero.x, y: hero.y, tx, ty, life: 0.1,
-            color: crit ? '#ffd23f' : '#ffffff', source: 'hero',
+            color: crit ? '#ffd23f' : '#ffffff', targetRadius: target.radius, source: 'hero',
           });
         }
         if (crit) this.float(tx, ty, 'CRIT!', '#ffd23f');
@@ -2129,7 +2136,10 @@ export class Game {
       this.skillHit(current, skill, raw);
 
       const [tx, ty] = pathPos(current.distance);
-      this.shots.push({ x: from[0], y: from[1], tx, ty, life: 0.12, color: '#7ce7ff' });
+      this.shots.push({
+        x: from[0], y: from[1], tx, ty, life: 0.12,
+        color: '#7ce7ff', targetRadius: current.radius,
+      });
       if (bounce > 0) this.float(tx, ty, `×${bounce + 1}`, '#7ce7ff');
       from = [tx, ty];
 
@@ -2425,7 +2435,8 @@ export class Game {
         }
         this.shots.push({
           x: slot.x, y: slot.y, tx: cx, ty: cy, life: 0.08, color,
-          splashRadius: blast, race: tower.def.race, speed: tower.def.tags.includes('speed'),
+          splashRadius: blast, targetRadius: inReach[best].radius,
+          race: tower.def.race, speed: tower.def.tags.includes('speed'),
         });
       } else {
         // 파워는 체력 최대(보스) 우선, 그 외에는 가장 멀리 간 적(돌파 임박) 우선
@@ -2443,7 +2454,8 @@ export class Game {
         this.pushVfx({ kind: 'hit', x, y, amount: dealt, color });
         this.shots.push({
           x: slot.x, y: slot.y, tx: x, ty: y, life: 0.08, color,
-          race: tower.def.race, speed: tower.def.tags.includes('speed'),
+          targetRadius: target.radius, race: tower.def.race,
+          speed: tower.def.tags.includes('speed'),
         });
       }
       tower.cooldown = attackInterval(tower);
