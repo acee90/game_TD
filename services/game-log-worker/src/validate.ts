@@ -8,6 +8,9 @@
 //
 // 점수 재계산·리플레이는 하지 않는다 (사용자 결정 2026-07-22, §2).
 
+// 정상 종료 판정은 스키마 원본(engine)이 소유한다 — 규칙을 여기서 복제하지 않는다
+import { isNormalEnd } from "../../../engine/src/game/logging";
+
 /** eventBase.type enum — v1.schema.json과 같은 목록 */
 export const EVENT_TYPES = [
   'run_started',
@@ -65,10 +68,21 @@ export interface Limits {
   clockSkewSeconds: number;
 }
 
-/** M0 실측 전 잠정값. 실측 후 갱신한다 (계획 §8 M0 게이트) */
+/**
+ * 실측 기반 상한 (2026-07-22 측정, 계획 §8 M0 게이트 충족).
+ *
+ * 측정: 봇 12판 게임오버까지 — 이벤트 p50 168 / 최대 207개, JSONL p50 45 / 최대 56 KB.
+ * 라운드당 7.1이벤트·1.92KB이므로 R60 클리어를 외삽하면 약 427이벤트·115KB다.
+ *
+ * maxEvents는 두 천장 아래에 둔다:
+ *  ① 현실 최대(R60 ≈ 427)의 10배 여유
+ *  ② **D1 무료 플랜의 Worker 호출당 쿼리 50개 제한** — ingestRun은 조회 2회 + runs 1회 +
+ *     이벤트를 EVENT_CHUNK(200)씩 batch로 나눠 넣는다(batch 1회 = 쿼리 1회). 즉 이벤트
+ *     상한이 약 9,400개를 넘으면 batch 수가 50을 넘겨 런타임에 실패한다.
+ */
 export const DEFAULT_LIMITS: Limits = {
-  maxBytes: 5 * 1024 * 1024,
-  maxEvents: 20_000,
+  maxBytes: 1024 * 1024, // 실측 최대 56 KB의 약 18배
+  maxEvents: 5_000, // R60 외삽 427의 약 12배, D1 쿼리 한도(≈9,400) 아래
   maxDisplayName: 24,
   clockSkewSeconds: 24 * 60 * 60,
 };
@@ -134,8 +148,13 @@ function validateEventShape(e: unknown, index: number): RunEvent {
 export interface ValidatedRun {
   runId: string;
   events: RunEvent[];
-  /** run_finished 이벤트가 있으면 true */
+  /** run_finished 이벤트가 있으면 true — "로그가 온전한가"이지 "정상 종료인가"가 아니다 */
   complete: boolean;
+  /**
+   * 정상 종료(game_over·cleared)로 끝났는가 — 랭킹·대시보드 노출 자격.
+   * 중단(quit·restart)도 run_finished를 남기므로 complete만으로는 구분할 수 없다.
+   */
+  normalEnd: boolean;
   finishReason: string | null;
   summary: Record<string, unknown> | null;
   startedAt: string;
@@ -226,11 +245,15 @@ export function validateUpload(
   const finished = last.type === 'run_finished' ? (last.data as Record<string, unknown>) : null;
   const summary = finished && isPlainObject(finished.summary) ? finished.summary : null;
 
+  const finishReason = finished && typeof finished.reason === 'string' ? finished.reason : null;
+
   return {
     runId,
     events,
     complete: finished !== null,
-    finishReason: finished && typeof finished.reason === 'string' ? finished.reason : null,
+    // 판정 기준의 원본은 engine/src/game/logging.ts다 — 여기서 규칙을 다시 쓰지 않는다
+    normalEnd: isNormalEnd(finishReason),
+    finishReason,
     summary,
     startedAt: started.startedAt as string,
     build: {

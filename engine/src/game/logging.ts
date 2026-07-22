@@ -7,6 +7,20 @@ export type LogTarget = 'web' | 'unity' | 'phaser';
 export type FinishReason = 'game_over' | 'cleared' | 'restart' | 'quit' | 'abandoned' | 'test';
 export type XpSource = 'purchase' | 'mob_kill' | 'boss_kill' | 'augment';
 
+/**
+ * **정상 종료**로 인정하는 종료 사유 — 판을 끝까지 치른 경우만이다.
+ *
+ * 주의: `run_finished` 이벤트의 존재(= 로그가 온전한가)와 정상 종료는 다른 개념이다.
+ * 중단(`quit`·`restart`)도 이탈 처리에서 `finishRun()`을 부르므로 `run_finished`를 남긴다.
+ * 랭킹·대시보드 노출 자격은 반드시 이 목록으로 판정한다 (2026-07-22 사용자 결정).
+ * 중단 런은 버리지 않고 저장해 두었다가 운영 분석에 쓴다.
+ */
+export const NORMAL_FINISH_REASONS: readonly FinishReason[] = ['game_over', 'cleared'];
+
+/** 정상 종료로 끝난 런인가 — 랭킹·대시보드 노출 판정의 단일 기준 */
+export const isNormalEnd = (reason: FinishReason | string | null | undefined): boolean =>
+  reason === 'game_over' || reason === 'cleared';
+
 export interface BuildInfo {
   readonly gitSha: string;
   readonly branch: string;

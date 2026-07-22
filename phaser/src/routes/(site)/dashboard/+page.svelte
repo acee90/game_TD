@@ -5,7 +5,7 @@
   import { base } from '$app/paths';
   import * as hallOfFame from '$lib/game/hall-of-fame';
   import { listRunSummaries } from '@engine/logging/indexed-db-run-store';
-  import type { RunSummary } from '@engine/game/logging';
+  import { isNormalEnd, type RunSummary } from '@engine/game/logging';
 
   let loaded = $state(false);
   let best = $state<hallOfFame.Record | null>(null);
@@ -15,7 +15,10 @@
     const records = hallOfFame.load();
     best = records[0] ?? null;
     try {
-      recent = (await listRunSummaries()).slice(0, 5);
+      // 정상 종료(게임오버·클리어)한 판만 보여준다 — 중간에 그만둔 판은 기록으로 치지 않는다.
+      // 중단 런도 저장은 되지만(운영 분석용) 화면에는 노출하지 않는다 (2026-07-22 결정).
+      const all = await listRunSummaries();
+      recent = all.filter((run) => isNormalEnd(run.finishReason)).slice(0, 5);
     } catch {
       recent = []; // IndexedDB를 못 여는 환경 — 빈 상태로 둔다
     }
@@ -79,7 +82,7 @@
           </li>
         {/each}
       </ul>
-      <p class="note">완료된 판만 기록됩니다.</p>
+      <p class="note">끝까지 진행한 판(게임오버·클리어)만 기록됩니다.</p>
     {:else}
       <div class="empty-state">
         아직 완료된 플레이 기록이 없습니다. 판을 끝까지 진행하면 여기에 쌓입니다.

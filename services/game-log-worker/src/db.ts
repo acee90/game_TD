@@ -53,11 +53,11 @@ export async function ingestRun(
        run_id, schema_version, content_hash,
        build_sha, build_branch, build_target, build_dirty, app_version, engine_version,
        seed, rng_algorithm,
-       started_at, uploaded_at, finish_reason, complete, cleared,
+       started_at, uploaded_at, finish_reason, complete, normal_end, cleared,
        score, round, kills, elapsed_seconds, hero_level, boss_cleared,
        display_name, client_token_hash, user_id,
        event_count, summary_json
-     ) VALUES (?,?,?, ?,?,?,?,?,?, ?,?, ?,?,?,?,?, ?,?,?,?,?,?, ?,?,NULL, ?,?)`,
+     ) VALUES (?,?,?, ?,?,?,?,?,?, ?,?, ?,?,?,?,?,?, ?,?,?,?,?,?, ?,?,NULL, ?,?)`,
   ).bind(
     run.runId,
     1,
@@ -74,6 +74,8 @@ export async function ingestRun(
     now.toISOString(),
     run.finishReason,
     run.complete ? 1 : 0,
+    // 랭킹·대시보드 노출 자격 — 중단 런은 저장하되 0으로 남는다
+    run.normalEnd ? 1 : 0,
     summary?.cleared === true ? 1 : summary?.cleared === false ? 0 : null,
     // 완주면 summary 값을, 중단이면 마지막 이벤트 값을 쓴다
     num('score') ?? run.score,
