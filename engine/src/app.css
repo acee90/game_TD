@@ -241,16 +241,30 @@ button:disabled{opacity:.35;cursor:default;box-shadow:none}
 
 /* ── 레이아웃 ──
    기본(모바일/좁은 화면): 기존 세로 단일 컬럼 그대로.
-   데스크톱(≥880px): 보드를 가운데 두고 버튼·패널을 좌우 여백에 배치하는 3열 그리드. */
+   데스크톱(≥880px): 한 화면 고정 — 좌우 패널은 화면 양끝에 붙고 가운데 보드가
+   뷰포트 높이에 맞춰 스케일된다 (2026-07-22, 사용자 지시).
+   --board-w = (뷰포트 높이 - 보드 주변 크롬 ≈215px) × 보드 비율(420/470). */
 .boardcol{min-width:0}
 @media (min-width:880px){
+  /* --game-chrome-top: 호스트 페이지가 #wrap 위에 얹는 크롬(상단 바 등)의 높이.
+     phaser /game 페이지가 주입하고, 없으면 0. */
+  /* 세로(뷰포트 높이 기준)와 가로(사이드 최소 240×2 + 간격·패딩 544px) 여유 중 작은 쪽 */
+  :root{
+    --board-w:clamp(320px,min(calc((100vh - 180px - var(--game-chrome-top,0px))*420/470),calc(100vw - 544px)),470px);
+    --board-w:clamp(320px,min(calc((100dvh - 180px - var(--game-chrome-top,0px))*420/470),calc(100vw - 544px)),470px);
+  }
   body{padding:14px;justify-content:center}
-  #wrap{max-width:1160px;display:grid;gap:18px;align-items:start;
-        grid-template-columns:minmax(240px,1fr) minmax(380px,470px) minmax(240px,1fr)}
-  .actions{order:1}   /* 왼쪽 여백 — 액션 버튼 */
-  .boardcol{order:2}  /* 가운데 — 게임 보드 */
-  .panels{order:3}    /* 오른쪽 여백 — 영웅·보상 패널 */
-  .actions,.panels{position:sticky;top:14px}
+  #wrap{max-width:none;display:grid;gap:18px;align-items:start;
+        grid-template-columns:minmax(240px,380px) var(--board-w) minmax(240px,380px);
+        justify-content:space-between}
+  .actions{order:1}   /* 왼쪽 끝 — 액션 버튼 */
+  .boardcol{order:2}  /* 가운데 — 게임 보드 (뷰포트 높이 기준 폭) */
+  .panels{order:3}    /* 오른쪽 끝 — 영웅·보상 패널 */
+  /* 페이지 자체는 안 굴러가게 — 사이드가 길면 사이드만 스크롤 */
+  .actions,.panels{position:sticky;top:14px;
+                   max-height:calc(100vh - 28px - var(--game-chrome-top,0px));
+                   max-height:calc(100dvh - 28px - var(--game-chrome-top,0px));
+                   overflow-y:auto;scrollbar-width:thin}
   /* 사이드로 올라가면 첫 요소의 상단 여백은 지운다 */
   .actions>:first-child,.panels>:first-child,.boardcol>:first-child{margin-top:0}
 }

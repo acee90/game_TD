@@ -31,11 +31,15 @@
 {/if}
 
 <style>
+  /* 상단 바 높이를 HUD 레이아웃(app.css)에 알린다 — 한 화면 맞춤 계산에 들어간다 */
+  :global(:root) {
+    --game-chrome-top: 30px;
+  }
+
   .game-topbar {
     display: flex;
     gap: 16px;
     width: 100%;
-    max-width: 460px;
     padding: 2px 2px 6px;
     font-size: 12px;
   }
