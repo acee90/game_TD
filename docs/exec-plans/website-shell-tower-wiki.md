@@ -167,6 +167,13 @@ Wiki는 타워를 `{ def, tier, cooldown: 0 }` 형태로 구성하고 병과 업
 - 현행 `/` 게임 시작, `?bot`, 게임오버, 로그 저장, 두 랩 진입점 동작을 확인한다.
 - `phaser` 빌드 산출 크기와 첫 로드 시 Phaser 청크 크기를 기록한다.
 - **게이트:** 마이그레이션 전 기준 동작과 수치가 재현 가능하다.
+- **기록 (2026-07-22, 완료):** 기준선 커밋 `764491f`. 검증: svelte-check 0 에러 ·
+  Vitest 348 통과 · phaser 빌드 통과. 산출: dist 1.8 MB, `phaser` 청크
+  1,482.54 kB(gzip 340.17 kB), `game` 청크 170.64 kB(gzip 59.18 kB) —
+  첫 로드에 둘 다 포함(코드 분할 없음, M1 비교 기준). 브라우저 확인: `/` 시작 화면,
+  `?bot` 자동 플레이 + FX 계측 HUD, 두 랩 진입점, IndexedDB 런 로그의
+  `run_started.build`(gitSha·target='phaser') 기록 — 콘솔 에러 0건(favicon 404 제외).
+  SparkSet 팩 원본은 라이선스(독립 재배포 금지)로 .gitignore 등록, 통합 사용분만 커밋.
 
 ### M1. SvelteKit 정적 셸 전환 · 규모 L
 
