@@ -1,6 +1,6 @@
 <script lang="ts">
-  import type { Game } from '../game/game';
-  import * as HD from '../data/hero';
+  import type { Game } from '@engine/game/game';
+  import * as HD from '@engine/data/hero';
   import { augmentCardsHtml, heroAugsHtml, skillChoiceCardsHtml, upgradeChoiceCardsHtml } from './view';
 
   let { game, tick }: { game: Game; tick: number } = $props();

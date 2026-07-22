@@ -1,6 +1,6 @@
 <script lang="ts">
-  import type { Game } from '../game/game';
-  import { CLEAR_ROUND } from '../data/balance';
+  import type { Game } from '@engine/game/game';
+  import { CLEAR_ROUND } from '@engine/data/balance';
 
   // R60 클리어 오버레이 (2026-07-19) — clearPending 동안 게임이 멈춘다.
   // 게임오버와 달리 런은 계속된다: 버튼 하나로 무한 모드에 들어간다.

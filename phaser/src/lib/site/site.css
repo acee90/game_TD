@@ -2,6 +2,13 @@
    모든 규칙을 .site 아래에 두어 /game의 app.css 전역 규칙과 충돌하지 않는다.
    (색은 플레이버 — engine/src/app.css :root와 같은 값) */
 
+html,
+body {
+  margin: 0;
+  padding: 0;
+  min-height: 100%;
+}
+
 .site {
   --bg: #15110c;
   --bg2: #0d0a06;

@@ -1,7 +1,7 @@
 <script lang="ts">
-  import type { Game } from '../game/game';
-  import type { Race } from '../data/units';
-  import * as B from '../data/balance';
+  import type { Game } from '@engine/game/game';
+  import type { Race } from '@engine/data/units';
+  import * as B from '@engine/data/balance';
   import {
     selectionInfoHtml,
     bossStateLabel,

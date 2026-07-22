@@ -3,7 +3,7 @@
   // Phaser는 onMount 안에서만 동적 import한다. 탭 백그라운드·뷰포트 밖·
   // reduced-motion이면 멈춘다 (§5).
   import { onMount } from 'svelte';
-  import type { TowerWikiView } from '@engine/lib/tower-wiki';
+  import type { TowerWikiView } from './tower-wiki';
   import type { TowerPreviewScene } from '../../scenes/TowerPreviewScene';
 
   let { view }: { view: TowerWikiView } = $props();

@@ -1,24 +1,24 @@
 <script lang="ts">
-  // ───────── 프로덕션 셸 — Phaser 보드 + 기존 Svelte HUD (단일 원본 이식) ─────────
+  // ───────── 프로덕션 셸 — Phaser 보드 + Svelte HUD ─────────
   // 레이아웃·컴포넌트·클릭 규칙·단축키는 은퇴한 웹 프로토(App.svelte)에서 이어받았다 —
-  // HUD 로직 이중화 없음. 픽셀 스타일 재단장은 나중에 CSS 교체로 한다 (issue #23과 별개).
+  // HUD는 프로덕션 앱인 phaser/가 소유하고, 게임 규칙은 @engine에서 가져온다.
   import { onMount } from 'svelte';
   import Phaser from 'phaser';
-  import '@engine/app.css'; // HUD 스타일도 단일 원본 — 픽셀 재단장은 나중에 덮어쓴다
+  import './game.css';
   import { Game } from '@engine/game/game';
   import { createSeededRand } from '@engine/game/random';
   import { createBrowserRunContext, createBrowserSeed } from '@engine/logging/browser-run';
   import { IndexedDbRunStore } from '@engine/logging/indexed-db-run-store';
-  import Hud from '@engine/lib/Hud.svelte';
-  import ActionsColumn from '@engine/lib/ActionsColumn.svelte';
-  import HeroPanel from '@engine/lib/HeroPanel.svelte';
-  import MissionsPanel from '@engine/lib/MissionsPanel.svelte';
-  import AugmentOverlay from '@engine/lib/AugmentOverlay.svelte';
-  import AugmentPanel from '@engine/lib/AugmentPanel.svelte';
-  import ClearOverlay from '@engine/lib/ClearOverlay.svelte';
-  import GameOverOverlay from '@engine/lib/GameOverOverlay.svelte';
-  import MenuOverlay from '@engine/lib/MenuOverlay.svelte';
-  import * as hallOfFame from '@engine/ui/hall-of-fame';
+  import Hud from './Hud.svelte';
+  import ActionsColumn from './ActionsColumn.svelte';
+  import HeroPanel from './HeroPanel.svelte';
+  import MissionsPanel from './MissionsPanel.svelte';
+  import AugmentOverlay from './AugmentOverlay.svelte';
+  import AugmentPanel from './AugmentPanel.svelte';
+  import ClearOverlay from './ClearOverlay.svelte';
+  import GameOverOverlay from './GameOverOverlay.svelte';
+  import MenuOverlay from './MenuOverlay.svelte';
+  import * as hallOfFame from './hall-of-fame';
   import { BattleScene } from '../../BattleScene';
 
   // 시드·런 로깅 — web과 동일 배선 (기록 다운로드·명예의 전당까지 같은 경로)

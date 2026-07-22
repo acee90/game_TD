@@ -12,7 +12,7 @@ const config = {
     adapter: adapter({ fallback: '404.html' }),
     // 기존 Phaser 에셋 경로(public/assets/…)를 그대로 쓴다
     files: { assets: 'public' },
-    // 엔진 단일 원본 — 게임 로직·데이터·HUD는 engine/src를 그대로 import (이중화 없음)
+    // 게임 규칙·데이터는 engine/src 단일 원본, Svelte UI는 phaser/src가 소유한다.
     alias: { '@engine': '../engine/src' },
     // 배포 대상 미확정 — 루트 경로가 기본, 서브패스 배포가 결정되면 BASE_PATH로 전환
     paths: { base: process.env.BASE_PATH ?? '' },

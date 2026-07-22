@@ -1,7 +1,7 @@
 // ───────── 명예의 전당 ─────────
 // 원본은 기록을 맵 파일에 하드코딩해 두었다(strings:592/655). 여기서는 브라우저에 저장한다.
 
-import { HALL_OF_FAME_SIZE } from '../data/score';
+import { HALL_OF_FAME_SIZE } from '@engine/data/score';
 
 const STORAGE_KEY = 'gattadi.hallOfFame.v1';
 

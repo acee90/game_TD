@@ -3,7 +3,7 @@
   // 명예의 전당(localStorage, 동기 저장)과 완주 런 summary(IndexedDB)만 신뢰한다.
   import { onMount } from 'svelte';
   import { base } from '$app/paths';
-  import * as hallOfFame from '@engine/ui/hall-of-fame';
+  import * as hallOfFame from '$lib/game/hall-of-fame';
   import { listRunSummaries } from '@engine/logging/indexed-db-run-store';
   import type { RunSummary } from '@engine/game/logging';
 

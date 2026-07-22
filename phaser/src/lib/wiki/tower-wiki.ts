@@ -13,10 +13,10 @@ import {
   slowFactor,
   splashRadius,
   type UpgradeLevels,
-} from '../game/combat';
-import { RACES, RACE_COLOR, TIER_LABEL, tagLabel, type Race, type Tag } from '../data/units';
-import { towerById, type CatalogTower } from '../data/tower-catalog';
-import type { Tower } from '../game/types';
+} from '@engine/game/combat';
+import { RACES, RACE_COLOR, TIER_LABEL, tagLabel, type Race, type Tag } from '@engine/data/units';
+import { towerById, type CatalogTower } from '@engine/data/tower-catalog';
+import type { Tower } from '@engine/game/types';
 
 /** Wiki 기준 업그레이드 — 항상 0 (표시 수치의 전제) */
 export const WIKI_UPGRADES: UpgradeLevels = [0, 0, 0, 0];

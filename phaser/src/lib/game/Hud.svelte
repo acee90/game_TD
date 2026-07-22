@@ -1,6 +1,6 @@
 <script lang="ts">
-  import type { Game } from '../game/game';
-  import * as S from '../data/score';
+  import type { Game } from '@engine/game/game';
+  import * as S from '@engine/data/score';
 
   let { game, tick }: { game: Game; tick: number } = $props();
 

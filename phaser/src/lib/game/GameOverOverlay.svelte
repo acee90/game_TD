@@ -1,6 +1,6 @@
 <script lang="ts">
   import { hallOfFameHtml } from './view';
-  import type * as hallOfFame from '../ui/hall-of-fame';
+  import type * as hallOfFame from './hall-of-fame';
 
   // 순수 표시 컴포넌트 — 스냅샷은 App이 game.over 순간에 한 번 계산해 넘긴다.
   let {

@@ -1,14 +1,14 @@
 // ───────── 순수 뷰 빌더 ─────────
 // 게임 상태 → HTML/문자열. DOM을 만지지 않는다 (Svelte가 {@html}로 꽂는다).
 // 원본 web/src/ui/ui.ts의 문자열 생성 로직을 그대로 이식 — 표시 규칙을 한곳에 모은다.
-import * as B from '../data/balance';
-import { GOD_TIER, RACES, RACE_COLOR, TIER_LABEL, tagLabel, type Race } from '../data/units';
-import { attackInterval, damage, range } from '../game/combat';
-import { bossKillMineral, nextMilestone } from '../game/economy';
-import * as HD from '../data/hero';
-import { SKILLS, isStarterSkill, type SkillRole } from '../data/skills';
-import type { Game } from '../game/game';
-import type * as hallOfFame from '../ui/hall-of-fame';
+import * as B from '@engine/data/balance';
+import { GOD_TIER, RACES, RACE_COLOR, TIER_LABEL, tagLabel, type Race } from '@engine/data/units';
+import { attackInterval, damage, range } from '@engine/game/combat';
+import { bossKillMineral, nextMilestone } from '@engine/game/economy';
+import * as HD from '@engine/data/hero';
+import { SKILLS, isStarterSkill, type SkillRole } from '@engine/data/skills';
+import type { Game } from '@engine/game/game';
+import type * as hallOfFame from './hall-of-fame';
 
 export function bossStateLabel(game: Game): string {
   const live = game.liveBossLevels;

@@ -11,9 +11,9 @@ import {
   TIER_POOLS,
   type Race,
   type UnitDef,
-} from '../src/data/units';
-import { TOWER_CATALOG, towerById } from '../src/data/tower-catalog';
-import { towerWikiView, towerWikiViewById, WIKI_UPGRADES } from '../src/lib/tower-wiki';
+} from '@engine/data/units';
+import { TOWER_CATALOG, towerById } from '@engine/data/tower-catalog';
+import { towerWikiView, towerWikiViewById, WIKI_UPGRADES } from '../src/lib/wiki/tower-wiki';
 import {
   attackInterval,
   damage,
@@ -22,8 +22,8 @@ import {
   range,
   slowFactor,
   splashRadius,
-} from '../src/game/combat';
-import type { Tower } from '../src/game/types';
+} from '@engine/game/combat';
+import type { Tower } from '@engine/game/types';
 
 /** 풀에 등장하는 모든 def — GOD_POOL_LATE는 초기 풀 spread를 포함하므로 전체를 덮는다 */
 const ALL_POOL_DEFS: readonly UnitDef[] = [...TIER_POOLS.flat(), ...GOD_POOL_LATE];

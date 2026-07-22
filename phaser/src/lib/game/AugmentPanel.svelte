@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { Game } from '../game/game';
+  import type { Game } from '@engine/game/game';
   import { augmentPanelHtml } from './view';
 
   let { game, tick }: { game: Game; tick: number } = $props();

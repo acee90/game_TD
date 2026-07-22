@@ -1,7 +1,7 @@
 <script lang="ts">
   // 타워 정보 패널 — 수치·문자열은 전부 view-model(tower-wiki)에서 온다.
   // 여기서 계산·반올림을 다시 하지 않는다 (§4.2).
-  import type { TowerWikiView } from '@engine/lib/tower-wiki';
+  import type { TowerWikiView } from './tower-wiki';
 
   let { view }: { view: TowerWikiView } = $props();
 

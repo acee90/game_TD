@@ -3,7 +3,7 @@
   // 온라인 랭킹이 아니다 — 서버 랭킹처럼 보이는 가짜 사용자명·점수를 넣지 않는다 (§3.2).
   import { onMount } from 'svelte';
   import { base } from '$app/paths';
-  import * as hallOfFame from '@engine/ui/hall-of-fame';
+  import * as hallOfFame from '$lib/game/hall-of-fame';
 
   let loaded = $state(false);
   let records = $state<hallOfFame.Record[]>([]);

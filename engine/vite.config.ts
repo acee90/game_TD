@@ -1,5 +1,4 @@
 import { defineConfig } from 'vite';
-import { svelte } from '@sveltejs/vite-plugin-svelte';
 import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -33,7 +32,6 @@ const buildInfo = {
 } as const;
 
 export default defineConfig({
-  plugins: [svelte()],
   define: {
     __GAME_BUILD_INFO__: JSON.stringify(buildInfo),
   },
