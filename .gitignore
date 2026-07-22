@@ -39,3 +39,6 @@ web-svelte/
 
 # 게임 런 로그(JSONL) — /logs viewer가 내려받은 실행 산출물. 소스가 아니다.
 logs/
+
+# Wrangler 로컬 상태 — 로컬 D1 sqlite 파일과 캐시. 소스가 아니다.
+.wrangler/

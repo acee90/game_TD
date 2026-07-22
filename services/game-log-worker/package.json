@@ -1,0 +1,21 @@
+{
+  "name": "game-log-worker",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "check": "tsc --noEmit -p tsconfig.json",
+    "test": "vitest run",
+    "db:apply:local": "wrangler d1 migrations apply game-td-run-logs --local",
+    "db:apply:remote": "wrangler d1 migrations apply game-td-run-logs --remote"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20260721.1",
+    "@types/node": "^26.1.1",
+    "typescript": "^5.6.0",
+    "vitest": "^3.0.0",
+    "wrangler": "^4.113.0"
+  }
+}
