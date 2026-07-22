@@ -3,4 +3,3 @@ dist/
 build/
 .svelte-kit/
 .playwright-mcp/
-.wrangler/
