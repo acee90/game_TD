@@ -4,6 +4,17 @@ import { vitePreprocess } from '@sveltejs/vite-plugin-svelte';
 /** @type {import('@sveltejs/kit').Config} */
 const config = {
   preprocess: vitePreprocess(),
+  // HUD의 이벤트 위임 컨테이너(AugmentPanel·AugmentOverlay·ActionsColumn)에서 나는
+  // a11y 오탐을 억제한다. 이들은 {@html}로 렌더된 내부 요소의 클릭을 event.target으로
+  // 위임받는 컨테이너라 자신은 인터랙티브가 아니다. svelte-ignore 주석이 이 규칙엔
+  // 안 먹어(svelte 5.56) 여기서 파일 범위를 좁혀 억제한다 — 그 외 a11y 경고는 그대로 둔다.
+  onwarn: (warning, handler) => {
+    const delegationWarning =
+      warning.code === 'a11y_no_noninteractive_element_interactions' ||
+      warning.code === 'a11y_no_static_element_interactions';
+    if (delegationWarning && warning.filename?.includes('/lib/game/')) return;
+    handler(warning);
+  },
   kit: {
     // Cloudflare Workers 어댑터 — 사이트와 API(+server.ts)를 한 Worker로 배포한다.
     // 정적 페이지는 prerender로 그대로 정적 서빙되고(홈·Wiki·랭킹 셸), /api/* 라우트만

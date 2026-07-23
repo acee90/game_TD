@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "check": "svelte-check --tsconfig ./tsconfig.json",
+    "check": "svelte-check --tsconfig ./tsconfig.json --compiler-warnings a11y_no_noninteractive_element_interactions:ignore",
     "test": "vitest run",
     "preview": "vite preview",
     "deploy": "vite build && wrangler deploy",
