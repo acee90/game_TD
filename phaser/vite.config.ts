@@ -43,9 +43,12 @@ export default defineConfig({
   server: {
     port: 5199,
     fs: { allow: ['..'] }, // ../engine/src를 읽는다
-    // 배포본은 사이트와 API가 한 Worker라 동일 출처다(루트 wrangler.jsonc).
-    // 개발 서버에서도 같은 조건을 만들어 두어야 CORS 없이 /api/*를 부를 수 있다.
-    // 사전 실행: 루트에서 `npm run dev:worker` (wrangler dev, 8787)
+    // ── 개발 방식 두 가지 ──
+    //  ① 통합(권장): 루트에서 `npm run dev` → wrangler dev 하나가 localhost:8787에서
+    //     사이트+API를 함께 서빙한다(프로덕션과 동일, build 산출물 서빙이라 HMR 없음).
+    //  ② UI HMR: 이 vite dev(5199) + 루트에서 `npm run dev:api`(wrangler, 8787).
+    //     vite는 API Worker를 모르므로 아래 프록시가 /api를 8787로 넘긴다.
+    //     사이트 코드는 즉시 반영되지만 API용 wrangler를 함께 띄워야 한다.
     proxy: {
       '/api': {
         target: 'http://127.0.0.1:8787',
