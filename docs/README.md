@@ -1,6 +1,6 @@
 # docs — 문서 지도
 
-> 상태: **현행** (새 문서는 여기에 등록한다) · 최종 갱신: 2026-07-22
+> 상태: **현행** (새 문서는 여기에 등록한다) · 최종 갱신: 2026-07-23
 > 규칙: [documentation-rules.md](documentation-rules.md) · 상태가 **현행**인 문서만 기준으로 삼는다.
 
 ```
@@ -44,8 +44,18 @@ docs/
 | [wandering-knight-concept-v1.png](reference/wandering-knight-concept-v1.png) | 현행 (아트 기준) | Meshy용 방랑기사 정면 콘셉트 v1 |
 | [wandering-archer-concept-v1.png](reference/wandering-archer-concept-v1.png) | 현행 (아트 기준) | Meshy용 방랑궁수 정면 콘셉트 v1 |
 | [wandering-archer-chibi-tpose-concept-v1.png](reference/wandering-archer-chibi-tpose-concept-v1.png) | 현행 (모델링 기준) | Meshy용 치비 로우폴리 방랑궁수 T포즈 v1 |
+| [character-pixel-style-spec.md](design/character-pixel-style-spec.md) | 현행 (필수 아트 기준) | 신규 인간형 픽셀 캐릭터의 화풍·팔레트·96×96 시트·애니메이션 생성 규격 |
 | [god-td-system-notes-v0.1.md](reference/god-td-system-notes-v0.1.md) | 보관 | 초기 시스템 정리 (맵분석으로 대체) |
 | [god-td-ops-layer-analysis-v0.1.md](reference/god-td-ops-layer-analysis-v0.1.md) | 보관 | 운영 레이어 초기 분석 |
+
+### 캐릭터 픽셀 에셋 추가 기준
+
+신규 인간형 캐릭터를 만들거나 기존 시트를 고칠 때는 반드시
+[캐릭터 픽셀 스타일·규격](design/character-pixel-style-spec.md)을 먼저 따른다.
+`Human_Soldier_Sword_Shield`와 `Monster_Slime`이 화풍의 기준이며, 새 캐릭터는 최소한
+96×96 투명 셀, 문서에 정의된 제한 팔레트·발 위치, `No_Shadows` / `Only_Shadows` /
+`With_Shadows` 분리를 유지한다. 필요한 동작만 제작하더라도 해당 동작의 기준 프레임 수와
+파일명 규칙은 문서와 맞춘다.
 
 ## archive/ — 대체된 옛 방향
 
