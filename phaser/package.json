@@ -9,7 +9,7 @@
     "check": "svelte-check --tsconfig ./tsconfig.json",
     "test": "vitest run",
     "preview": "vite preview",
-    "deploy": "vite build && node -e \"require('fs').writeFileSync('.svelte-kit/cloudflare/.assetsignore','_worker.js\\n_routes.json\\n')\" && wrangler deploy",
+    "deploy": "vite build && wrangler deploy",
     "db:apply:local": "wrangler d1 migrations apply game-td-run-logs --local",
     "db:apply:remote": "wrangler d1 migrations apply game-td-run-logs --remote",
     "prepare": "svelte-kit sync"
