@@ -4,16 +4,9 @@
 // 같은 run_id 재업로드 규칙: 내용(content_hash)이 같으면 idempotent 성공,
 // 다르면 409 conflict로 거부한다 — 조용히 덮어쓰지 않는다.
 
+import type { D1Database, D1PreparedStatement } from '@cloudflare/workers-types';
 import type { RunEvent, ValidatedRun } from './validate';
 import { contentFingerprint, sha256Hex } from './validate';
-
-export interface Env {
-  DB: D1Database;
-  /** 정적 자산 계층 — API가 아닌 요청을 되돌려준다 (루트 wrangler.jsonc의 assets.binding) */
-  ASSETS: Fetcher;
-  /** 선택 — 설정하면 이 값과 일치하는 요청만 admin 경로를 쓸 수 있다 */
-  ADMIN_TOKEN?: string;
-}
 
 export type IngestOutcome =
   | { status: 'created'; runId: string; eventCount: number }
@@ -24,14 +17,14 @@ export type IngestOutcome =
 const EVENT_CHUNK = 200;
 
 export async function ingestRun(
-  env: Env,
+  db: D1Database,
   run: ValidatedRun,
   clientTokenHash: string,
   now: Date,
 ): Promise<IngestOutcome> {
   const contentHash = await sha256Hex(contentFingerprint(run.events));
 
-  const existing = await env.DB.prepare('SELECT content_hash FROM runs WHERE run_id = ?')
+  const existing = await db.prepare('SELECT content_hash FROM runs WHERE run_id = ?')
     .bind(run.runId)
     .first<{ content_hash: string }>();
 
@@ -42,7 +35,7 @@ export async function ingestRun(
     // 같은 내용의 재전송(네트워크 재시도, 이름 저장 후 재전송)은 성공으로 취급한다.
     // 이벤트 열은 그대로이므로 표시명만 갱신한다 — 지문에 표시명은 들어가지 않는다.
     if (run.displayName !== null) {
-      await env.DB.prepare('UPDATE runs SET display_name = ? WHERE run_id = ?')
+      await db.prepare('UPDATE runs SET display_name = ? WHERE run_id = ?')
         .bind(run.displayName, run.runId)
         .run();
     }
@@ -55,7 +48,7 @@ export async function ingestRun(
     return typeof v === 'number' ? v : null;
   };
 
-  const insertRun = env.DB.prepare(
+  const insertRun = db.prepare(
     `INSERT INTO runs (
        run_id, schema_version, content_hash,
        build_sha, build_branch, build_target, build_dirty, app_version, engine_version,
@@ -98,20 +91,20 @@ export async function ingestRun(
   );
 
   const eventStatements = chunk(run.events, EVENT_CHUNK).map((group) =>
-    group.map((e) => eventInsert(env, run.runId, e)),
+    group.map((e) => eventInsert(db, run.runId, e)),
   );
 
   // D1 batch는 암묵 트랜잭션이다. runs를 먼저 넣어 FK 참조를 만족시킨다.
-  await env.DB.batch([insertRun]);
+  await db.batch([insertRun]);
   for (const group of eventStatements) {
-    await env.DB.batch(group);
+    await db.batch(group);
   }
 
   return { status: 'created', runId: run.runId, eventCount: run.events.length };
 }
 
-function eventInsert(env: Env, runId: string, e: RunEvent): D1PreparedStatement {
-  return env.DB.prepare(
+function eventInsert(db: D1Database, runId: string, e: RunEvent): D1PreparedStatement {
+  return db.prepare(
     `INSERT OR IGNORE INTO run_events
        (run_id, seq, type, elapsed_seconds, round, round_time, score, payload_json)
      VALUES (?,?,?,?,?,?,?,?)`,
@@ -129,11 +122,11 @@ function chunk<T>(items: readonly T[], size: number): T[][] {
  * 정교한 제한이 필요해지면 Durable Object나 KV로 옮긴다.
  */
 export async function recentUploadCount(
-  env: Env,
+  db: D1Database,
   clientTokenHash: string,
   sinceIso: string,
 ): Promise<number> {
-  const row = await env.DB.prepare(
+  const row = await db.prepare(
     'SELECT COUNT(*) AS n FROM runs WHERE client_token_hash = ? AND uploaded_at >= ?',
   )
     .bind(clientTokenHash, sinceIso)

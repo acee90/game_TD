@@ -1,0 +1,32 @@
+{
+  // ───────── G-타워디펜스 (SvelteKit + adapter-cloudflare) ─────────
+  // 사이트와 API(+server.ts)를 한 Worker로 배포한다. adapter-cloudflare가 빌드 시
+  // .svelte-kit/cloudflare 에 _worker.js와 정적 자산을 만든다.
+  //
+  // 개발: `npm run dev` (vite) 하나로 HMR + API + 로컬 D1이 함께 돈다 —
+  //       platformProxy가 아래 d1_databases를 로컬 D1(.wrangler/state)로 에뮬레이트한다.
+  // 배포: `npm run build && npx wrangler deploy` (phaser 디렉터리에서)
+  //
+  // D1 준비:
+  //   npx wrangler d1 migrations apply game-td-run-logs --local   (개발)
+  //   npx wrangler d1 migrations apply game-td-run-logs --remote  (운영)
+  "name": "game-td",
+  "compatibility_date": "2026-07-22",
+  "compatibility_flags": ["nodejs_compat"],
+  // adapter-cloudflare 빌드 산출물 — _worker.js가 서버(+server.ts), 나머지는 정적 자산.
+  // _routes.json이 어느 경로를 Worker로 보낼지 제어한다.
+  "main": ".svelte-kit/cloudflare/_worker.js",
+  "assets": {
+    "binding": "ASSETS",
+    "directory": ".svelte-kit/cloudflare"
+  },
+  "d1_databases": [
+    {
+      // binding은 코드에서 DB를 꺼내는 이름 — +server.ts의 platform.env.DB와 같아야 한다
+      "binding": "DB",
+      "database_name": "game-td-run-logs",
+      "database_id": "d8247466-8237-4293-a56c-e39f662a8961",
+      "migrations_dir": "migrations"
+    }
+  ]
+}

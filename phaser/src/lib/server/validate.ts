@@ -9,7 +9,7 @@
 // 점수 재계산·리플레이는 하지 않는다 (사용자 결정 2026-07-22, §2).
 
 // 정상 종료 판정은 스키마 원본(engine)이 소유한다 — 규칙을 여기서 복제하지 않는다
-import { isNormalEnd } from "../../../engine/src/game/logging";
+import { isNormalEnd } from '@engine/game/logging';
 
 /** eventBase.type enum — v1.schema.json과 같은 목록 */
 export const EVENT_TYPES = [

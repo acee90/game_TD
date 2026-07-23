@@ -74,6 +74,27 @@ JSONL·summary를 내려받을 수 있으며, 공통 JSON Schema(`schemas/game-r
 - 클라이언트 업로드·동기화 계층
 - `/ranking` 서버 연동과 랭킹 상세(선택 기록) 화면
 
+## 3.4 API를 SvelteKit +server.ts로 통합 (2026-07-23, 사용자 지시)
+
+처음엔 API를 별도 Worker 스크립트(`services/game-log-worker/`)로 두고 배포 때만
+`assets`+`main`으로 합쳤다. 배포는 하나였지만 **개발 DX가 나빴다** — vite(SvelteKit)가
+그 별도 Worker를 모르니 `vite dev`만으론 API가 안 붙고, 통합해서 보려면 프로덕션 빌드
+후 `wrangler dev`를 띄우거나 프록시로 별도 wrangler를 함께 돌려야 했다.
+
+사용자 지시로 **API를 SvelteKit `+server.ts` 라우트로 통합**하고 `adapter-static` →
+`adapter-cloudflare`로 전환했다. 결과:
+
+- `phaser/src/routes/api/**/+server.ts` — 업로드·랭킹·상세·health. `platform.env.DB`로 D1 접근
+- API 로직(`validate`/`db`/`ranking`)은 `phaser/src/lib/server/`로 이동 (engine `isNormalEnd`는 `@engine`으로 계속 import). `services/game-log-worker/` 폴더 제거
+- 각 API 라우트에 `prerender=false`·`trailingSlash='ignore'` — 루트 레이아웃의 prerender=true 상속을 끊는다
+- 검사 테스트는 `phaser/tests/upload-validate.test.ts`로 이동 (phaser 46 테스트)
+- **개발은 `phaser`에서 `npm run dev` 하나** — HMR + API + 로컬 D1(platformProxy가 wrangler.jsonc 바인딩을 에뮬레이트). 별도 wrangler 불필요
+- 배포는 `npm run deploy`(phaser) — adapter가 `.svelte-kit/cloudflare`에 _worker.js+정적자산 생성, `.assetsignore`로 _worker.js를 assets에서 제외
+- wrangler.jsonc·migrations를 `phaser/`로 이동, 저장소 루트의 wrangler.jsonc·package.json 제거
+
+검증: `vite dev` 하나에서 홈·API·랭킹(실데이터) 동작 · 프로덕션 배포 후 사이트+API+D1+404
+전부 정상 · 업로드 201/재업로드 200 · engine 348·phaser 46 테스트·타입검사 0에러.
+
 ## 4. 아키텍처
 
 **정적 사이트와 API를 하나의 Worker로 배포한다** (2026-07-22 사용자 결정).

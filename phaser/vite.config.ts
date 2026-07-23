@@ -43,17 +43,7 @@ export default defineConfig({
   server: {
     port: 5199,
     fs: { allow: ['..'] }, // ../engine/src를 읽는다
-    // ── 개발 방식 두 가지 ──
-    //  ① 통합(권장): 루트에서 `npm run dev` → wrangler dev 하나가 localhost:8787에서
-    //     사이트+API를 함께 서빙한다(프로덕션과 동일, build 산출물 서빙이라 HMR 없음).
-    //  ② UI HMR: 이 vite dev(5199) + 루트에서 `npm run dev:api`(wrangler, 8787).
-    //     vite는 API Worker를 모르므로 아래 프록시가 /api를 8787로 넘긴다.
-    //     사이트 코드는 즉시 반영되지만 API용 wrangler를 함께 띄워야 한다.
-    proxy: {
-      '/api': {
-        target: 'http://127.0.0.1:8787',
-        changeOrigin: true,
-      },
-    },
+    // API(+server.ts)도 adapter-cloudflare가 vite dev 안에서 함께 실행하므로
+    // 프록시가 필요 없다 — `npm run dev` 하나로 HMR + API + 로컬 D1이 돈다.
   },
 });
