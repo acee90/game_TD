@@ -1,0 +1,56 @@
+/* ───────── Tailwind 4 + daisyUI (사이트 셸 전용) ─────────
+   이 파일은 (site) 그룹 레이아웃에서만 import한다 — /game·/dev/*는 자체 전역 CSS를
+   갖는 별도 세계라 여기에 딸려오면 안 된다 (data-sveltekit-reload 경계로 격리).
+
+   테마는 기존 중세 판타지 팔레트(site.css의 --gold·--panel 등)를 daisyUI 색 변수로
+   옮긴 것이다 — 색감은 그대로 두고 컴포넌트 시스템만 얹는다. */
+
+@import 'tailwindcss';
+
+/* 기본 테마들은 끄고 우리 테마만 쓴다 — 톤 일관성 */
+@plugin "daisyui" {
+  themes: false;
+}
+
+@plugin "daisyui/theme" {
+  name: 'gattadi';
+  default: true;
+  prefersdark: true;
+  color-scheme: dark;
+
+  /* 바탕 — bg / panel / panel2 */
+  --color-base-100: #15110c;
+  --color-base-200: #241d14;
+  --color-base-300: #31271a;
+  --color-base-content: #ece2cb;
+
+  /* 강조 = 금색 */
+  --color-primary: #e3b23e;
+  --color-primary-content: #1c1508;
+
+  /* 병과색을 보조 색으로 매핑 — 차트·배지에서 재사용한다
+     정규군 강철 · 포병 청동 · 마법대 자수정 · 소환대 이끼 */
+  --color-secondary: #6d86ab;
+  --color-secondary-content: #0d0a06;
+  --color-accent: #9a6ea6;
+  --color-accent-content: #0d0a06;
+
+  --color-neutral: #4d3d28;
+  --color-neutral-content: #ece2cb;
+
+  --color-info: #6d86ab;
+  --color-success: #8a9a5b;
+  --color-warning: #bf7a3a;
+  --color-error: #c14a2c;
+  --color-info-content: #0d0a06;
+  --color-success-content: #0d0a06;
+  --color-warning-content: #0d0a06;
+  --color-error-content: #ffffff;
+
+  --radius-selector: 0.5rem;
+  --radius-field: 0.5rem;
+  --radius-box: 0.75rem;
+  --border: 1px;
+  --depth: 0;
+  --noise: 0;
+}

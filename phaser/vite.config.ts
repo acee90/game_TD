@@ -1,3 +1,4 @@
+import tailwindcss from '@tailwindcss/vite';
 import { sveltekit } from '@sveltejs/kit/vite';
 import { defineConfig } from 'vite';
 import { execFileSync } from 'node:child_process';
@@ -34,7 +35,8 @@ const buildInfo = {
 } as const;
 
 export default defineConfig({
-  plugins: [sveltekit()],
+  // tailwindcss는 sveltekit보다 앞에 둔다 (daisyUI 스타일이 사이트 셸에만 실린다)
+  plugins: [tailwindcss(), sveltekit()],
   define: {
     __GAME_BUILD_INFO__: JSON.stringify(buildInfo),
   },

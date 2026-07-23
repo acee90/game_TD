@@ -3,7 +3,8 @@
   import type { Snippet } from 'svelte';
   import { page } from '$app/state';
   import { base } from '$app/paths';
-  import './site.css';
+  import './app.css'; // Tailwind preflight + daisyUI 테마 (먼저)
+  import './site.css'; // 기존 커스텀 스타일 (preflight 위에 덮는다)
 
   let { children }: { children: Snippet } = $props();
 

@@ -44,7 +44,10 @@ export interface RunSummaryLike {
   bossCleared?: number;
   elapsedSeconds?: number;
   upgrades?: readonly number[];
-  towers?: readonly { tower: { name: string; tier: number; raceName: string }; count: number }[];
+  towers?: readonly {
+    tower: { name: string; tier: number; race: number; raceName: string };
+    count: number;
+  }[];
   augments?: readonly { augment: { name: string; rarity: string }; round: number }[];
 }
 
