@@ -631,7 +631,7 @@ describe('맵 — 십자 일주', () => {
   const CORNER_COUNT = 4 * CORNER_OFFSETS.length;
 
   // 41 → 29 (2026-07-21, 사용자 지시): 모서리를 3×2(6칸)에서 L자 3칸으로 줄였다.
-  // 보드가 넓으면 '수로 밀어붙이기'가 조합·티어보다 쉬워져 중반이 물러진다.
+  // 29 → 48 → 29 (2026-07-24, 사용자 지시): 십자 2칸 폭(36칸) 실험 후 1칸으로 롤백.
   test('타워 타일은 십자 17 + 모서리 12 = 29개', () => {
     expect(CROSS_COUNT).toBe(17);
     expect(CORNER_COUNT).toBe(12);
@@ -649,8 +649,9 @@ describe('맵 — 십자 일주', () => {
     };
     const corners = SLOT_POS.slice(CROSS_COUNT);
     expect(corners).toHaveLength(12);
-    // 6칸이던 시절 바깥 대각 2칸은 거리 74였다 — 그것들이 빠졌는지 확인
-    for (const [x, y] of corners) expect(distToPath(x, y)).toBeLessThan(50);
+    // L자 3칸은 경로 가까운 것들 — 바깥 대각(먼 칸)이 빠졌는지 확인.
+    // 길 2칸 확장(2026-07-24)으로 CLEARANCE=54라 최근접 54px, L자 팔 끝은 90px.
+    for (const [x, y] of corners) expect(distToPath(x, y)).toBeLessThan(95);
   });
 
   test('모서리 타일은 경로와 겹치지 않는다', () => {

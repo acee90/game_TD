@@ -21,25 +21,47 @@ export const CENTER: Pt = [210, 250];
 export const ARM_TILES = 4;
 
 const HALF = TILE / 2;
-const REACH = TILE * ARM_TILES + HALF; // 중심에서 가지 끝 바깥면까지
 
-/** 십자 지형 사각형 두 개 (세로 바 / 가로 바) */
+/**
+ * 십자 반폭 = 반 칸(십자 폭 1칸).
+ * 1칸 → 2칸 → **1칸 롤백** (2026-07-24, 사용자 지시).
+ * 2칸 실험은 그리드를 반칸 옮겨(제단 2×2) 슬롯 36칸이 됐는데, 슬롯 수가 너무 늘고
+ * 중앙 블록이 비대해져 되돌렸다. 타워 셀은 정수 격자 `CENTER + TILE·n`, 제단은 중앙 1칸.
+ * (길 2칸 확장은 유지 — OFFSET/WALKABLE_HALF_WIDTH 주석 참조.)
+ */
+const CROSS_HALF = HALF;
+const REACH = TILE * ARM_TILES + CROSS_HALF; // 중심 칸 반높이 + 가지 ARM_TILES칸
+
+/** 십자 지형 사각형 두 개 (세로 바 / 가로 바) — 폭 2·CROSS_HALF = 1칸 */
 export const CROSS_BARS = [
-  { x: CENTER[0] - HALF, y: CENTER[1] - REACH, w: TILE, h: REACH * 2 },
-  { x: CENTER[0] - REACH, y: CENTER[1] - HALF, w: REACH * 2, h: TILE },
+  { x: CENTER[0] - CROSS_HALF, y: CENTER[1] - REACH, w: CROSS_HALF * 2, h: REACH * 2 },
+  { x: CENTER[0] - REACH, y: CENTER[1] - CROSS_HALF, w: REACH * 2, h: CROSS_HALF * 2 },
 ] as const;
 
-/** 경로가 십자 바깥면에서 떨어진 거리 */
-const OFFSET = 20;
+/**
+ * 경로 중심선이 십자 중심축에서 떨어진 거리 = HALF + OFFSET.
+ * 20 → HALF(18) (2026-07-24, 타워·길 격자 정렬): 8개 경로선이 타워 격자 "한 칸 바깥"
+ *   셀 중심(CENTER ± TILE·n)에 떨어져 타워·길이 하나의 36px 격자로 통일됐다.
+ * HALF(18) → TILE(36) (2026-07-24, 길 2칸 확장, 사용자 지시): 통로가 1칸이라 좁았다.
+ *   OFFSET === WALKABLE_HALF_WIDTH 불변식을 유지하면(둘 다 TILE) 통로 안쪽 변은 여전히
+ *   십자면에 밀착하고(CENTER±HALF) 폭만 2칸(72px)이 된다. 바깥 변(CENTER±90=2.5·TILE)이
+ *   코너 셀 안쪽 면(CENTER±108=3·TILE 셀의 −HALF)과 정확히 맞물려 격자 정합은 유지된다.
+ *   맵 반지름 = REACH+OFFSET+폭절반 = 162+36+36 = 234 (렌더 카메라만 조정).
+ *   공간 밸런스(타워 길 커버리지)는 바뀌므로 sim으로 검산한다.
+ */
+const OFFSET = TILE;
 
-const barL = CENTER[0] - HALF - OFFSET; // 172
-const barR = CENTER[0] + HALF + OFFSET; // 248
-const barT = CENTER[1] - REACH - OFFSET; // 68
-const barB = CENTER[1] + REACH + OFFSET; // 432
-const armT = CENTER[1] - HALF - OFFSET; // 212
-const armB = CENTER[1] + HALF + OFFSET; // 288
-const armL = CENTER[0] - REACH - OFFSET; // 28
-const armR = CENTER[0] + REACH + OFFSET; // 392
+// 아래 8개 = 2칸 통로의 중심선. 세로/가로바는 중심축에서 CROSS_HALF+OFFSET=1.5·TILE,
+// 가지 끝은 REACH+OFFSET. 통로 폭 ±TILE라 안쪽 변은 십자면(CENTER±CROSS_HALF)에 밀착,
+// 통로가 정수 격자 두 칸(CENTER−90..−18 = 셀 −2,−1)을 정확히 덮는다.
+const barL = CENTER[0] - CROSS_HALF - OFFSET; // 156 = CENTER−1.5·TILE (세로바 왼쪽 통로 중심선)
+const barR = CENTER[0] + CROSS_HALF + OFFSET; // 264 = CENTER+1.5·TILE
+const barT = CENTER[1] - REACH - OFFSET; // 52  = CENTER−5.5·TILE (위 가지 끝 통로 중심선)
+const barB = CENTER[1] + REACH + OFFSET; // 448 = CENTER+5.5·TILE
+const armT = CENTER[1] - CROSS_HALF - OFFSET; // 196 = CENTER−1.5·TILE (가로바 위 통로 중심선)
+const armB = CENTER[1] + CROSS_HALF + OFFSET; // 304 = CENTER+1.5·TILE
+const armL = CENTER[0] - REACH - OFFSET; // 12  = CENTER−5.5·TILE (왼 가지 끝 통로 중심선)
+const armR = CENTER[0] + REACH + OFFSET; // 408 = CENTER+5.5·TILE
 
 /**
  * 십자 타일 17개 — 중앙 1 + 가지별 4.
@@ -75,10 +97,15 @@ export const CORNER_OFFSETS: readonly (readonly [col: number, row: number])[] = 
  * 영웅 이동과 몹 횡오프셋(겹침 분리)이 모두 이 폭을 쓴다.
  * 12 → 20 (2026-07-19, 사용자 지시): 몹 겹침 분리를 넣으면서 몹끼리 길을 완전히
  * 막지 않도록 길을 ~1.7배 넓혔다. 몹(반지름 9) 기준 2~3열이 나란히 지나간다.
+ * 20 → HALF(18) (2026-07-24, 격자 정렬): 길 폭 = 정확히 한 칸.
+ * HALF(18) → TILE(36) (2026-07-24, 길 2칸 확장, 사용자 지시): 폭 = 2칸(72px).
+ *   OFFSET과 반드시 같아야 통로 안쪽 변이 십자면에 밀착한다(위 OFFSET 주석 참조).
+ *   CLEARANCE = TILE + HALF = 54라 코너 셀이 CENTER±3·TILE 격자에 정렬된다.
+ *   영웅은 좌우 2칸 여유, 몹은 겹칠 때 더 넓게 벌어진다.
  */
-export const WALKABLE_HALF_WIDTH = 20;
+export const WALKABLE_HALF_WIDTH = TILE;
 
-/** 보행 반폭 + 타일 절반 — 이만큼은 경로 중심선에서 떨어져야 겹치지 않는다 */
+/** 보행 반폭 + 타일 절반 = 한 칸(TILE) — 경로 중심선에서 이만큼 떨어지면 격자 한 칸 바깥이다 */
 const CLEARANCE = WALKABLE_HALF_WIDTH + TILE / 2;
 
 const cornerBlock = (originX: number, originY: number, dx: number, dy: number): Pt[] =>
@@ -87,10 +114,10 @@ const cornerBlock = (originX: number, originY: number, dx: number, dy: number): 
   );
 
 // 네 모서리의 안쪽 한계 — 십자 세로바/가로바를 감싸는 경로선에서 CLEARANCE만큼 물러난 지점
-const innerLeft = CENTER[0] - HALF - OFFSET - CLEARANCE;
-const innerRight = CENTER[0] + HALF + OFFSET + CLEARANCE;
-const innerTop = CENTER[1] - HALF - OFFSET - CLEARANCE;
-const innerBottom = CENTER[1] + HALF + OFFSET + CLEARANCE;
+const innerLeft = CENTER[0] - CROSS_HALF - OFFSET - CLEARANCE;
+const innerRight = CENTER[0] + CROSS_HALF + OFFSET + CLEARANCE;
+const innerTop = CENTER[1] - CROSS_HALF - OFFSET - CLEARANCE;
+const innerBottom = CENTER[1] + CROSS_HALF + OFFSET + CLEARANCE;
 
 const CORNER_SLOTS: readonly Pt[] = [
   ...cornerBlock(innerLeft, innerTop, -1, -1),

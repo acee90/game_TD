@@ -29,11 +29,11 @@ describe('projectToPath — 클릭 좌표 분해', () => {
   });
 
   test('직선 구간 가장자리 클릭 — 실제 목적지 오차 1px 이하 (보행 폭 안)', () => {
-    // 좌측 세로 구간 (172,68)→(172,212)의 안쪽: x로 ±8 비껴 클릭
+    // 좌측 세로 구간 (156,52)→(156,196)의 안쪽: x로 ±22 비껴 클릭(보행 반폭 36 안, 코너서 멀리)
     for (const [cx, cy] of [
-      [180, 100],
-      [164, 100],
-      [180, 180],
+      [178, 100],
+      [134, 110],
+      [178, 140],
     ] as const) {
       const p = projectToPath(cx, cy);
       expect(Math.hypot(p.x - cx, p.y - cy)).toBeLessThanOrEqual(1);
@@ -51,15 +51,16 @@ describe('projectToPath — 클릭 좌표 분해', () => {
   test('FIXTURE — Unity Core 미러와 비교하는 기준값', () => {
     // (입력 x, y) → (distance, lateral) — M3에서 C# ProjectToPath가 같은 값을 내야 한다
     const fixture = [
-      { in: [180, 100], out: projectToPath(180, 100) },
+      { in: [178, 100], out: projectToPath(178, 100) },
       { in: [40, 250], out: projectToPath(40, 250) },
       { in: [248, 432], out: projectToPath(248, 432) },
       { in: [CENTER[0], CENTER[1]], out: projectToPath(CENTER[0], CENTER[1]) },
     ];
     // 스냅샷 대신 자기서술 — 회귀가 생기면 여기가 깨진다.
-    // (180,100)은 좌측 세로 구간: 입구 40 + (100−68) = 진행도 72, 좌법선 기준 −8.
-    expect(fixture[0].out.distance).toBeCloseTo(72, 0);
-    expect(fixture[0].out.lateral).toBeCloseTo(-8, 5);
+    // (178,100)은 좌측 세로 통로(중심선 x=156): 입구 40 + (100−52) = 진행도 88,
+    // 중심선에서 오른쪽 22px이므로 좌법선 기준 −22.
+    expect(fixture[0].out.distance).toBeCloseTo(88, 0);
+    expect(fixture[0].out.lateral).toBeCloseTo(-22, 5);
     expect(Math.abs(fixture[3].out.lateral)).toBeLessThanOrEqual(WALKABLE_HALF_WIDTH);
   });
 });
@@ -87,7 +88,7 @@ describe('영웅 이동 — 2D 속도 예산과 연속성', () => {
     const hero = mkHero();
     const dt = 1 / 60;
     const speed = hero.stats.moveSpeed;
-    // 내부 코너 하나(웨이포인트 2번 = (172,212))를 사이에 둔 두 지점
+    // 내부 코너 하나(웨이포인트 2번 = (156,196))를 사이에 둔 두 지점
     hero.distance = nearestPathDistance(172, 190);
     hero.lateral = WALKABLE_HALF_WIDTH;
     hero.moveTo(150, 212 + 20); // 코너 너머, 가장자리
