@@ -221,11 +221,6 @@ export function makeTextures(scene: Phaser.Scene): void {
     makeCanvasTexture(scene, `boss${frame}`, 36, 36, (px) => drawBoss(px, frame));
   }
 
-  // 영웅 — 숨쉬기 2프레임
-  for (const frame of [0, 1]) {
-    makeCanvasTexture(scene, `hero${frame}`, 24, 28, (px) => drawHero(px, frame));
-  }
-
   // 타워 — 28×28: 돌단 받침 + 벽돌 몸체 + 성가퀴 포탑 (틴트로 종족색)
   makeCanvasTexture(scene, 'tower', 28, 28, (px) => {
     px(5, 22, 18, 1, S2);
@@ -298,7 +293,22 @@ export function makeAnims(scene: Phaser.Scene): void {
   };
   loop('mob-walk', 'mob', 4, 12); // 사이클 3회/초 — 초기판 2프레임 6fps와 같은 보속
   loop('boss-walk', 'boss', 4, 8); // 보스는 묵직하게
-  loop('hero-idle', 'hero', 2, 2); // 숨쉬기
+  if (!scene.anims.exists('hero-knight-idle')) {
+    scene.anims.create({
+      key: 'hero-knight-idle',
+      frames: scene.anims.generateFrameNumbers('hero-knight-idle', { start: 0, end: 5 }),
+      frameRate: 7,
+      repeat: -1,
+    });
+  }
+  if (!scene.anims.exists('hero-knight-attack')) {
+    scene.anims.create({
+      key: 'hero-knight-attack',
+      frames: scene.anims.generateFrameNumbers('hero-knight-attack1', { start: 0, end: 7 }),
+      frameRate: 16,
+      repeat: 0,
+    });
+  }
 }
 
 /** '#rrggbb' → Phaser tint 정수 */
