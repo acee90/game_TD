@@ -276,7 +276,8 @@ export class BattleScene extends Phaser.Scene {
    */
   private drawBoard(): void {
     // 맵을 엔진 월드 좌표계로 축소·배치한다 — 엔진 수치·클릭 판정은 그대로다.
-    createTiledMap(this, { inEngineSpace: true, depthBase: DEPTH.terrain });
+    // 틴트: 지형이 유닛·VFX보다 밝아 묻힌다는 지적(2026-07-24)으로 한 단계 눌렀다.
+    createTiledMap(this, { inEngineSpace: true, depthBase: DEPTH.terrain, tint: 0xa8a8a8 });
 
     const g = this.add.graphics().setDepth(DEPTH.board);
 

@@ -57,10 +57,12 @@ export interface TiledMapView {
  * @param inEngineSpace true면 레이어를 엔진 월드 좌표계에 맞춰 축소·배치한다(실게임).
  *   false면 맵 픽셀 그대로 둔다(검수실 — 타일이 원본 32px로 보인다).
  * @param depthBase 첫 레이어의 depth. 이후 레이어는 +1씩.
+ * @param tint 지형 전체에 곱해지는 틴트(어둡게). 실게임은 유닛·VFX가 지형에 묻히지 않게
+ *   한 단계 눌러 쓴다 — 검수실은 원본 밝기 그대로(생략).
  */
 export function createTiledMap(
   scene: Phaser.Scene,
-  { inEngineSpace = false, depthBase = 0 } = {},
+  { inEngineSpace = false, depthBase = 0, tint }: { inEngineSpace?: boolean; depthBase?: number; tint?: number } = {},
 ): TiledMapView {
   const map = scene.make.tilemap({ key: TILEMAP_KEY });
   // 시트를 전부 등록하고 레이어마다 전부 넘긴다 — Tiled에서 한 레이어가 여러 시트를
@@ -82,6 +84,7 @@ export function createTiledMap(
     if (!layer) return;
     layer.setDepth(depthBase + i);
     if (inEngineSpace) layer.setScale(s).setPosition(ox, oy);
+    if (tint !== undefined) layer.setTint(tint);
     layers.push(layer);
   });
 
