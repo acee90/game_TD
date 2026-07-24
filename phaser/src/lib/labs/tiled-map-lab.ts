@@ -138,7 +138,7 @@ export function createTiledMapLab(
     type: Phaser.AUTO,
     parent,
     width: 1280,
-    height: 832, // 맵 크기와 동일 (40×26 타일 × 32px)
+    height: 928, // 맵 크기와 동일 (40×29 타일 × 32px)
     pixelArt: true,
     roundPixels: true,
     backgroundColor: '#1c2026',

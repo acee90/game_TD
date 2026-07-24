@@ -7,19 +7,21 @@
 //
 // ── 좌표계 ──
 //  엔진(@engine/core/map)은 TILE=36px 논리 격자. 맵은 32px 타일 2장이 논리 1칸(64px)이다.
-//  따라서 맵 픽셀 = 엔진 픽셀 × 64/36, 그리고 엔진 CENTER(210,250)가 맵 (640,352)에 온다.
+//  따라서 맵 픽셀 = 엔진 픽셀 × 64/36, 그리고 엔진 CENTER(210,250)가 맵 (640,448)에 온다.
 //
 //  [검증] ORIGIN은 눈대중이 아니다 — 엔진 십자(CROSS_BARS) 68칸을 이 식으로 변환했을 때
 //  .tmx의 'L2-잔디'(고지대)와 어긋나는 칸이 0이 되는 값이다. 32px씩 옮겨보면 바로 깨진다
-//  (±1타일에서 2칸, ±2타일에서 18칸 어긋남). **맵을 위아래로 자르거나 늘리면 여기도 고쳐야 한다.**
-//  (2026-07-24 상단 4행 삭제로 맵 30행→26행, ORIGIN y 480→352.)
+//  (±1타일에서 2칸, ±2타일에서 18칸 어긋남). **맵을 위아래로 자르거나 늘리면 여기도 고쳐야 한다** —
+//  tools/map/check-map-coverage.py가 이 값을 읽어 검증하니 그걸 돌려 재확정할 것.
+//  (이력: 40×30 y=480 → 상단 4행 삭제로 40×26 y=352 → 상단 3행 복원으로 40×29 y=448.
+//   입·출구 통로가 카메라 상단(월드 y0)까지 이어지려면 이 3행이 필요했다.)
 
 import type Phaser from 'phaser';
 
 /** 논리 1칸(엔진 TILE=36) = 맵 타일 2장(64px) */
 export const MAP_SCALE = 64 / 36;
 /** 엔진 CENTER(210,250)가 놓이는 맵 픽셀 좌표 */
-export const MAP_ORIGIN: readonly [number, number] = [640, 352];
+export const MAP_ORIGIN: readonly [number, number] = [640, 448];
 /** 엔진 CENTER 상수 사본 — MAP_ORIGIN이 대응하는 엔진 좌표 */
 const ENGINE_CENTER: readonly [number, number] = [210, 250];
 
