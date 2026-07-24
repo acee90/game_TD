@@ -38,7 +38,8 @@
       out.push({
         key: String(i),
         left: (slot.x / WORLD_W) * 100,
-        top: (slot.y / WORLD_H) * 100,
+        // +12 = 발밑 티어 원판 중심(BattleScene의 disc y 오프셋과 짝) — 숫자가 원판 위에 앉는다
+        top: ((slot.y + 12) / WORLD_H) * 100,
         text: god ? 'G' : String(tower.tier + 1),
         god,
       });
@@ -65,11 +66,10 @@
 
   .tower-badge {
     position: absolute;
-    /* 머리 위 → 몸 하단 반투명 겹침 (2026-07-24, 유닛 스케일업과 세트):
-       머리 위 배지가 유닛 크기를 제약해서, 숫자를 다리 쪽에 겹쳐 그리고
-       유닛을 키웠다. -20% = 텍스트 중심이 슬롯 중심 약간 아래(하반신) —
-       얼굴·상체는 가리지 않는다. */
-    transform: translate(-50%, -20%);
+    /* 발밑 원판 정중앙 정렬 (2026-07-24, 티어 원판과 세트): top이 이미 원판 중심
+       (slot.y+12)을 가리키므로 -50%로 그 점에 숫자를 앉힌다. pip(개수)은 캔버스
+       원판이, 정확한 숫자는 이 배지가 맡는다 — 유닛 몸통은 안 가린다. */
+    transform: translate(-50%, -50%);
     display: flex;
     align-items: center;
     justify-content: center;

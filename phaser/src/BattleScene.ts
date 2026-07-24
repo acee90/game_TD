@@ -38,6 +38,8 @@ const DEPTH = {
 // 그린다 — 캔버스가 CSS로 축소돼도 clamp() 최소 폰트로 가독성을 지킨다 (2026-07-23 결정).
 interface TowerView {
   img: Phaser.GameObjects.Image | Phaser.GameObjects.Sprite;
+  /** 발밑 티어 원판 — 티어만큼 pip, GOD은 금빛 링. 숫자는 DOM 배지(TowerBadges) 담당 */
+  disc: Phaser.GameObjects.Image;
   key: string;
   /** 외부 캐릭터 시트의 키. 없으면 기존 프로시저럴 타워다. */
   characterKey: CharacterAsset | null;
@@ -143,9 +145,16 @@ export class BattleScene extends Phaser.Scene {
 
     // 타워 뷰 — 슬롯 수만큼 미리 만들어 두고 상태에 맞춰 보이기만 바꾼다.
     // 티어 숫자 라벨은 여기서 그리지 않는다 — DOM 오버레이(TowerBadges)가 맡는다.
+    this.makeTierDiscTextures();
     for (const slot of this.game_.slots) {
       const img = this.add.image(slot.x, slot.y, 'tower').setDepth(DEPTH.tower).setVisible(false);
-      this.towers.push({ img, key: '', characterKey: null, releaseFrame: 0, pendingShots: [] });
+      // 발밑 원판 — 유닛보다 아래(depth), 발치(y+12)에 깔린다. 텍스처는 2배 해상도.
+      const disc = this.add
+        .image(slot.x, slot.y + 12, 'tier-disc-0')
+        .setScale(0.5)
+        .setDepth(DEPTH.tower - 1)
+        .setVisible(false);
+      this.towers.push({ img, disc, key: '', characterKey: null, releaseFrame: 0, pendingShots: [] });
     }
 
     // 초기 0.5배 기준의 1.5배 크기. 직전 2배(1.0)는 보드에서 지나치게 컸다.
@@ -210,6 +219,51 @@ export class BattleScene extends Phaser.Scene {
       if (hit.tower) game.selected = hit;
       else game.spawnUnit(hit);
     });
+  }
+
+  /**
+   * 발밑 티어 원판 텍스처 — 'tier-disc-0..3'(pip 1~4개) + 'tier-disc-god'(금빛 링).
+   *
+   * 티어를 숫자가 아니라 **형태**(pip 개수)로 부호화한다: 월드 텍스트 숫자는 캔버스가
+   * CSS로 축소되면 안 읽혀서 DOM 배지로 옮긴 이력이 있고(2026-07-23), 바닥 숫자도 같은
+   * 함정이다. pip은 축소돼도 개수가 읽힌다. 정확한 숫자는 여전히 TowerBadges(DOM)가 맡는다.
+   * 색은 쓰지 않는다 — RACE_COLOR가 이미 종족을 말하고 있어 티어까지 색이면 충돌한다.
+   * pip은 앞쪽 호(아래 반원)에만 — 유닛 뒤로 숨지 않는 자리다. 텍스처는 2배 해상도.
+   */
+  private makeTierDiscTextures(): void {
+    const W2 = 76; // 2x: 월드 38×20
+    const H2 = 40;
+    const cx = W2 / 2;
+    const cy = H2 / 2;
+    const rx = 34;
+    const ry = 15;
+    for (let tier = 0; tier <= GOD_TIER; tier++) {
+      const god = tier === GOD_TIER;
+      const g = this.add.graphics();
+      g.fillStyle(0x000000, god ? 0.34 : 0.28);
+      g.fillEllipse(cx, cy, rx * 2, ry * 2);
+      g.lineStyle(2, god ? 0xffdf7a : 0x3a2f1e, god ? 0.9 : 0.65);
+      g.strokeEllipse(cx, cy, rx * 2, ry * 2);
+      if (god) {
+        // GOD — 이중 링 (pip 대신 격을 형태로)
+        g.lineStyle(2, 0xffdf7a, 0.5);
+        g.strokeEllipse(cx, cy, rx * 2 - 8, ry * 2 - 6);
+      } else {
+        // pip = tier+1개, 앞쪽 호(45°~135°)에 균등 배치
+        const n = tier + 1;
+        for (let k = 0; k < n; k++) {
+          const a = ((n === 1 ? 90 : 55 + (70 * k) / (n - 1)) * Math.PI) / 180;
+          const px = cx + (rx - 3) * Math.cos(a);
+          const py = cy + (ry - 1) * Math.sin(a);
+          g.fillStyle(0x0d0a06, 0.9);
+          g.fillCircle(px, py, 4.5);
+          g.fillStyle(0xf0d392, 1);
+          g.fillCircle(px, py, 3);
+        }
+      }
+      g.generateTexture(god ? 'tier-disc-god' : `tier-disc-${tier}`, W2, H2);
+      g.destroy();
+    }
   }
 
   /**
@@ -279,6 +333,7 @@ export class BattleScene extends Phaser.Scene {
       const tower = slot.tower;
       if (!tower || slot === this.game_.altarSlot) {
         view.img.setVisible(false);
+        view.disc.setVisible(false);
         view.key = '';
         view.characterKey = null;
         view.pendingShots.length = 0; // 빈 슬롯 — 대기 발사도 폐기
@@ -287,6 +342,10 @@ export class BattleScene extends Phaser.Scene {
       const god = tower.tier === GOD_TIER;
       const characterKey = characterAssetForTower(tower.def.id);
       const key = characterKey ?? `${tower.def.race}:${tower.tier}`;
+      // 발밑 원판 — key와 별개로 갱신한다 (캐릭터 타워는 key에 티어가 없다)
+      const discKey = god ? 'tier-disc-god' : `tier-disc-${tower.tier}`;
+      if (view.disc.texture.key !== discKey) view.disc.setTexture(discKey);
+      view.disc.setVisible(true);
       if (view.key !== key) {
         view.key = key;
         view.characterKey = characterKey;
@@ -306,11 +365,10 @@ export class BattleScene extends Phaser.Scene {
           actor
             .setTexture(characterKey, 0)
             .clearTint()
-            // 0.5 → 1 (2026-07-24, 유닛이 작다는 사용자 지적): 시트 원본 도트가 몸체
-            // ~20px라 0.5에선 타일(36px) 위에 ~10px로 보였다. zoom 2 기준 텍셀=2화면px
-            // 정수 배율이라 도트도 깨지지 않는다. 티어 배지는 머리 위 → 몸 하단 반투명
-            // 겹침으로 옮겨(TowerBadges.svelte) 머리 위 공간 제약을 없앴다.
-            .setScale(1)
+            // 1 → 1.5 (2026-07-24, 오블리크 뷰라 그리드 밖으로 튀어나와도 된다는 사용자
+            // 지시): 몸체 ~30px로 슬롯(36px)을 꽉 채운다. zoom 2 기준 텍셀=3화면px —
+            // 정수 배율이라 도트가 깨지지 않는다 (1.25 같은 반정수는 뭉개진다).
+            .setScale(1.5)
             .setVisible(true)
             .play(`${characterKey}-idle`, true);
         } else {
@@ -321,7 +379,7 @@ export class BattleScene extends Phaser.Scene {
           view.img
             .setTexture(god ? 'towerGod' : 'tower')
             .setTint(tint(RACE_COLOR[tower.def.race]))
-            .setScale((god ? 1.2 : 1 + tower.tier * 0.14) / 2) // 텍스처가 2배 해상도라 절반이 기준
+            .setScale((god ? 1.2 : 1 + tower.tier * 0.14) * 0.75) // 2배 해상도 기준 0.5 × 1.5(캐릭터와 동율 확대)
             .setVisible(true);
         }
         // 배치·티어업 순간의 팝
