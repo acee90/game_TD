@@ -10,6 +10,7 @@
   import { createBrowserRunContext, createBrowserSeed } from '@engine/logging/browser-run';
   import { IndexedDbRunStore } from '@engine/logging/indexed-db-run-store';
   import Hud from './Hud.svelte';
+  import TowerBadges from './TowerBadges.svelte';
   import ActionsColumn from './ActionsColumn.svelte';
   import HeroPanel from './HeroPanel.svelte';
   import MissionsPanel from './MissionsPanel.svelte';
@@ -191,8 +192,12 @@
       <button id="menuBtn" onclick={openMenu}>☰ 메뉴</button>
     </div>
 
-    <!-- Phaser가 이 안에 캔버스를 만든다 (FIT 스케일) -->
-    <div bind:this={host} id="phaserHost" aria-label="십자 일주 맵"></div>
+    <!-- Phaser가 이 안에 캔버스를 만든다 (FIT 스케일). 티어 숫자 배지는 캔버스 밖
+         DOM 오버레이로 얹어 캔버스가 축소돼도 최소 폰트로 읽힌다. -->
+    <div id="boardStage">
+      <div bind:this={host} id="phaserHost" aria-label="십자 일주 맵"></div>
+      <TowerBadges {game} {tick} />
+    </div>
 
     <p id="message">{message}</p>
 
@@ -254,6 +259,11 @@
 {/if}
 
 <style>
+  /* 보드 스테이지 — 캔버스와 티어 배지 오버레이가 정확히 겹치도록 위치 기준을 만든다 */
+  #boardStage {
+    position: relative;
+    width: 100%;
+  }
   #phaserHost {
     width: 100%;
     aspect-ratio: 420 / 470;

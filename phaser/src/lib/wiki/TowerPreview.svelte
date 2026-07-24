@@ -4,7 +4,13 @@
   // reduced-motion이면 멈춘다 (§5).
   import { onMount } from 'svelte';
   import type { TowerWikiView } from './tower-wiki';
-  import type { TowerPreviewScene } from '../../scenes/TowerPreviewScene';
+  import type { PreviewMotion, TowerPreviewScene } from '../../scenes/TowerPreviewScene';
+
+  const MOTIONS: readonly { id: PreviewMotion; label: string }[] = [
+    { id: 'idle', label: '대기' },
+    { id: 'attack1', label: '공격 1' },
+    { id: 'attack2', label: '공격 2' },
+  ];
 
   let { view }: { view: TowerWikiView } = $props();
 
@@ -15,6 +21,7 @@
   let reducedMotion = $state(false);
   let userPaused = $state(false);
   let speed = $state(1);
+  let motion = $state<PreviewMotion>('attack1');
   /** 가시성·탭 상태에 따른 자동 정지 — 사용자 일시정지와 별개로 합산 */
   let autoPaused = false;
 
@@ -33,10 +40,12 @@
       tier: view.tier,
       attackInterval: view.attackInterval,
       splashRadius: view.splashRadius,
+      characterAsset: view.characterAsset,
     });
     phaserGame = created.game;
     scene = created.scene;
     scene.setSpeed(speed);
+    scene.setMotion(motion);
     applyPause();
   }
 
@@ -83,9 +92,22 @@
     }
     scene?.replay();
   }
+
+  function changeMotion(next: PreviewMotion): void {
+    motion = next;
+    scene?.setMotion(next);
+  }
 </script>
 
 <div class="preview">
+  {#if view.characterAsset}
+    <div class="direction-controls" role="group" aria-label="캐릭터 동작 선택">
+      <span>동작</span>
+      {#each MOTIONS as item}
+        <button class:active={motion === item.id} onclick={() => changeMotion(item.id)}>{item.label}</button>
+      {/each}
+    </div>
+  {/if}
   <div class="preview-canvas" bind:this={host} role="img" aria-label="{view.name}의 투사체 비행과 착탄 반복 재생">
     {#if !started}
       <button class="preview-start" onclick={() => void start()}>▶ 프리뷰 재생</button>
@@ -135,6 +157,31 @@
     align-items: center;
     gap: 8px;
     margin-top: 10px;
+  }
+
+  .direction-controls {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    margin-bottom: 8px;
+    color: var(--dim, #9d8c6f);
+    font-size: 12px;
+  }
+
+  .direction-controls button {
+    min-width: 30px;
+    padding: 4px 7px;
+    border-radius: 5px;
+    border: 1px solid var(--line2, #6b5638);
+    background: var(--panel, #241d14);
+    color: var(--text, #ece2cb);
+    cursor: pointer;
+  }
+
+  .direction-controls button.active {
+    background: var(--gold, #e3b23e);
+    color: #1c1508;
+    font-weight: 700;
   }
 
   .preview-controls button {

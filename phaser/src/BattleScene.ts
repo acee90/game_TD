@@ -5,9 +5,9 @@
 
 import Phaser from 'phaser';
 import { Game } from '@engine/game/game';
-import type { Enemy } from '@engine/game/types';
+import type { Enemy, Shot } from '@engine/game/types';
 import {
-  CROSS_BARS, DOOR_IN, DOOR_OUT, NEXUS, TILE, WALKABLE_HALF_WIDTH, WAYPOINTS,
+  CROSS_BARS, DOOR_IN, DOOR_OUT, NEXUS, TILE, WAYPOINTS,
   pathPos, pathPosOffset,
 } from '@engine/core/map';
 import { BOSS_COOLDOWN_SECONDS } from '@engine/data/balance';
@@ -19,15 +19,31 @@ import { ParticlePool, TextPool, UI_FONT, UI_RES } from './fx';
 import { makeAnims, makeGlowTextures, makeTextures, tint } from './sprites';
 import { ProjectileFxController } from './projectile-fx';
 import { PreviewBot } from './bot';
+import {
+  ATTACK_RELEASE_FRAME, BATTLE_CHARACTER_ASSETS, characterAssetForTower, type CharacterAsset,
+} from './character-assets';
 
-const PATH_WIDTH = (WALKABLE_HALF_WIDTH + 10) * 2;
+// 길 렌더 폭 = 정확히 한 칸(TILE). 격자 정렬(2026-07-24) 후 길이 옆 모서리 셀로 삐져나오지 않게
+// 한 칸 안에 가둔다. (기존 (WALKABLE+10)*2=56은 한 칸보다 넓어 모서리 슬롯과 겹쳐 보였다)
+const PATH_WIDTH = TILE;
 
 const DEPTH = {
   board: 0, zone: 2, tower: 4, enemy: 6, hero: 8, decoy: 7,
   shot: 10, particle: 12, overlay: 14, text: 16, hud: 20,
 };
 
-interface TowerView { img: Phaser.GameObjects.Image; label: Phaser.GameObjects.Text; key: string }
+// 티어 숫자는 Phaser 월드 텍스트가 아니라 캔버스 밖 DOM 오버레이(TowerBadges.svelte)가
+// 그린다 — 캔버스가 CSS로 축소돼도 clamp() 최소 폰트로 가독성을 지킨다 (2026-07-23 결정).
+interface TowerView {
+  img: Phaser.GameObjects.Image | Phaser.GameObjects.Sprite;
+  key: string;
+  /** 외부 캐릭터 시트의 키. 없으면 기존 프로시저럴 타워다. */
+  characterKey: CharacterAsset | null;
+  /** 공격 시트에서 투사체가 떠나는 프레임 (0-based) — 캐릭터 타워만 유효 */
+  releaseFrame: number;
+  /** 발사 프레임까지 대기 중인 발사 — 스윙 정점에서 한꺼번에 투사체로 나간다 */
+  pendingShots: Shot[];
+}
 
 /** 씬 바깥(Svelte HUD)과 공유하는 의존성 */
 export interface SceneDeps {
@@ -86,6 +102,12 @@ export class BattleScene extends Phaser.Scene {
     for (const frame of [0, 1, 2, 3]) {
       this.load.image(`boss${frame}`, 'assets/sprites/boss-dragon.png');
     }
+    for (const key of BATTLE_CHARACTER_ASSETS) {
+      this.load.spritesheet(key, `assets/sprites/${key}.png`, {
+        frameWidth: 96,
+        frameHeight: 96,
+      });
+    }
     ProjectileFxController.preload(this); // 화살 본체 + 포병 착탄 플립북
     // SparkSet 파티클 팩 — 감속 눈꽃만 채택 (별·섬광은 기존 톤과 안 맞아 반려, 2026-07-22)
     this.load.image('fx-snow', 'assets/fx/snow.png');
@@ -95,6 +117,10 @@ export class BattleScene extends Phaser.Scene {
     makeTextures(this);
     makeGlowTextures(this); // HD-2D 이펙트 — 월드는 NEAREST, 글로우는 LINEAR
     makeAnims(this);
+
+    for (const key of BATTLE_CHARACTER_ASSETS) {
+      this.createCharacterAnimations(key);
+    }
 
     // 승인된 후보 04 — 포병 착탄에만 쓰는 3D 볼류메트릭 플립북 (공용 컨트롤러가 등록)
     ProjectileFxController.createAnimations(this);
@@ -112,16 +138,11 @@ export class BattleScene extends Phaser.Scene {
     this.drawBoard();
     this.overlay = this.add.graphics().setDepth(DEPTH.overlay);
 
-    // 타워 뷰 — 슬롯 수만큼 미리 만들어 두고 상태에 맞춰 보이기만 바꾼다
+    // 타워 뷰 — 슬롯 수만큼 미리 만들어 두고 상태에 맞춰 보이기만 바꾼다.
+    // 티어 숫자 라벨은 여기서 그리지 않는다 — DOM 오버레이(TowerBadges)가 맡는다.
     for (const slot of this.game_.slots) {
       const img = this.add.image(slot.x, slot.y, 'tower').setDepth(DEPTH.tower).setVisible(false);
-      const label = this.add
-        .text(slot.x, slot.y + 1, '', { fontFamily: UI_FONT, fontStyle: 'bold', fontSize: 8, color: '#1a130a' })
-        .setOrigin(0.5)
-        .setDepth(DEPTH.tower + 1)
-        .setResolution(UI_RES)
-        .setVisible(false);
-      this.towers.push({ img, label, key: '' });
+      this.towers.push({ img, key: '', characterKey: null, releaseFrame: 0, pendingShots: [] });
     }
 
     // 초기 0.5배 기준의 1.5배 크기. 직전 2배(1.0)는 보드에서 지나치게 컸다.
@@ -198,8 +219,8 @@ export class BattleScene extends Phaser.Scene {
       for (let i = 1; i < WAYPOINTS.length; i++) g.lineTo(WAYPOINTS[i][0], WAYPOINTS[i][1]);
       g.strokePath();
     };
-    stroke(PATH_WIDTH + 4, 0x46392a);
-    stroke(PATH_WIDTH, 0x241c12);
+    stroke(PATH_WIDTH, 0x46392a); // 한 칸 안에 테두리
+    stroke(PATH_WIDTH - 4, 0x241c12); // 그 안쪽이 길 본체
 
     for (const bar of CROSS_BARS) {
       g.fillStyle(0x211a12, 1);
@@ -260,26 +281,92 @@ export class BattleScene extends Phaser.Scene {
       const tower = slot.tower;
       if (!tower || slot === this.game_.altarSlot) {
         view.img.setVisible(false);
-        view.label.setVisible(false);
         view.key = '';
+        view.characterKey = null;
+        view.pendingShots.length = 0; // 빈 슬롯 — 대기 발사도 폐기
         return;
       }
       const god = tower.tier === GOD_TIER;
-      const key = `${tower.def.race}:${tower.tier}`;
+      const characterKey = characterAssetForTower(tower.def.id);
+      const key = characterKey ?? `${tower.def.race}:${tower.tier}`;
       if (view.key !== key) {
         view.key = key;
-        view.img
-          .setTexture(god ? 'towerGod' : 'tower')
-          .setTint(tint(RACE_COLOR[tower.def.race]))
-          .setScale((god ? 1.2 : 1 + tower.tier * 0.14) / 2) // 텍스처가 2배 해상도라 절반이 기준
-
-          .setVisible(true);
-        view.label
-          .setText(god ? 'G' : String(tower.tier + 1))
-          .setColor(god ? '#1a130a' : '#1a130a')
-          .setVisible(true);
+        view.characterKey = characterKey;
+        view.releaseFrame = characterKey ? ATTACK_RELEASE_FRAME[characterKey] : 0;
+        view.pendingShots.length = 0; // 병과·티어 교체 — 이전 타워의 대기 발사 폐기
+        if (characterKey) {
+          if (!(view.img instanceof Phaser.GameObjects.Sprite)) {
+            view.img.destroy();
+            // 스케일 1에선 공격 모션이 인접 타일까지 뻗는다 — 아래쪽 타워가 위를 덮도록 y-정렬
+            const sprite = this.add
+              .sprite(slot.x, slot.y + 2, characterKey, 0)
+              .setDepth(DEPTH.tower + slot.y / 1000);
+            this.attachTowerAttackHandlers(sprite, view);
+            view.img = sprite;
+          }
+          const actor = view.img as Phaser.GameObjects.Sprite;
+          actor
+            .setTexture(characterKey, 0)
+            .clearTint()
+            // 0.5 → 1 (2026-07-24, 유닛이 작다는 사용자 지적): 시트 원본 도트가 몸체
+            // ~20px라 0.5에선 타일(36px) 위에 ~10px로 보였다. zoom 2 기준 텍셀=2화면px
+            // 정수 배율이라 도트도 깨지지 않는다. 티어 배지는 머리 위 → 몸 하단 반투명
+            // 겹침으로 옮겨(TowerBadges.svelte) 머리 위 공간 제약을 없앴다.
+            .setScale(1)
+            .setVisible(true)
+            .play(`${characterKey}-idle`, true);
+        } else {
+          if (view.img instanceof Phaser.GameObjects.Sprite) {
+            view.img.destroy();
+            view.img = this.add.image(slot.x, slot.y, 'tower').setDepth(DEPTH.tower);
+          }
+          view.img
+            .setTexture(god ? 'towerGod' : 'tower')
+            .setTint(tint(RACE_COLOR[tower.def.race]))
+            .setScale((god ? 1.2 : 1 + tower.tier * 0.14) / 2) // 텍스처가 2배 해상도라 절반이 기준
+            .setVisible(true);
+        }
         // 배치·티어업 순간의 팝
         this.particles.burst(slot.x, slot.y, RACE_COLOR[tower.def.race], 6, { speed: 45, life: 0.35 });
+      }
+    });
+  }
+
+  /** 에셋 팩과 같은 행 배치: Idle(0~5), Attack1(20~27). */
+  private createCharacterAnimations(key: string): void {
+    this.anims.create({
+      key: `${key}-idle`,
+      frames: this.anims.generateFrameNumbers(key, { start: 0, end: 5 }),
+      frameRate: 7,
+      repeat: -1,
+    });
+    this.anims.create({
+      key: `${key}-attack`,
+      frames: this.anims.generateFrameNumbers(key, { start: 20, end: 27 }),
+      frameRate: 16,
+      repeat: 0,
+    });
+  }
+
+  /**
+   * 캐릭터 타워 스프라이트에 공격 처리 리스너를 한 번만 붙인다 (스프라이트는 재사용된다).
+   * 투사체는 발사 이벤트가 아니라 **공격 스윙의 발사 프레임**에서 생성해 손·무기와 싱크를 맞춘다.
+   * 공격이 끝나면 idle로 복귀한다. 캐릭터가 바뀌어도 view.releaseFrame/pendingShots만 갱신하면 된다.
+   */
+  private attachTowerAttackHandlers(sprite: Phaser.GameObjects.Sprite, view: TowerView): void {
+    sprite.on(
+      Phaser.Animations.Events.ANIMATION_UPDATE,
+      (anim: Phaser.Animations.Animation, frame: Phaser.Animations.AnimationFrame) => {
+        if (view.pendingShots.length === 0 || !anim.key.endsWith('-attack')) return;
+        // frame.index는 1-based(프레임 배열 위치). 0-based 발사 프레임과 비교한다.
+        if (frame.index - 1 !== view.releaseFrame) return;
+        for (const shot of view.pendingShots) this.projectileFx.spawn(shot);
+        view.pendingShots.length = 0;
+      },
+    );
+    sprite.on(Phaser.Animations.Events.ANIMATION_COMPLETE, (anim: Phaser.Animations.Animation) => {
+      if (anim.key.endsWith('-attack') && sprite.active && view.characterKey) {
+        sprite.play(`${view.characterKey}-idle`, true);
       }
     });
   }
@@ -360,7 +447,20 @@ export class BattleScene extends Phaser.Scene {
     for (const shot of this.game_.shots) {
       if (this.seenShots.has(shot)) continue;
       this.seenShots.add(shot);
-      this.projectileFx.spawn(shot);
+      // 엔진의 발사 원점은 타워 슬롯 좌표다. 같은 좌표의 캐릭터만 공격 모션을 재생한다.
+      const index = this.game_.slots.findIndex((slot) =>
+        slot.tower !== null && Math.hypot(slot.x - shot.x, slot.y - shot.y) < 1,
+      );
+      const view = index < 0 ? undefined : this.towers[index];
+      if (view?.characterKey && view.img instanceof Phaser.GameObjects.Sprite) {
+        // 캐릭터 타워 — 투사체는 공격 스윙을 처음부터 다시 재생하고, 발사 프레임에서 생성한다.
+        // 매 발사마다 스윙을 리스타트해 발사 프레임이 항상 앞에 오도록 보장한다(투사체 유실 방지).
+        view.pendingShots.push(shot);
+        view.img.play(`${view.characterKey}-attack`);
+      } else {
+        // 프로시저럴 타워·영웅 — 동기화할 스윙이 없으니 즉시 발사한다.
+        this.projectileFx.spawn(shot);
+      }
     }
   }
 

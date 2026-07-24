@@ -17,12 +17,15 @@ import {
 import { RACES, RACE_COLOR, TIER_LABEL, tagLabel, type Race, type Tag } from '@engine/data/units';
 import { towerById, type CatalogTower } from '@engine/data/tower-catalog';
 import type { Tower } from '@engine/game/types';
+import { characterAssetForWikiTower, type CharacterAsset } from '../../character-assets';
 
 /** Wiki 기준 업그레이드 — 항상 0 (표시 수치의 전제) */
 export const WIKI_UPGRADES: UpgradeLevels = [0, 0, 0, 0];
 
 export interface TowerWikiView {
   readonly id: string;
+  /** 승인된 개별 캐릭터 애니메이션 키가 있으면 Wiki 프리뷰에서 사용한다. */
+  readonly characterAsset: CharacterAsset | null;
   readonly name: string;
   readonly race: Race;
   readonly raceLabel: string;
@@ -68,6 +71,7 @@ export function towerWikiView(entry: CatalogTower): TowerWikiView {
 
   return {
     id: entry.id,
+    characterAsset: characterAssetForWikiTower(entry.id),
     name: entry.def.name,
     race: entry.def.race,
     raceLabel: RACES[entry.def.race],

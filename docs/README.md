@@ -44,7 +44,9 @@ docs/
 | [wandering-knight-concept-v1.png](reference/wandering-knight-concept-v1.png) | 현행 (아트 기준) | Meshy용 방랑기사 정면 콘셉트 v1 |
 | [wandering-archer-concept-v1.png](reference/wandering-archer-concept-v1.png) | 현행 (아트 기준) | Meshy용 방랑궁수 정면 콘셉트 v1 |
 | [wandering-archer-chibi-tpose-concept-v1.png](reference/wandering-archer-chibi-tpose-concept-v1.png) | 현행 (모델링 기준) | Meshy용 치비 로우폴리 방랑궁수 T포즈 v1 |
+| [정규군 / 스피드 / 기사 캐릭터 레퍼런스](reference/characters/army/speed/) | 초안 | 기사 계열 컨셉아트와 앞면·뒷면 픽셀 캐릭터 후보. `knight-speed-lineup-concept-v3.png`를 최신 컨셉 후보로 사용 |
 | [character-pixel-style-spec.md](design/character-pixel-style-spec.md) | 현행 (필수 아트 기준) | 신규 인간형 픽셀 캐릭터의 화풍·팔레트·96×96 시트·애니메이션 생성 규격 |
+| [영웅 기사 캐릭터 레퍼런스](reference/hero/) | 초안 | 현재 게임 영웅의 컨셉아트와 도트 이미지 레퍼런스 |
 | [god-td-system-notes-v0.1.md](reference/god-td-system-notes-v0.1.md) | 보관 | 초기 시스템 정리 (맵분석으로 대체) |
 | [god-td-ops-layer-analysis-v0.1.md](reference/god-td-ops-layer-analysis-v0.1.md) | 보관 | 운영 레이어 초기 분석 |
 
