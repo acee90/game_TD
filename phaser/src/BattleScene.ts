@@ -7,7 +7,7 @@ import Phaser from 'phaser';
 import { Game } from '@engine/game/game';
 import type { Enemy, Shot } from '@engine/game/types';
 import {
-  CROSS_BARS, DOOR_IN, DOOR_OUT, NEXUS, TILE, WAYPOINTS,
+  DOOR_IN, DOOR_OUT, NEXUS, TILE,
   pathPos, pathPosOffset,
 } from '@engine/core/map';
 import { BOSS_COOLDOWN_SECONDS } from '@engine/data/balance';
@@ -16,6 +16,7 @@ import { GOD_TIER, RACE_COLOR } from '@engine/data/units';
 import { HERO_RADIUS } from '@engine/data/hero';
 import { SKILLS } from '@engine/data/skills';
 import { ParticlePool, TextPool, UI_FONT, UI_RES } from './fx';
+import { createTiledMap, preloadTiledMap } from './tiled-map';
 import { makeAnims, makeGlowTextures, makeTextures, tint } from './sprites';
 import { ProjectileFxController } from './projectile-fx';
 import { PreviewBot } from './bot';
@@ -28,7 +29,8 @@ import {
 const PATH_WIDTH = TILE;
 
 const DEPTH = {
-  board: 0, zone: 2, tower: 4, enemy: 6, hero: 8, decoy: 7,
+  // Tiled 지형(gtd-map)이 맨 아래. 레이어 6장이 -10..-5를 쓰므로 board(0)와 안 겹친다.
+  terrain: -10, board: 0, zone: 2, tower: 4, enemy: 6, hero: 8, decoy: 7,
   shot: 10, particle: 12, overlay: 14, text: 16, hud: 20,
 };
 
@@ -108,6 +110,7 @@ export class BattleScene extends Phaser.Scene {
         frameHeight: 96,
       });
     }
+    preloadTiledMap(this); // Tiled로 그린 지형 — 절차적 보드를 대체한다
     ProjectileFxController.preload(this); // 화살 본체 + 포병 착탄 플립북
     // SparkSet 파티클 팩 — 감속 눈꽃만 채택 (별·섬광은 기존 톤과 안 맞아 반려, 2026-07-22)
     this.load.image('fx-snow', 'assets/fx/snow.png');
@@ -209,32 +212,27 @@ export class BattleScene extends Phaser.Scene {
     });
   }
 
-  /** 정적 보드 — 한 번만 그린다 */
+  /**
+   * 정적 보드 — 한 번만 그린다.
+   *
+   * 지형(잔디·돌길·절벽·소품)은 Tiled로 그린 gtd-map이 담당한다(2026-07-24). 예전에는
+   * 여기서 십자 사각형·길 폴리라인을 색칠했는데, 그 불투명 칠이 타일맵을 덮으므로 걷어냈다.
+   * 남긴 것은 **타일 아트가 표현하지 못하는 게임 어포던스**뿐 — 배치 가능한 슬롯 칸과
+   * 입·출구 표시. 경로/지형 자체는 이제 맵 아트가 말한다.
+   */
   private drawBoard(): void {
+    // 맵을 엔진 월드 좌표계로 축소·배치한다 — 엔진 수치·클릭 판정은 그대로다.
+    createTiledMap(this, { inEngineSpace: true, depthBase: DEPTH.terrain });
+
     const g = this.add.graphics().setDepth(DEPTH.board);
-    const stroke = (width: number, color: number) => {
-      g.lineStyle(width, color, 1);
-      g.beginPath();
-      g.moveTo(WAYPOINTS[0][0], WAYPOINTS[0][1]);
-      for (let i = 1; i < WAYPOINTS.length; i++) g.lineTo(WAYPOINTS[i][0], WAYPOINTS[i][1]);
-      g.strokePath();
-    };
-    stroke(PATH_WIDTH, 0x46392a); // 한 칸 안에 테두리
-    stroke(PATH_WIDTH - 4, 0x241c12); // 그 안쪽이 길 본체
 
-    for (const bar of CROSS_BARS) {
-      g.fillStyle(0x211a12, 1);
-      g.fillRect(bar.x, bar.y, bar.w, bar.h);
-      g.lineStyle(1, 0x4d3d28, 1);
-      g.strokeRect(bar.x, bar.y, bar.w, bar.h);
-    }
-
+    // 슬롯 칸 — 어디에 놓을 수 있는지. 지형이 비치도록 옅은 칠 + 테두리만.
     for (const slot of this.game_.slots) {
       const half = TILE / 2 - 2;
       const altar = slot === this.game_.altarSlot;
-      g.fillStyle(altar ? 0x2a2036 : 0x241d14, altar ? 1 : 0.72);
+      g.fillStyle(altar ? 0x2a2036 : 0x1a140d, altar ? 0.5 : 0.22);
       g.fillRect(slot.x - half, slot.y - half, half * 2, half * 2);
-      g.lineStyle(1, altar ? 0x8a6ea6 : 0x4d3d28, 1);
+      g.lineStyle(1, altar ? 0x8a6ea6 : 0x6b563a, altar ? 1 : 0.75);
       g.strokeRect(slot.x - half, slot.y - half, half * 2, half * 2);
     }
 
