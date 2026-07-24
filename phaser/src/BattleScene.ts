@@ -98,11 +98,16 @@ export class BattleScene extends Phaser.Scene {
   preload(): void {
     // /game/ 라우트 기준 상대 경로가 깨지지 않게 루트 고정 — 서브패스 배포 시 paths.base 주입
     this.load.setBaseURL('/');
-    // 정식 도트 에셋을 기존 애니메이션 키에 연결한다. 프레임별 PNG가 생기기 전까지는
-    // 같은 텍스처를 재사용해 현재 애니메이션/틴트 파이프라인을 그대로 유지한다.
-    for (const frame of [0, 1]) {
-      this.load.image(`hero${frame}`, 'assets/sprites/hero-knight.png');
-    }
+    // Human_Soldier_Sword_Shield 기반 영웅 스프라이트. 원본 픽셀을 유지하기 위해
+    // 24×32 Idle과 검 궤적을 포함한 48×40 Attack1을 별도 시트로 로드한다.
+    this.load.spritesheet('hero-knight-idle', 'assets/sprites/hero-knight-idle-24x32.png', {
+      frameWidth: 24,
+      frameHeight: 32,
+    });
+    this.load.spritesheet('hero-knight-attack1', 'assets/sprites/hero-knight-attack1-48x40.png', {
+      frameWidth: 48,
+      frameHeight: 40,
+    });
     for (const frame of [0, 1, 2, 3]) {
       this.load.image(`boss${frame}`, 'assets/sprites/boss-dragon.png');
     }
@@ -157,9 +162,11 @@ export class BattleScene extends Phaser.Scene {
       this.towers.push({ img, disc, key: '', characterKey: null, releaseFrame: 0, pendingShots: [] });
     }
 
-    // 초기 0.5배 기준의 1.5배 크기. 직전 2배(1.0)는 보드에서 지나치게 컸다.
-    this.heroImg = this.add.sprite(0, 0, 'hero0').setScale(0.75).setDepth(DEPTH.hero);
-    this.heroImg.play('hero-idle');
+    // 0.75 → 1.125 (2026-07-24, 사용자 지시: 1.5배 확대) — 몸체 27×36 월드px로
+    // 타워(1.5배, ~30px)와 톤이 맞는다. zoom 2 기준 텍셀=2.25화면px라 정수 배율은
+    // 아니지만, 24×32 네이티브 시트라 1.0(작다)·1.5(타워보다 큼) 사이 절충이다.
+    this.heroImg = this.add.sprite(0, 0, 'hero-knight-idle', 0).setScale(1.125).setDepth(DEPTH.hero);
+    this.heroImg.play('hero-knight-idle');
     this.heroLabel = this.add
       .text(0, 0, '', {
         fontFamily: UI_FONT, fontStyle: 'bold', fontSize: 7, color: '#ffd23f',
