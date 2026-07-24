@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<tileset version="1.10" tiledversion="1.12.2" name="cainos-props-shadow" tilewidth="32" tileheight="32" tilecount="256" columns="16">
+ <image source="../downloads/Pixel Art Top Down - Basic v1.2.3/Texture/Extra/TX Props with Shadow.png" width="512" height="512"/>
+</tileset>
